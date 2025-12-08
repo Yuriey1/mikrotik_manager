@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MikroTik Device Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 20px;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #e74c3c;
+        }
+
+        .status-dot.connected {
+            background: #2ecc71;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+            height: calc(100vh - 180px);
+        }
+
+        .sidebar {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+
+        .content {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            color: #3498db;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .checkbox-group input {
+            width: auto;
+        }
+
+        .btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+            width: 100%;
+        }
+
+        .btn:hover {
+            background: #2980b9;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+        }
+
+        .btn-success {
+            background: #2ecc71;
+        }
+
+        .btn-success:hover {
+            background: #27ae60;
+            box-shadow: 0 4px 12px rgba(46, 204, 113, 0.3);
+        }
+
+        .btn-warning {
+            background: #f39c12;
+        }
+
+        .btn-warning:hover {
+            background: #e67e22;
+        }
+
+        .btn-danger {
+            background: #e74c3c;
+        }
+
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+
+        .device-list {
+            list-style: none;
+            margin-top: 10px;
+        }
+
+        .device-item {
+            padding: 12px;
+            border: 2px solid #eee;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .device-item:hover {
+            border-color: #3498db;
+            background: #f8fafd;
+        }
+
+        .device-item.active {
+            border-color: #2ecc71;
+            background: #f0f9f4;
+        }
+
+        .device-info {
+            flex: 1;
+        }
+
+        .device-name {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .device-ip {
+            font-size: 12px;
+            color: #7f8c8d;
+        }
+
+        .connect-btn {
+            padding: 6px 12px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .tab-container {
+            display: flex;
+            border-bottom: 2px solid #f0f0f0;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab:hover {
+            color: #3498db;
+        }
+
+        .tab.active {
+            color: #3498db;
+            border-bottom-color: #3498db;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .queue-tree {
+            font-family: 'Courier New', monospace;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .queue-item {
+            padding: 5px 10px;
+            margin: 2px 0;
+            border-left: 3px solid #3498db;
+            background: white;
+        }
+
+        .queue-item.disabled {
+            opacity: 0.5;
+            border-left-color: #e74c3c;
+        }
+
+        .queue-item .level-1 { padding-left: 20px; }
+        .queue-item .level-2 { padding-left: 40px; }
+        .queue-item .level-3 { padding-left: 60px; }
+        .queue-item .level-4 { padding-left: 80px; }
+        .queue-item .level-5 { padding-left: 100px; }
+
+        .results {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+
+        .result-item {
+            padding: 8px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 3px;
+            border-left: 4px solid #3498db;
+        }
+
+        .result-item.success {
+            border-left-color: #2ecc71;
+        }
+
+        .result-item.error {
+            border-left-color: #e74c3c;
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <!-- В секции статуса в header -->
+            <div class="status-bar">
+                <div class="status-item">
+                    <div class="status-dot" id="connection-status"></div>
+                    <span id="connection-text">Не подключено</span>
+                </div>
+                <div class="status-item" id="device-name"></div>
+                <div class="status-item" id="queue-stats"></div>
+                <div class="status-item">
+                    <button class="connect-btn btn-danger" onclick="disconnectDevice()" 
+                            id="disconnect-btn" style="display: none; padding: 5px 10px; font-size: 12px;">
+                        🔓 Отключиться
+                    </button>
+                 </div>
+            </div>
+        </header>
+        <div class="main-layout">
+            <div class="sidebar">
+                <div class="section">
+                    <h2>📱 Устройства</h2>
+                    <button class="btn" onclick="showAddDeviceForm()">+ Добавить устройство</button>
+                    <ul class="device-list" id="device-list"></ul>
+                </div>
+
+                <div class="section">
+                    <h2>⚙️ Настройки</h2>
+                    <div class="form-group">
+                        <label><input type="checkbox" id="auto-save-password"> Сохранять пароли</label>
+                    </div>
+                    <div class="form-group">
+                        <label>Имя пользователя по умолчанию</label>
+                        <input type="text" id="default-username" value="admin">
+                    </div>
+                    <button class="btn btn-success" onclick="saveSettings()">💾 Сохранить настройки</button>
+                </div>
+            </div>
+
+            <div class="content">
+                <div class="tab-container">
+                    <div class="tab active" onclick="switchTab('employee')">👤 Добавить сотрудника</div>
+                    <div class="tab" onclick="switchTab('queues')">🌳 Дерево очередей</div>
+                    <div class="tab" onclick="switchTab('tools')">🔧 Инструменты</div>
+                </div>
+
+                <div id="employee-tab" class="tab-content active">
+                    <div class="section">
+                        <h2>Добавить сотрудника</h2>
+                        <div class="form-group">
+                            <label>ФИО *</label>
+                            <input type="text" id="full-name" placeholder="Иванов Иван Иванович">
+                        </div>
+                        <div class="form-group">
+                            <label>Должность *</label>
+                            <input type="text" id="position" placeholder="Инженер">
+                        </div>
+                        <div class="form-group">
+                            <label>IP адрес *</label>
+                            <input type="text" id="ip-address" placeholder="192.168.1.100">
+                            <button class="btn btn-warning" onclick="checkDHCP()" style="margin-top: 5px; width: auto;">🔍 Проверить DHCP</button>
+                        </div>
+                        <div class="form-group">
+                            <label>MAC адрес</label>
+                            <input type="text" id="mac-address" placeholder="00:11:22:33:44:55">
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-group">
+                                <input type="checkbox" id="internet-access"> Доступ в интернет
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>Очередь</label>
+                            <select id="queue-select">
+                                <option value="">-- Не выбрана --</option>
+                            </select>
+                            <button class="btn btn-warning" onclick="findQueues()" style="margin-top: 5px; width: auto;">🔍 Найти очереди для IP</button>
+                        </div>
+                        <button class="btn btn-success" onclick="addEmployee()">✅ Добавить сотрудника</button>
+                        <div id="employee-results" class="results"></div>
+                    </div>
+                </div>
+
+                <div id="queues-tab" class="tab-content">
+                    <div class="section">
+                        <h2>Дерево очередей</h2>
+                        <button class="btn" onclick="loadQueueTree()">🔄 Обновить дерево</button>
+                        <div id="queue-tree" class="queue-tree"></div>
+                    </div>
+                </div>
+
+                <div id="tools-tab" class="tab-content">
+                    <div class="section">
+                        <h2>Инструменты</h2>
+                        <div class="form-group">
+                            <label>IP для проверки</label>
+                            <input type="text" id="check-ip" placeholder="192.168.1.100">
+                            <button class="btn" onclick="checkIP()">🔍 Проверить IP</button>
+                        </div>
+                        <div id="tools-results"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для добавления устройства -->
+    <div id="device-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
+        <div style="background: white; width: 500px; margin: 100px auto; padding: 20px; border-radius: 10px;">
+            <h2>➕ Добавить устройство</h2>
+            <div class="form-group">
+                <label>Имя устройства *</label>
+                <input type="text" id="device-name-input" placeholder="Роутер офиса">
+            </div>
+            <div class="form-group">
+                <label>IP адрес *</label>
+                <input type="text" id="device-ip" placeholder="192.168.88.1">
+            </div>
+            <div class="form-group">
+                <label>Порт</label>
+                <input type="number" id="device-port" value="8728">
+            </div>
+            <div class="form-group">
+                <label>Имя пользователя</label>
+                <input type="text" id="device-username" value="admin">
+            </div>
+            <div class="form-group">
+                <label>Пароль</label>
+                <input type="password" id="device-password">
+            </div>
+            <div class="form-group">
+                <label>Описание</label>
+                <textarea id="device-description" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+                <label class="checkbox-group">
+                    <input type="checkbox" id="save-password"> Сохранить пароль
+                </label>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-success" onclick="saveDevice()">💾 Сохранить</button>
+                <button class="btn btn-danger" onclick="hideAddDeviceForm()">❌ Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentDevice = null;
+        let queueTree = [];
+
+        // Загрузка при старте
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDevices();
+            loadSettings();
+        });
+
+        function showAddDeviceForm() {
+            document.getElementById('device-modal').style.display = 'block';
+        }
+
+        function hideAddDeviceForm() {
+            document.getElementById('device-modal').style.display = 'none';
+        }
+
+        function switchTab(tabName) {
+            // Скрыть все вкладки
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Показать выбранную
+            document.getElementById(tabName + '-tab').classList.add('active');
+            document.querySelectorAll('.tab').forEach(tab => {
+                if (tab.textContent.includes(getTabName(tabName))) {
+                    tab.classList.add('active');
+                }
+            });
+        }
+
+        function getTabName(tabKey) {
+            const tabs = {
+                'employee': 'Добавить сотрудника',
+                'queues': 'Дерево очередей',
+                'tools': 'Инструменты'
+            };
+            return tabs[tabKey] || tabKey;
+        }
+
+        // Загрузка устройств
+        function loadDevices() {
+            fetch('/api/devices')
+                .then(response => response.json())
+                .then(data => {
+                    const deviceList = document.getElementById('device-list');
+                    deviceList.innerHTML = '';
+            
+                    if (data.devices && Object.keys(data.devices).length > 0) {
+                        for (const [name, device] of Object.entries(data.devices)) {
+                            const li = document.createElement('li');
+                            li.className = 'device-item';
+                            if (currentDevice === name) {
+                                li.classList.add('active');
+                            }
+                    
+                            // Определяем текст кнопки
+                            const buttonText = currentDevice === name ? '🔓 Отключить' : '🔗 Подключить';
+                            const buttonClass = currentDevice === name ? 'btn-danger' : '';
+                    
+                            li.innerHTML = `
+                                <div class="device-info">
+                                    <div class="device-name">${name}</div>
+                                    <div class="device-ip">${device.ip}:${device.port}</div>
+                                </div>
+                                <button class="connect-btn ${buttonClass}" onclick="connectDevice('${name}')">
+                                    ${buttonText}
+                                </button>
+                            `;
+                            deviceList.appendChild(li);
+                        }
+                    } else {
+                        deviceList.innerHTML = '<li style="color: #999; padding: 10px;">Нет устройств</li>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка загрузки устройств:', error);
+                    showAlert('Ошибка загрузки устройств', 'error');
+                });
+        }
+
+
+        // Подключение/отключение устройства
+        function connectDevice(deviceName) {
+            // Если уже подключены к этому устройству - отключаемся
+            if (currentDevice === deviceName) {
+                disconnectDevice();
+                return;
+            }
+    
+            showAlert('Подключаемся...', 'info');
+    
+            fetch(`/api/connect?device=${encodeURIComponent(deviceName)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        if (data.action === 'connected') {
+                            currentDevice = deviceName;
+                            document.getElementById('connection-status').className = 'status-dot connected';
+                            document.getElementById('connection-text').textContent = 'Подключено';
+                            document.getElementById('device-name').textContent = deviceName;
+                            document.getElementById('disconnect-btn').style.display = 'block';
+                    
+                            showAlert(data.message, 'success');
+                    
+                            // Загружаем дерево очередей
+                            loadQueueTree();
+                        } else if (data.action === 'disconnected') {
+                            currentDevice = null;
+                            document.getElementById('connection-status').className = 'status-dot';
+                            document.getElementById('connection-text').textContent = 'Не подключено';
+                            document.getElementById('device-name').textContent = '';
+                            document.getElementById('queue-stats').textContent = '';
+                            document.getElementById('disconnect-btn').style.display = 'none';
+                    
+                            showAlert(data.message, 'info');
+                    
+                            // Очищаем дерево очередей
+                            document.getElementById('queue-tree').innerHTML = '';
+                        }
+                
+                        // Обновляем список устройств
+                        loadDevices();
+                    } else {
+                        showAlert(data.error || 'Ошибка подключения', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка подключения:', error);
+                    showAlert('Ошибка подключения', 'error');
+                });
+        }
+
+        // Функция для отключения
+        function disconnectDevice() {
+            if (!currentDevice) {
+                showAlert('Нет активных подключений', 'info');
+                return;
+            }
+    
+            showAlert('Отключаемся...', 'info');
+    
+            fetch('/api/disconnect')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        currentDevice = null;
+                        document.getElementById('connection-status').className = 'status-dot';
+                        document.getElementById('connection-text').textContent = 'Не подключено';
+                        document.getElementById('device-name').textContent = '';
+                        document.getElementById('queue-stats').textContent = '';
+                        document.getElementById('disconnect-btn').style.display = 'none';
+                
+                        showAlert(data.message, 'info');
+                
+                        // Очищаем дерево очередей
+                        document.getElementById('queue-tree').innerHTML = '';
+                
+                        // Обновляем список устройств
+                        loadDevices();
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка отключения:', error);
+                    showAlert('Ошибка отключения', 'error');
+                });
+        }
+
+        // Сохранение устройства
+        function saveDevice() {
+            const deviceData = {
+                name: document.getElementById('device-name-input').value.trim(),
+                ip: document.getElementById('device-ip').value.trim(),
+                port: parseInt(document.getElementById('device-port').value) || 8728,
+                username: document.getElementById('device-username').value.trim() || 'admin',
+                password: document.getElementById('device-password').value,
+                description: document.getElementById('device-description').value.trim(),
+                savePassword: document.getElementById('save-password').checked
+            };
+
+            if (!deviceData.name || !deviceData.ip) {
+                showAlert('Заполните имя и IP адрес', 'error');
+                return;
+            }
+
+            fetch('/api/add_device', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(deviceData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    hideAddDeviceForm();
+                    loadDevices();
+                    
+                    // Очищаем форму
+                    document.getElementById('device-name-input').value = '';
+                    document.getElementById('device-ip').value = '';
+                    document.getElementById('device-password').value = '';
+                    document.getElementById('device-description').value = '';
+                } else {
+                    showAlert(data.error, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка сохранения:', error);
+                showAlert('Ошибка сохранения', 'error');
+            });
+        }
+
+        // Загрузка настроек
+        function loadSettings() {
+            const config = {
+                auto_save_password: localStorage.getItem('auto_save_password') === 'true',
+                default_username: localStorage.getItem('default_username') || 'admin'
+            };
+
+            document.getElementById('auto-save-password').checked = config.auto_save_password;
+            document.getElementById('default-username').value = config.default_username;
+        }
+
+        // Сохранение настроек
+        function saveSettings() {
+            const settings = {
+                auto_save_password: document.getElementById('auto-save-password').checked,
+                default_username: document.getElementById('default-username').value
+            };
+
+            localStorage.setItem('auto_save_password', settings.auto_save_password);
+            localStorage.setItem('default_username', settings.default_username);
+
+            fetch('/api/save_config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(settings)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('Настройки сохранены', 'success');
+                } else {
+                    showAlert(data.error, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка сохранения настроек:', error);
+                showAlert('Ошибка сохранения настроек', 'error');
+            });
+        }
+
+        // Проверка DHCP
+        function checkDHCP() {
+            const ip = document.getElementById('ip-address').value.trim();
+            if (!ip) {
+                showAlert('Введите IP адрес', 'error');
+                return;
+            }
+
+            fetch(`/api/check_dhcp?ip=${encodeURIComponent(ip)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        if (data.found) {
+                            showAlert(`DHCP найден: ${data.lease.ip} (${data.lease.status})`, 'info');
+                            if (data.lease.mac) {
+                                document.getElementById('mac-address').value = data.lease.mac;
+                            }
+                        } else {
+                            showAlert('DHCP не найден', 'info');
+                        }
+                    } else {
+                        showAlert(data.error, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка проверки DHCP:', error);
+                    showAlert('Ошибка проверки DHCP', 'error');
+                });
+        }
+
+        // Поиск очередей для IP
+        function findQueues() {
+            const ip = document.getElementById('ip-address').value.trim();
+            if (!ip) {
+                showAlert('Введите IP адрес', 'error');
+                return;
+            }
+
+            if (!currentDevice) {
+                showAlert('Сначала подключитесь к устройству', 'error');
+                return;
+            }
+
+            fetch(`/api/find_queues?ip=${encodeURIComponent(ip)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const select = document.getElementById('queue-select');
+                        select.innerHTML = '<option value="">-- Не выбрана --</option>';
+                        
+                        if (data.existing && data.existing.length > 0) {
+                            showAlert(`IP уже находится в очередях: ${data.existing.join(', ')}`, 'warning');
+                        }
+                        
+                        if (data.queues && data.queues.length > 0) {
+                            data.queues.forEach(queue => {
+                                const option = document.createElement('option');
+                                option.value = queue.name;
+                                option.textContent = `${queue.name} (${queue.ip_count} IP)`;
+                                select.appendChild(option);
+                            });
+                            showAlert(`Найдено ${data.count} подходящих очередей`, 'success');
+                        } else {
+                            showAlert('Подходящих очередей не найдено', 'info');
+                        }
+                    } else {
+                        showAlert(data.error, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка поиска очередей:', error);
+                    showAlert('Ошибка поиска очередей', 'error');
+                });
+        }
+
+        // Добавление сотрудника
+        function addEmployee() {
+            const employeeData = {
+                full_name: document.getElementById('full-name').value.trim(),
+                position: document.getElementById('position').value.trim(),
+                ip: document.getElementById('ip-address').value.trim(),
+                mac: document.getElementById('mac-address').value.trim(),
+                internet_access: document.getElementById('internet-access').checked,
+                queue: document.getElementById('queue-select').value
+            };
+
+            // Валидация
+            if (!employeeData.full_name || !employeeData.position || !employeeData.ip) {
+                showAlert('Заполните обязательные поля (ФИО, Должность, IP)', 'error');
+                return;
+            }
+
+            if (!currentDevice) {
+                showAlert('Сначала подключитесь к устройству', 'error');
+                return;
+            }
+
+            const resultsDiv = document.getElementById('employee-results');
+            resultsDiv.innerHTML = '<div class="alert alert-info">Добавляем сотрудника...</div>';
+
+            fetch('/api/add_employee', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(employeeData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                resultsDiv.innerHTML = '';
+                
+                if (data.success || data.results) {
+                    let html = '<div class="result-item success">✅ Сотрудник добавлен</div>';
+                    
+                    if (data.results) {
+                        for (const [key, value] of Object.entries(data.results)) {
+                            const resultText = {
+                                'dhcp': 'DHCP запись',
+                                'arp': 'ARP запись',
+                                'queue': 'Очередь',
+                                'firewall': 'Firewall правило'
+                            }[key] || key;
+                            
+                            html += `<div class="result-item ${value ? 'success' : 'error'}">
+                                ${value ? '✅' : '❌'} ${resultText}
+                            </div>`;
+                        }
+                    }
+                    
+                    resultsDiv.innerHTML = html;
+                    
+                    // Очищаем форму
+                    document.getElementById('full-name').value = '';
+                    document.getElementById('position').value = '';
+                    document.getElementById('ip-address').value = '';
+                    document.getElementById('mac-address').value = '';
+                    document.getElementById('internet-access').checked = false;
+                    document.getElementById('queue-select').value = '';
+                    
+                    // Обновляем дерево очередей
+                    loadQueueTree();
+                } else {
+                    showAlert(data.error || 'Ошибка добавления', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка добавления:', error);
+                showAlert('Ошибка добавления сотрудника', 'error');
+            });
+        }
+
+        // Загрузка дерева очередей
+        function loadQueueTree() {
+            if (!currentDevice) {
+                showAlert('Сначала подключитесь к устройству', 'error');
+                return;
+            }
+
+            fetch('/api/tree')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        queueTree = data.tree;
+                        renderQueueTree(data.tree);
+                        
+                        // Обновляем статистику
+                        if (data.stats) {
+                            const statsText = `Очередей: ${data.stats.total_queues} (вкл: ${data.stats.enabled_queues})`;
+                            document.getElementById('queue-stats').textContent = statsText;
+                        }
+                    } else {
+                        showAlert(data.error, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка загрузки дерева:', error);
+                    showAlert('Ошибка загрузки дерева очередей', 'error');
+                });
+        }
+
+        // Отрисовка дерева очередей
+        function renderQueueTree(tree) {
+            const container = document.getElementById('queue-tree');
+            container.innerHTML = '';
+            
+            function renderNode(node, level = 0) {
+                const div = document.createElement('div');
+                div.className = `queue-item ${node.enabled ? '' : 'disabled'}`;
+                div.classList.add(`level-${level}`);
+                
+                let prefix = '─ '.repeat(level);
+                if (level > 0) {
+                    prefix = '├' + prefix;
+                }
+                
+                let ipInfo = '';
+                if (node.ip_count > 0) {
+                    ipInfo = ` <span style="color: #3498db;">(${node.ip_count} IP)</span>`;
+                }
+                
+                div.innerHTML = `
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>${prefix} ${node.name}${ipInfo}</span>
+                        <span style="font-size: 12px; color: #7f8c8d;">
+                            ${node.enabled ? '✅' : '❌'} ${node.max_limit || 'без лимита'}
+                        </span>
+                    </div>
+                    ${node.comment ? `<div style="font-size: 12px; color: #666; margin-left: ${level * 20 + 20}px;">${node.comment}</div>` : ''}
+                `;
+                
+                container.appendChild(div);
+                
+                if (node.children && node.children.length > 0) {
+                    node.children.forEach(child => renderNode(child, level + 1));
+                }
+            }
+            
+            tree.forEach(node => renderNode(node));
+        }
+
+        // Проверка IP
+        function checkIP() {
+            const ip = document.getElementById('check-ip').value.trim();
+            if (!ip) {
+                showAlert('Введите IP адрес', 'error');
+                return;
+            }
+
+            if (!currentDevice) {
+                showAlert('Сначала подключитесь к устройству', 'error');
+                return;
+            }
+
+            const resultsDiv = document.getElementById('tools-results');
+            resultsDiv.innerHTML = '<div class="alert alert-info">Проверяем...</div>';
+
+            // Проверяем DHCP
+            fetch(`/api/check_dhcp?ip=${encodeURIComponent(ip)}`)
+                .then(response => response.json())
+                .then(dhcpData => {
+                    let html = '';
+                    
+                    if (dhcpData.success && dhcpData.found) {
+                        html += `<div class="result-item success">
+                            ✅ DHCP найден: ${dhcpData.lease.ip} (${dhcpData.lease.status})
+                            ${dhcpData.lease.mac ? `<br>MAC: ${dhcpData.lease.mac}` : ''}
+                            ${dhcpData.lease.comment ? `<br>Комментарий: ${dhcpData.lease.comment}` : ''}
+                        </div>`;
+                    } else {
+                        html += `<div class="result-item error">❌ DHCP не найден</div>`;
+                    }
+                    
+                    // Проверяем очереди
+                    fetch(`/api/find_queues?ip=${encodeURIComponent(ip)}`)
+                        .then(response => response.json())
+                        .then(queueData => {
+                            if (queueData.success) {
+                                if (queueData.existing && queueData.existing.length > 0) {
+                                    html += `<div class="result-item warning">
+                                        ⚠️ Уже в очередях: ${queueData.existing.join(', ')}
+                                    </div>`;
+                                }
+                                
+                                if (queueData.queues && queueData.queues.length > 0) {
+                                    html += `<div class="result-item success">
+                                        ✅ Подходящих очередей: ${queueData.count}
+                                    </div>`;
+                                } else {
+                                    html += `<div class="result-item info">ℹ️ Подходящих очередей не найдено</div>`;
+                                }
+                            }
+                            
+                            resultsDiv.innerHTML = html;
+                        });
+                })
+                .catch(error => {
+                    console.error('Ошибка проверки IP:', error);
+                    showAlert('Ошибка проверки IP', 'error');
+                });
+        }
+
+        // Вспомогательная функция для показа уведомлений
+        function showAlert(message, type = 'info') {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.textContent = message;
+            
+            // Добавляем в начало контента
+            const content = document.querySelector('.content');
+            content.insertBefore(alertDiv, content.firstChild);
+            
+            // Удаляем через 5 секунд
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.parentNode.removeChild(alertDiv);
+                }
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
