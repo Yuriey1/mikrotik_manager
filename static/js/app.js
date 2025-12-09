@@ -79,7 +79,7 @@
                 })
                 .catch(error => {
                     console.error('Ошибка загрузки устройств:', error);
-                    showAlert('Ошибка загрузки устройств', 'error');
+                    showToast('Ошибка загрузки устройств', 'error');
                 });
         }
 
@@ -92,7 +92,7 @@
                 return;
             }
 
-            showAlert('Подключаемся...', 'info');
+            showToast('Подключаемся...', 'info');
 
             fetch(`/api/connect?device=${encodeURIComponent(deviceName)}`)
                 .then(response => response.json())
@@ -105,7 +105,7 @@
                             document.getElementById('device-name').textContent = deviceName;
                             document.getElementById('disconnect-btn').style.display = 'block';
 
-                            showAlert(data.message, 'success');
+                            showToast(data.message, 'success');
 
                             // Загружаем дерево очередей
                             loadQueueTree();
@@ -115,9 +115,10 @@
                             document.getElementById('connection-text').textContent = 'Не подключено';
                             document.getElementById('device-name').textContent = '';
                             document.getElementById('queue-stats').textContent = '';
-                            document.getElementById('disconnect-btn').style.display = 'none';
+                            document.getElementById('disconnect-btn').style.setProperty('display', 'none', 'important');
+                            //document.getElementById('disconnect-btn').style.display = 'none !important';
 
-                            showAlert(data.message, 'info');
+                            showToast(data.message, 'info');
 
                             // Очищаем дерево очередей
                             document.getElementById('queue-tree').innerHTML = '';
@@ -126,7 +127,7 @@
                         // Обновляем список устройств
                         loadDevices();
                     } else {
-                        showAlert(data.error || 'Ошибка подключения', 'error');
+                        showToast(data.error || 'Ошибка подключения', 'error');
                     }
                 })
                 .catch(error => {
@@ -153,7 +154,8 @@
                         document.getElementById('connection-text').textContent = 'Не подключено';
                         document.getElementById('device-name').textContent = '';
                         document.getElementById('queue-stats').textContent = '';
-                        document.getElementById('disconnect-btn').style.display = 'none';
+                        document.getElementById('disconnect-btn').style.setProperty('display', 'none', 'important');
+//                        document.getElementById('disconnect-btn').style.display = 'none !important';
 
                         showAlert(data.message, 'info');
 
@@ -356,7 +358,7 @@
             }
 
             const resultsDiv = document.getElementById('employee-results');
-            resultsDiv.innerHTML = '<div class="alert alert-info">Добавляем сотрудника...</div>';
+            resultsDiv.innerHTML = '<div class="toast toast-info">Добавляем сотрудника...</div>';
 
             fetch('/api/add_employee', {
                 method: 'POST',
@@ -539,20 +541,61 @@
                 });
         }
 
-        // Вспомогательная функция для показа уведомлений
-        function showAlert(message, type = 'info') {
-            const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type}`;
-            alertDiv.textContent = message;
-
-            // Добавляем в начало контента
-            const content = document.querySelector('.content');
-            content.insertBefore(alertDiv, content.firstChild);
-
-            // Удаляем через 5 секунд
-            setTimeout(() => {
-                if (alertDiv.parentNode) {
-                    alertDiv.parentNode.removeChild(alertDiv);
-                }
-            }, 5000);
+// Toast уведомления
+function showToast(message, type = 'info', duration = 5000) {
+    // Создаем контейнер если его нет
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+    
+    // Создаем toast
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    
+    // Иконки для разных типов
+    const icons = {
+        success: 'fas fa-check-circle',
+        error: 'fas fa-exclamation-circle',
+        warning: 'fas fa-exclamation-triangle',
+        info: 'fas fa-info-circle'
+    };
+    
+    toast.innerHTML = `
+        <i class="toast-icon ${icons[type] || icons.info}"></i>
+        <div class="toast-content">${message}</div>
+        <button class="toast-close" onclick="this.parentElement.remove()">
+            <i class="fas fa-times"></i>
+        </button>
+        <div class="toast-progress"></div>
+    `;
+    
+    // Добавляем в контейнер
+    container.appendChild(toast);
+    
+    // Удаляем через указанное время
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.style.animation = 'toastFadeOut 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
         }
+    }, duration);
+    
+    // Удаляем при клике на сам toast (кроме кнопки закрытия)
+    toast.addEventListener('click', function(e) {
+        if (!e.target.closest('.toast-close')) {
+            this.style.animation = 'toastFadeOut 0.3s ease';
+            setTimeout(() => this.remove(), 300);
+        }
+    });
+    
+    return toast;
+}
+
+// Заменяем старую функцию showAlert
+function showAlert(message, type = 'info') {
+    showToast(message, type);
+}
