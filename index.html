@@ -4,155 +4,240 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MikroTik Device Manager</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
     <div class="container">
+        <!-- ШАПКА -->
         <header>
-            <!-- В секции статуса в header -->
+            <h1><i class="fas fa-router"></i> MikroTik Device Manager</h1>
+            
             <div class="status-bar">
                 <div class="status-item">
-                    <div class="status-dot" id="connection-status"></div>
+                    <span class="status-dot" id="connection-status"></span>
                     <span id="connection-text">Не подключено</span>
                 </div>
-                <div class="status-item" id="device-name"></div>
-                <div class="status-item" id="queue-stats"></div>
                 <div class="status-item">
-                    <button class="connect-btn btn-danger" onclick="disconnectDevice()" 
-                            id="disconnect-btn" style="display: none; padding: 5px 10px; font-size: 12px;">
-                        🔓 Отключиться
+                    <i class="fas fa-server"></i>
+                    <span id="device-name">Нет устройства</span>
+                </div>
+                <div class="status-item">
+                    <i class="fas fa-sitemap"></i>
+                    <span id="queue-stats">Очередей: 0</span>
+                </div>
+                <div class="status-item">
+                    <button class="btn btn-danger" onclick="disconnectDevice()" 
+                            id="disconnect-btn" style="display: none;">
+                        <i class="fas fa-unlink"></i> Отключиться
                     </button>
-                 </div>
+                </div>
             </div>
         </header>
+        
+        <!-- ОСНОВНОЙ КОНТЕНТ -->
         <div class="main-layout">
+            <!-- БОКОВАЯ ПАНЕЛЬ -->
             <div class="sidebar">
                 <div class="section">
-                    <h2>📱 Устройства</h2>
-                    <button class="btn" onclick="showAddDeviceForm()">+ Добавить устройство</button>
-                    <ul class="device-list" id="device-list"></ul>
+                    <h2><i class="fas fa-server"></i> Устройства</h2>
+                    <button class="btn btn-primary w-full" onclick="showAddDeviceForm()">
+                        <i class="fas fa-plus"></i> Добавить устройство
+                    </button>
+                    <ul class="device-list" id="device-list">
+                        <!-- Устройства будут здесь -->
+                        <li class="empty-state">
+                            <i class="fas fa-plug"></i>
+                            <p>Нет устройств</p>
+                            <button class="btn btn-primary mt-10" onclick="showAddDeviceForm()">
+                                Добавить первое устройство
+                            </button>
+                        </li>
+                    </ul>
                 </div>
 
                 <div class="section">
-                    <h2>⚙️ Настройки</h2>
+                    <h2><i class="fas fa-cog"></i> Настройки</h2>
                     <div class="form-group">
-                        <label><input type="checkbox" id="auto-save-password"> Сохранять пароли</label>
+                        <label class="checkbox-group">
+                            <input type="checkbox" id="auto-save-password">
+                            <span>Сохранять пароли</span>
+                        </label>
                     </div>
                     <div class="form-group">
                         <label>Имя пользователя по умолчанию</label>
                         <input type="text" id="default-username" value="admin">
                     </div>
-                    <button class="btn btn-success" onclick="saveSettings()">💾 Сохранить настройки</button>
+                    <button class="btn btn-success w-full" onclick="saveSettings()">
+                        <i class="fas fa-save"></i> Сохранить настройки
+                    </button>
                 </div>
             </div>
 
+            <!-- ОСНОВНАЯ ОБЛАСТЬ -->
             <div class="content">
+                <!-- ВКЛАДКИ -->
                 <div class="tab-container">
-                    <div class="tab active" onclick="switchTab('employee')">👤 Добавить сотрудника</div>
-                    <div class="tab" onclick="switchTab('queues')">🌳 Дерево очередей</div>
-                    <div class="tab" onclick="switchTab('tools')">🔧 Инструменты</div>
+                    <div class="tab active" onclick="switchTab('employee')">
+                        <i class="fas fa-user-plus"></i> Добавить сотрудника
+                    </div>
+                    <div class="tab" onclick="switchTab('queues')">
+                        <i class="fas fa-sitemap"></i> Дерево очередей
+                    </div>
+                    <div class="tab" onclick="switchTab('tools')">
+                        <i class="fas fa-tools"></i> Инструменты
+                    </div>
                 </div>
 
+                <!-- ВКЛАДКА: ДОБАВЛЕНИЕ СОТРУДНИКА -->
                 <div id="employee-tab" class="tab-content active">
                     <div class="section">
-                        <h2>Добавить сотрудника</h2>
+                        <h2><i class="fas fa-user-plus"></i> Добавить сотрудника</h2>
+                        
                         <div class="form-group">
                             <label>ФИО *</label>
                             <input type="text" id="full-name" placeholder="Иванов Иван Иванович">
                         </div>
+                        
                         <div class="form-group">
                             <label>Должность *</label>
                             <input type="text" id="position" placeholder="Инженер">
                         </div>
+                        
                         <div class="form-group">
                             <label>IP адрес *</label>
-                            <input type="text" id="ip-address" placeholder="192.168.1.100">
-                            <button class="btn btn-warning" onclick="checkDHCP()" style="margin-top: 5px; width: auto;">🔍 Проверить DHCP</button>
+                            <div class="flex gap-10">
+                                <input type="text" id="ip-address" placeholder="192.168.1.100" class="flex-1">
+                                <button class="btn btn-warning" onclick="checkDHCP()">
+                                    <i class="fas fa-search"></i> Проверить DHCP
+                                </button>
+                            </div>
                         </div>
+                        
                         <div class="form-group">
                             <label>MAC адрес</label>
                             <input type="text" id="mac-address" placeholder="00:11:22:33:44:55">
                         </div>
+                        
                         <div class="form-group">
                             <label class="checkbox-group">
-                                <input type="checkbox" id="internet-access"> Доступ в интернет
+                                <input type="checkbox" id="internet-access">
+                                <span>Доступ в интернет</span>
                             </label>
                         </div>
+                        
                         <div class="form-group">
                             <label>Очередь</label>
-                            <select id="queue-select">
-                                <option value="">-- Не выбрана --</option>
-                            </select>
-                            <button class="btn btn-warning" onclick="findQueues()" style="margin-top: 5px; width: auto;">🔍 Найти очереди для IP</button>
+                            <div class="flex gap-10">
+                                <select id="queue-select" class="flex-1">
+                                    <option value="">-- Не выбрана --</option>
+                                </select>
+                                <button class="btn btn-warning" onclick="findQueues()">
+                                    <i class="fas fa-search"></i> Найти очереди для IP
+                                </button>
+                            </div>
                         </div>
-                        <button class="btn btn-success" onclick="addEmployee()">✅ Добавить сотрудника</button>
+                        
+                        <button class="btn btn-success w-full" onclick="addEmployee()">
+                            <i class="fas fa-check"></i> Добавить сотрудника
+                        </button>
+                        
                         <div id="employee-results" class="results"></div>
                     </div>
                 </div>
 
+                <!-- ВКЛАДКА: ДЕРЕВО ОЧЕРЕДЕЙ -->
                 <div id="queues-tab" class="tab-content">
                     <div class="section">
-                        <h2>Дерево очередей</h2>
-                        <button class="btn" onclick="loadQueueTree()">🔄 Обновить дерево</button>
-                        <div id="queue-tree" class="queue-tree"></div>
+                        <h2><i class="fas fa-sitemap"></i> Дерево очередей</h2>
+                        <button class="btn btn-primary" onclick="loadQueueTree()">
+                            <i class="fas fa-sync-alt"></i> Обновить дерево
+                        </button>
+                        <div id="queue-tree" class="queue-tree mt-20">
+                            <div class="empty-state">
+                                <i class="fas fa-sitemap"></i>
+                                <p>Подключитесь к устройству для загрузки дерева очередей</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
+                <!-- ВКЛАДКА: ИНСТРУМЕНТЫ -->
                 <div id="tools-tab" class="tab-content">
                     <div class="section">
-                        <h2>Инструменты</h2>
+                        <h2><i class="fas fa-tools"></i> Инструменты</h2>
+                        
                         <div class="form-group">
                             <label>IP для проверки</label>
-                            <input type="text" id="check-ip" placeholder="192.168.1.100">
-                            <button class="btn" onclick="checkIP()">🔍 Проверить IP</button>
+                            <div class="flex gap-10">
+                                <input type="text" id="check-ip" placeholder="192.168.1.100" class="flex-1">
+                                <button class="btn btn-primary" onclick="checkIP()">
+                                    <i class="fas fa-search"></i> Проверить IP
+                                </button>
+                            </div>
                         </div>
-                        <div id="tools-results"></div>
+                        
+                        <div id="tools-results" class="results"></div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Модальное окно для добавления устройства -->
-    <div id="device-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
-        <div style="background: white; width: 500px; margin: 100px auto; padding: 20px; border-radius: 10px;">
-            <h2>➕ Добавить устройство</h2>
+    <!-- МОДАЛЬНОЕ ОКНО ДЛЯ ДОБАВЛЕНИЯ УСТРОЙСТВА -->
+    <div id="device-modal">
+        <div>
+            <h2><i class="fas fa-plus"></i> Добавить устройство</h2>
+            
             <div class="form-group">
                 <label>Имя устройства *</label>
                 <input type="text" id="device-name-input" placeholder="Роутер офиса">
             </div>
+            
             <div class="form-group">
                 <label>IP адрес *</label>
                 <input type="text" id="device-ip" placeholder="192.168.88.1">
             </div>
+            
             <div class="form-group">
                 <label>Порт</label>
                 <input type="number" id="device-port" value="8728">
             </div>
+            
             <div class="form-group">
                 <label>Имя пользователя</label>
                 <input type="text" id="device-username" value="admin">
             </div>
+            
             <div class="form-group">
                 <label>Пароль</label>
                 <input type="password" id="device-password">
             </div>
+            
             <div class="form-group">
                 <label>Описание</label>
-                <textarea id="device-description" rows="3"></textarea>
+                <textarea id="device-description" rows="3" placeholder="Дополнительная информация о устройстве"></textarea>
             </div>
+            
             <div class="form-group">
                 <label class="checkbox-group">
-                    <input type="checkbox" id="save-password"> Сохранить пароль
+                    <input type="checkbox" id="save-password">
+                    <span>Сохранить пароль</span>
                 </label>
             </div>
-            <div style="display: flex; gap: 10px;">
-                <button class="btn btn-success" onclick="saveDevice()">💾 Сохранить</button>
-                <button class="btn btn-danger" onclick="hideAddDeviceForm()">❌ Отмена</button>
+            
+            <div class="flex gap-10">
+                <button class="btn btn-success flex-1" onclick="saveDevice()">
+                    <i class="fas fa-save"></i> Сохранить
+                </button>
+                <button class="btn btn-danger flex-1" onclick="hideAddDeviceForm()">
+                    <i class="fas fa-times"></i> Отмена
+                </button>
             </div>
         </div>
     </div>
 
+    <!-- JavaScript -->
     <script src="/static/js/app.js"></script>
 </body>
 </html>
