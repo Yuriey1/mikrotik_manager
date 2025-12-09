@@ -91,6 +91,10 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 self._find_queues(parsed)
             elif path == '/api/check_dhcp':
                 self._check_dhcp(parsed)
+            # =====  ЭТА СТРОКА ДЛЯ CSS/JS =====
+            elif path.startswith('/static/'):
+                self._serve_static_file(path)
+            # =========================================
             else:
                 self.send_error(404, "Not Found")
                 
@@ -348,6 +352,42 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 'found': False
             })
     
+    def _serve_static_file(self, path):
+        """Отдать статический файл (CSS, JS)"""
+        try:
+            # Убираем ведущий слеш
+            if path.startswith('/'):
+                path = path[1:]
+        
+            # Проверяем существование файла
+            if not os.path.exists(path):
+                self.send_error(404, f"File not found: {path}")
+                return
+        
+            # Определяем Content-Type
+            content_type = 'text/plain'
+            if path.endswith('.css'):
+                content_type = 'text/css; charset=utf-8'
+            elif path.endswith('.js'):
+                content_type = 'application/javascript; charset=utf-8'
+            elif path.endswith('.png'):
+                content_type = 'image/png'
+        
+            # Читаем файл
+            with open(path, 'rb') as f:
+                content = f.read()
+        
+            # Отправляем
+            self.send_response(200)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Content-Length', str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+        
+        except Exception as e:
+            print(f"❌ Ошибка отдачи статического файла {path}: {e}")
+            self.send_error(500, str(e))
+
     def _add_device(self, data):
         """Добавить устройство"""
         try:
