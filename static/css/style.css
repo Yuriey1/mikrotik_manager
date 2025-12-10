@@ -315,6 +315,7 @@ textarea {
 }
 
 .device-info {
+    margin: 0 8px;
     flex: 1;
     min-width: 0;
 }
@@ -322,16 +323,19 @@ textarea {
 .device-name {
     font-weight: 600;
     color: var(--text-primary);
-    font-size: 15px;
-    margin-bottom: 4px;
+    font-size: 13px;
+    line-height: 1.2;
+    margin-bottom: 2px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .device-ip {
-    font-size: 13px;
+    font-size: 11px;
     color: var(--text-muted);
+    color: #666;
+    line-height: 1.2;
 }
 
 .connect-btn {
@@ -871,4 +875,122 @@ textarea {
     display: flex;
     align-items: center;
     height: 32px;
+}
+
+/* Стили для контейнера списка устройств */
+.device-list-container {
+    max-height: 300px; /* Ограничиваем высоту */
+    overflow-y: auto;  /* Вертикальная прокрутка */
+    margin-top: 15px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background-color: var(--bg-light);
+    width: 100%;
+    box-sizing: border-box;
+    /* Критически важные свойства */
+    scrollbar-color: #888 #f0f0f0 !important; /* Цвет для Firefox */
+    scrollbar-width: thin !important; /* Толщина для Firefox */
+    /* Для WebKit браузеров */
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Улучшаем стили списка устройств */
+.device-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.device-list li {
+    padding: 8px 10px; /* Было 12px 15px - уменьшаем */
+    min-height: 40px; /* Было 50px - уменьшаем */
+    font-size: 13px; /* Немного уменьшаем текст */
+    border-bottom: 1px solid var(--border-color);
+    transition: var(--transition);
+}
+
+/* Уменьшаем иконки в списке */
+.device-list li i {
+    font-size: 14px; /* Было 16px */
+    width: 20px; /* Фиксируем ширину */
+}
+
+/* Уменьшаем кнопки в списке */
+.device-list li .btn-sm {
+    padding: 4px 8px !important;
+    font-size: 12px !important;
+    min-width: 30px;
+}
+
+.device-list li:last-child {
+    border-bottom: none;
+}
+
+.device-list li:hover {
+    background-color: rgba(var(--primary-rgb), 0.05);
+}
+
+/* Полоса прокрутки */
+.device-list-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.device-list-container::-webkit-scrollbar-track {
+
+    background-color: #f0f0f0 !important;
+    border-radius: 7px !important;
+    margin: 2px 0 !important;
+
+    background: var(--bg-light);
+    /*border-radius: 4px;*/
+}
+
+.device-list-container::-webkit-scrollbar-thumb {
+
+    background-color: #0077cc !important;
+    border-radius: 7px !important;
+    border: 3px solid #f0f0f0 !important;
+    background-clip: content-box !important; /* Важно! */
+    min-height: 40px !important;
+
+    background: var(--primary);
+    /*border-radius: 4px;*/
+}
+
+.device-list-container::-webkit-scrollbar-thumb:hover {
+    /*background: var(--primary-dark);*/
+    background-color: #005599 !important;
+}
+
+.device-list-container::-webkit-scrollbar-button {
+    height: 5px !important;
+    background-color: #ccc !important;
+    display: block !important; /* Показываем кнопки вверх/вниз */
+}
+
+/* Для пустого состояния */
+.device-list .empty-state {
+    text-align: center;
+    padding: 15px 10px;
+    border-bottom: none;
+}
+
+.device-list .empty-state i {
+    font-size: 24px; /* Было 32px */
+    margin-bottom: 8px;
+}
+
+.device-list .empty-state p {
+    font-size: 13px;
+    margin-bottom: 10px;
+}
+
+/* Улучшаем отображение устройств при подключении/отключении */
+.device-list li.connected {
+    border-left: 4px solid var(--success);
+    background-color: rgba(var(--success-rgb), 0.05);
+}
+
+.device-list li.disconnected {
+    border-left: 4px solid var(--border-color);
 }

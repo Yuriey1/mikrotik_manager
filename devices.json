@@ -22,5 +22,29 @@
     "username": "nur001",
     "password": "enc:WjVNZjN4cGs=",
     "description": "Дражные тайлы, спутник"
+  },
+  "Посольный Теле2": {
+    "name": "Посольный Теле2",
+    "ip": "37.28.185.192",
+    "port": 8291,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Надежда Мегафон": {
+    "name": "Надежда Мегафон",
+    "ip": "31.173.249.220",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Кувай Ростелеком": {
+    "name": "Кувай Ростелеком",
+    "ip": "92.124.98.106",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
   }
 }
