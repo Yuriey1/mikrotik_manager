@@ -290,50 +290,65 @@
                 });
         }
 
-        // Поиск очередей для IP
-        function findQueues() {
-            const ip = document.getElementById('ip-address').value.trim();
-            if (!ip) {
-                showAlert('Введите IP адрес', 'error');
-                return;
-            }
+// Поиск очередей для IP (с фильтрацией платных очередей)
+function findQueues() {
+    const ip = document.getElementById('ip-address').value.trim();
+    if (!ip) {
+        showAlert('Введите IP адрес', 'error');
+        return;
+    }
 
-            if (!currentDevice) {
-                showAlert('Сначала подключитесь к устройству', 'error');
-                return;
-            }
+    if (!currentDevice) {
+        showAlert('Сначала подключитесь к устройству', 'error');
+        return;
+    }
 
-            fetch(`/api/find_queues?ip=${encodeURIComponent(ip)}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const select = document.getElementById('queue-select');
-                        select.innerHTML = '<option value="">-- Не выбрана --</option>';
+    fetch(`/api/find_queues?ip=${encodeURIComponent(ip)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const select = document.getElementById('queue-select');
+                select.innerHTML = '<option value="">-- Не выбрана --</option>';
 
-                        if (data.existing && data.existing.length > 0) {
-                            showAlert(`IP уже находится в очередях: ${data.existing.join(', ')}`, 'warning');
+                if (data.existing && data.existing.length > 0) {
+                    showAlert(`IP уже находится в очередях: ${data.existing.join(', ')}`, 'warning');
+                }
+
+                if (data.queues && data.queues.length > 0) {
+                    // ФИЛЬТРАЦИЯ: исключаем очереди, начинающиеся с "paid"
+                    const freeQueues = data.queues.filter(queue => {
+                        return !queue.name.toLowerCase().startsWith('paid');
+                    });
+
+                    if (freeQueues.length > 0) {
+                        freeQueues.forEach(queue => {
+                            const option = document.createElement('option');
+                            option.value = queue.name;
+                            option.textContent = `${queue.name} (${queue.ip_count} IP)`;
+                            select.appendChild(option);
+                        });
+                        
+                        const paidCount = data.queues.length - freeQueues.length;
+                        let message = `Найдено ${freeQueues.length} бесплатных очередей`;
+                        if (paidCount > 0) {
+                            message += ` (${paidCount} платных исключено)`;
                         }
-
-                        if (data.queues && data.queues.length > 0) {
-                            data.queues.forEach(queue => {
-                                const option = document.createElement('option');
-                                option.value = queue.name;
-                                option.textContent = `${queue.name} (${queue.ip_count} IP)`;
-                                select.appendChild(option);
-                            });
-                            showAlert(`Найдено ${data.count} подходящих очередей`, 'success');
-                        } else {
-                            showAlert('Подходящих очередей не найдено', 'info');
-                        }
+                        showAlert(message, 'success');
                     } else {
-                        showAlert(data.error, 'error');
+                        showAlert('Бесплатных очередей не найдено', 'info');
                     }
-                })
-                .catch(error => {
-                    console.error('Ошибка поиска очередей:', error);
-                    showAlert('Ошибка поиска очередей', 'error');
-                });
-        }
+                } else {
+                    showAlert('Подходящих очередей не найдено', 'info');
+                }
+            } else {
+                showAlert(data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка поиска очередей:', error);
+            showAlert('Ошибка поиска очередей', 'error');
+        });
+}
 
         // Добавление сотрудника
         function addEmployee() {
