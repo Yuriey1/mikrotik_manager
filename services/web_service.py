@@ -279,78 +279,72 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
         self._send_json(stats)
     
     def _find_queues(self, parsed):
-        """Найти очереди для IP"""
+        """Найти очереди для IP или вернуть все очереди"""
         global tree_builder
         if not tree_builder:
-            self._send_json({'error': 'Не подключено к устройству'}, 400)
+            self._send_json({'success': False, 'error': 'Не подключено к устройству'}, 400)
             return
-        
+
         query = parse_qs(parsed.query)
         ip = query.get('ip', [''])[0].strip()
-        
+
+        # ========= РЕЖИМ 1: БЕЗ IP - ВОЗВРАЩАЕМ ВСЕ ОЧЕРЕДИ =========
         if not ip:
-            self._send_json({'error': 'IP не указан'}, 400)
-            return
-        
+            try:
+                # Получаем все узлы из tree_builder
+                all_nodes = list(tree_builder.nodes.values())
+                all_dicts = []
+            
+                for node in all_nodes:
+                    node_dict = node.to_dict()
+                    all_dicts.append(node_dict)
+            
+                # Успешный ответ со всеми очередями
+                self._send_json({
+                    'success': True,
+                    'queues': all_dicts,
+                    'count': len(all_dicts)
+                })
+                return
+            
+            except Exception as e:
+                print(f"❌ Ошибка получения всех очередей: {e}")
+                self._send_json({'success': False, 'error': str(e)})
+                return
+
+    # ========= РЕЖИМ 2: С IP - ПОИСК ОЧЕРЕДЕЙ ДЛЯ КОНКРЕТНОГО IP =========
+    # Проверка формата IP (существующая логика)
         try:
             if '/' in ip:
                 ipaddress.ip_network(ip, strict=False)
             else:
                 ipaddress.ip_address(ip)
         except ValueError:
-            self._send_json({'error': 'Неверный формат IP'}, 400)
+            self._send_json({'success': False, 'error': 'Неверный формат IP'}, 400)
             return
-        
-        # Находим очереди, где уже есть IP
-        existing = []
-        for node in tree_builder.nodes.values():
-            if node.has_ip(ip):
-                existing.append(node.name)
-        
-        # Находим подходящие очереди
-        suitable = tree_builder.find_suitable_queues_for_ip(ip)
-        suitable_dicts = [node.to_dict() for node in suitable]
-        
-        self._send_json({
-            'success': True,
-            'existing': existing,
-            'queues': suitable_dicts,
-            'count': len(suitable)
-        })
-    
-    def _check_dhcp(self, parsed):
-        """Проверить DHCP lease"""
-        global mikrotik_manager
-        if not mikrotik_manager:
-            self._send_json({'error': 'Не подключено к устройству'}, 400)
-            return
-        
-        query = parse_qs(parsed.query)
-        ip = query.get('ip', [''])[0].strip()
-        mac = query.get('mac', [''])[0].strip()
-        
-        if not ip and not mac:
-            self._send_json({'error': 'Укажите IP или MAC'}, 400)
-            return
-        
-        lease = mikrotik_manager.find_dhcp_lease(ip=ip, mac=mac)
-        
-        if lease:
+
+        try:
+            # Находим очереди, где уже есть IP
+            existing = []
+            for node in tree_builder.nodes.values():
+                if node.has_ip(ip):
+                    existing.append(node.name)
+
+            # Находим подходящие очереди
+            suitable = tree_builder.find_suitable_queues_for_ip(ip)
+            suitable_dicts = [node.to_dict() for node in suitable]
+
             self._send_json({
                 'success': True,
-                'found': True,
-                'lease': {
-                    'ip': lease.get('address'),
-                    'mac': lease.get('mac-address'),
-                    'status': 'dynamic' if lease.get('dynamic') == 'true' else 'static',
-                    'comment': lease.get('comment', '')
-                }
+                'ip': ip,
+                'existing': existing,
+                'queues': suitable_dicts,
+                'count': len(suitable)
             })
-        else:
-            self._send_json({
-                'success': True,
-                'found': False
-            })
+        
+        except Exception as e:
+            print(f"❌ Ошибка поиска очередей для IP {ip}: {e}")
+            self._send_json({'success': False, 'error': str(e)})
     
     def _serve_static_file(self, path):
         """Отдать статический файл (CSS, JS)"""

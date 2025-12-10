@@ -83,58 +83,67 @@
                 });
         }
 
+// Подключение/отключение устройства
+function connectDevice(deviceName) {
+    // Если уже подключены к этому устройству - отключаемся
+    if (currentDevice === deviceName) {
+        disconnectDevice();
+        return;
+    }
 
-        // Подключение/отключение устройства
-        function connectDevice(deviceName) {
-            // Если уже подключены к этому устройству - отключаемся
-            if (currentDevice === deviceName) {
-                disconnectDevice();
-                return;
-            }
+    showToast('Подключаемся...', 'info');
 
-            showToast('Подключаемся...', 'info');
+    fetch(`/api/connect?device=${encodeURIComponent(deviceName)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                if (data.action === 'connected') {
+                    currentDevice = deviceName;
+                    document.getElementById('connection-status').className = 'status-dot connected';
+                    document.getElementById('connection-text').textContent = 'Подключено';
+                    document.getElementById('device-name').textContent = deviceName;
+                    document.getElementById('disconnect-btn').style.display = 'block';
 
-            fetch(`/api/connect?device=${encodeURIComponent(deviceName)}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        if (data.action === 'connected') {
-                            currentDevice = deviceName;
-                            document.getElementById('connection-status').className = 'status-dot connected';
-                            document.getElementById('connection-text').textContent = 'Подключено';
-                            document.getElementById('device-name').textContent = deviceName;
-                            document.getElementById('disconnect-btn').style.display = 'block';
+                    showToast(data.message, 'success');
 
-                            showToast(data.message, 'success');
+                    // 1. Загружаем дерево очередей (существующий вызов)
+                    loadQueueTree();
+                    
+                    // 2. ЗАГРУЖАЕМ ВСЕ ОЧЕРЕДИ ДЛЯ SELECT! (НОВОЕ!)
+                    loadAllQueues();
+                    
+                } else if (data.action === 'disconnected') {
+                    currentDevice = null;
+                    document.getElementById('connection-status').className = 'status-dot';
+                    document.getElementById('connection-text').textContent = 'Не подключено';
+                    document.getElementById('device-name').textContent = '';
+                    document.getElementById('queue-stats').textContent = '';
+                    document.getElementById('disconnect-btn').style.setProperty('display', 'none', 'important');
 
-                            // Загружаем дерево очередей
-                            loadQueueTree();
-                        } else if (data.action === 'disconnected') {
-                            currentDevice = null;
-                            document.getElementById('connection-status').className = 'status-dot';
-                            document.getElementById('connection-text').textContent = 'Не подключено';
-                            document.getElementById('device-name').textContent = '';
-                            document.getElementById('queue-stats').textContent = '';
-                            document.getElementById('disconnect-btn').style.setProperty('display', 'none', 'important');
-                            //document.getElementById('disconnect-btn').style.display = 'none !important';
+                    showToast(data.message, 'info');
 
-                            showToast(data.message, 'info');
-
-                            // Очищаем дерево очередей
-                            document.getElementById('queue-tree').innerHTML = '';
-                        }
-
-                        // Обновляем список устройств
-                        loadDevices();
-                    } else {
-                        showToast(data.error || 'Ошибка подключения', 'error');
+                    // Очищаем дерево очередей
+                    document.getElementById('queue-tree').innerHTML = '';
+                    
+                    // Очищаем select с очередями
+                    const queueSelect = document.getElementById('queue-select');
+                    if (queueSelect) {
+                        queueSelect.innerHTML = '<option value="">-- Не подключено --</option>';
+                        queueSelect.disabled = true;
                     }
-                })
-                .catch(error => {
-                    console.error('Ошибка подключения:', error);
-                    showAlert('Ошибка подключения', 'error');
-                });
-        }
+                }
+
+                // Обновляем список устройств
+                loadDevices();
+            } else {
+                showToast(data.error || 'Ошибка подключения', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка подключения:', error);
+            showAlert('Ошибка подключения', 'error');
+        });
+}
 
         // Функция для отключения
         function disconnectDevice() {
@@ -613,4 +622,113 @@ function showToast(message, type = 'info', duration = 5000) {
 // Заменяем старую функцию showAlert
 function showAlert(message, type = 'info') {
     showToast(message, type);
+}
+
+// Загружает ВСЕ очереди при подключении к устройству
+function loadAllQueues() {
+    console.log('loadAllQueues: Загрузка всех очередей...');
+    
+    if (!currentDevice) {
+        console.log('loadAllQueues: Нет подключенного устройства');
+        return;
+    }
+
+    const queueSelect = document.getElementById('queue-select');
+    if (queueSelect) {
+        queueSelect.innerHTML = '<option value="">-- Загрузка очередей... --</option>';
+        queueSelect.disabled = true;
+    }
+
+    // Запрос БЕЗ параметра IP - получим все очереди
+    fetch('/api/find_queues')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('loadAllQueues: Ответ сервера:', data);
+            
+            if (data.success && data.queues) {
+                console.log(`loadAllQueues: Получено ${data.queues.length} очередей`);
+                
+                // Фильтруем платные очереди (начинающиеся с "paid")
+                const freeQueues = data.queues.filter(queue => {
+                    return !queue.name.toLowerCase().startsWith('paid');
+                });
+                
+                console.log(`loadAllQueues: После фильтрации ${freeQueues.length} бесплатных очередей`);
+                
+                // Сохраняем в глобальной переменной (на всякий случай)
+                window.allQueuesCache = freeQueues;
+                
+                // Обновляем select
+                updateQueueSelect(freeQueues);
+                
+                // Показываем уведомление
+                showToast(`Загружено ${freeQueues.length} бесплатных очередей`, 'success');
+                
+            } else {
+                console.error('loadAllQueues: Ошибка в данных:', data.error);
+                showToast('Ошибка загрузки очередей: ' + (data.error || 'неизвестная ошибка'), 'error');
+                resetQueueSelect();
+            }
+        })
+        .catch(error => {
+            console.error('loadAllQueues: Ошибка сети:', error);
+            showToast('Ошибка соединения с сервером', 'error');
+            resetQueueSelect();
+        });
+}
+
+// Обновляет select с очередями
+function updateQueueSelect(queues) {
+    const select = document.getElementById('queue-select');
+    if (!select) {
+        console.log('updateQueueSelect: Элемент #queue-select не найден');
+        return;
+    }
+    
+    select.innerHTML = '<option value="">-- Не выбрана --</option>';
+    
+    if (queues.length === 0) {
+        select.innerHTML += '<option value="">-- Нет бесплатных очередей --</option>';
+        console.log('updateQueueSelect: Нет очередей для отображения');
+    } else {
+        // Сортируем очереди по имени (алфавиту)
+        queues.sort((a, b) => a.name.localeCompare(b.name));
+        
+        console.log(`updateQueueSelect: Добавляем ${queues.length} очередей в select`);
+        
+        // Добавляем опции
+        queues.forEach(queue => {
+            const option = document.createElement('option');
+            option.value = queue.name;
+            
+            let displayText = queue.name;
+            // Добавляем дополнительную информацию если есть
+            if (queue.target) {
+                displayText += ` (${queue.target})`;
+            }
+            if (queue.comment) {
+                displayText += ` - ${queue.comment}`;
+            }
+            
+            option.textContent = displayText;
+            select.appendChild(option);
+        });
+    }
+    
+    select.disabled = false;
+    console.log('updateQueueSelect: Select обновлен');
+}
+
+// Сбрасывает select в состояние ошибки
+function resetQueueSelect() {
+    const select = document.getElementById('queue-select');
+    if (select) {
+        select.innerHTML = '<option value="">-- Ошибка загрузки --</option>';
+        select.disabled = false;
+    }
 }
