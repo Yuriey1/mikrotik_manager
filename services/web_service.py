@@ -89,12 +89,12 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 self._serve_stats()
             elif path == '/api/find_queues':
                 self._find_queues(parsed)
-            elif path == '/api/check_dhcp':
-                self._check_dhcp(parsed)
             # =====  ЭТА СТРОКА ДЛЯ CSS/JS =====
             elif path.startswith('/static/'):
                 self._serve_static_file(path)
             # =========================================
+            elif path == '/api/find_dhcp_lease':
+                self._find_dhcp_lease(parsed)
             else:
                 self.send_error(404, "Not Found")
                 
@@ -152,6 +152,56 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
         self._set_headers('text/html')
         self.wfile.write(html.encode('utf-8'))
     
+    # Метод _find_dhcp_lease:
+    def _find_dhcp_lease(self, parsed):
+        """Обработчик для /api/find_dhcp_lease"""
+        global mikrotik_manager
+        try:
+            query = parse_qs(parsed.query)
+            ip = query.get('ip', [''])[0]
+    
+            if not ip:
+                self._send_json({"success": False, "error": "Не указан IP адрес"}, 400)
+                return
+    
+            if mikrotik_manager is None or not mikrotik_manager.connected:
+                self._send_json({"success": False, "error": "Не подключено к устройству"}, 400)
+                return
+    
+            print(f"🔍 Поиск DHCP lease для IP: {ip}")
+    
+            lease = mikrotik_manager.find_dhcp_lease(ip=ip)
+            print(f"🔍 Результат find_dhcp_lease: {lease}")
+    
+            if lease:
+                # Ищем MAC адрес (может быть в разных полях)
+                mac_address = None
+            
+                # Проверяем возможные названия полей
+                for key in ['mac-address', 'mac_address', 'mac-address', 'mac.address', 'mac']:
+                    if key in lease:
+                        mac_address = lease[key]
+                        break
+            
+                self._send_json({
+                    "success": True,
+                    "found": True,
+                    "lease": lease,
+                    "mac_address": mac_address
+                })
+            else:
+                self._send_json({
+                    "success": True,
+                    "found": False,
+                    "message": "DHCP lease не найден"
+                })
+        
+        except Exception as e:
+            print(f"❌ Ошибка в _find_dhcp_lease: {e}")
+            import traceback
+            traceback.print_exc()
+            self._send_json({"success": False, "error": str(e)}, 500)
+
     def _serve_devices(self):
         """Отдать список устройств"""
         try:
@@ -254,7 +304,7 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
     
     def _serve_tree(self):
         """Отдать дерево очередей"""
-        global tree_builder
+        global tree_builder, mikrotik_manager
         if not tree_builder or not mikrotik_manager or not mikrotik_manager.connected:
             self._send_json({'error': 'Не подключено к устройству'}, 400)
             return
@@ -428,18 +478,21 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
     def _add_employee(self, data):
         """Добавить сотрудника (полный процесс)"""
         global mikrotik_manager, tree_builder
-    
-        print(f"\n" + "="*50)
+
+        print("\n" + "=" * 50)
         print("👤 ДОБАВЛЕНИЕ СОТРУДНИКА")
         print(f"📝 Полученные данные: {data}")
-        print("="*50)
-    
+        print("=" * 50)
+
         if not mikrotik_manager:
             print("❌ Ошибка: mikrotik_manager не подключен")
             self._send_json({'error': 'Не подключено к устройству'}, 400)
             return
-    
+
         try:
+            # Начало процесса добавления сотрудника
+            print("Начало операции добавления сотрудника")
+
             # Получаем данные
             full_name = data.get('full_name', '').strip()
             position = data.get('position', '').strip()
@@ -447,7 +500,7 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             mac = data.get('mac', '').strip()
             internet_access = bool(data.get('internet_access', False))
             queue_name = data.get('queue', '').strip()
-        
+
             print(f"🔍 Парсинг данных:")
             print(f"  ФИО: {full_name}")
             print(f"  Должность: {position}")
@@ -455,13 +508,13 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             print(f"  MAC: {mac}")
             print(f"  Интернет доступ: {internet_access}")
             print(f"  Очередь: {queue_name}")
-        
+
             if not full_name or not position or not ip:
                 error_msg = 'Заполните обязательные поля'
                 print(f"❌ {error_msg}")
                 self._send_json({'error': error_msg}, 400)
                 return
-        
+
             # Проверяем формат IP
             try:
                 ipaddress.ip_address(ip)
@@ -471,8 +524,19 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 print(f"❌ {error_msg}")
                 self._send_json({'error': error_msg}, 400)
                 return
-        
-            # Проверяем формат MAC
+
+            # Если MAC не указан, ищем в DHCP
+            if not mac:
+                print(f"🔍 MAC не указан, ищем в DHCP для IP {ip}...")
+                try:
+                    lease = mikrotik_manager.find_dhcp_lease(ip=ip)
+                    if lease:
+                        mac = lease.get('mac-address', '')
+                        print(f"✅ Найден MAC в DHCP: {mac}")
+                except Exception as e:
+                    print(f"⚠️  Ошибка поиска DHCP lease: {e}")
+
+            # Проверяем формат MAC (если он есть)
             if mac:
                 mac_pattern = re.compile(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$')
                 if not mac_pattern.match(mac):
@@ -481,21 +545,21 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                     self._send_json({'error': error_msg}, 400)
                     return
                 # Приводим к формату MikroTik (через двоеточие)
-                mac = ':'.join(mac.replace('-', ':').split(':')).lower()
+                mac = ':'.join(mac.split(':')).lower()
                 print(f"✅ MAC адрес приведен: {mac}")
-        
+
             # Создаем комментарий
             comment = f"{position} - {full_name}"
             print(f"📝 Комментарий: {comment}")
-        
+
             results = {
                 'dhcp': False,
                 'arp': False,
                 'queue': False,
                 'firewall': False
             }
-        
-            # 1. DHCP Lease
+
+            # 1. DHCP Lease - только если есть MAC
             if mac:
                 print(f"🔧 Создание DHCP lease для {ip} -> {mac}")
                 results['dhcp'] = mikrotik_manager.create_static_lease(ip, mac, comment)
@@ -503,8 +567,8 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             else:
                 results['dhcp'] = True  # Пропускаем если нет MAC
                 print(f"⚠️  MAC не указан, пропускаем DHCP")
-        
-            # 2. ARP таблица
+
+            # 2. ARP таблица - только если есть MAC
             if mac:
                 print(f"🔧 Добавление ARP записи для {ip} -> {mac}")
                 results['arp'] = mikrotik_manager.add_static_arp(ip, mac, comment)
@@ -512,7 +576,7 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             else:
                 results['arp'] = True
                 print(f"⚠️  MAC не указан, пропускаем ARP")
-        
+
             # 3. Очередь
             if queue_name:
                 print(f"🔧 Поиск очереди '{queue_name}'...")
@@ -522,7 +586,7 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                     if node.name == queue_name:
                         queue_id = node.id
                         break
-            
+
                 if queue_id:
                     print(f"🔧 Добавление IP {ip} в очередь {queue_name} (ID: {queue_id})")
                     results['queue'] = mikrotik_manager.add_ip_to_queue(queue_id, ip)
@@ -533,47 +597,39 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             else:
                 results['queue'] = True
                 print(f"⚠️  Очередь не указана, пропускаем")
-        
+
             # 4. Firewall Address List (интернет доступ)
             if internet_access:
                 print(f"🔧 Добавление {ip} в address-list 'internet_access'")
                 results['firewall'] = mikrotik_manager.add_to_address_list(
-                    'internet_access', 
-                    f"{ip}/32", 
+                    'internet_access',
+                    f"{ip}/32",
                     comment
                 )
                 print(f"   Результат firewall: {results['firewall']}")
             else:
                 results['firewall'] = True
                 print(f"⚠️  Интернет доступ отключен, пропускаем")
-        
-            # 5. Создаем запись о сотруднике
-            employee = Employee(
-                full_name=full_name,
-                position=position,
-                ip_address=ip,
-                mac_address=mac,
-                internet_access=internet_access,
-                queue_assigned=queue_name
-            )
-        
-            # Перестраиваем дерево очередей
-            if tree_builder:
-                print("🔄 Перестраиваем дерево очередей...")
-                tree_builder.build_tree()
-        
-            success = all(results.values())
-        
+
+            # Завершение операции
+            print("Завершилась операция добавления сотрудника")
+
+            # Готовим ответ клиенту
             response = {
-                'success': success,
-                'message': f'Сотрудник {full_name} добавлен' if success else f'Сотрудник {full_name} добавлен с ошибками',
-                'results': results,
-                'employee': employee.to_dict()
+                'success': all(results.values()),
+                'message': f'Сотрудник {full_name} добавлен' if all(results.values()) else f'Сотрудник {full_name} добавлен с ошибками',
+                'details': [
+                    f'DHCP: {"успешно" if results["dhcp"] else "ошибочно"}',
+                    f'ARP: {"успешно" if results["arp"] else "ошибочно"}',
+                    f'Queue: {"успешно" if results["queue"] else "ошибочно"}',
+                    f'Firewall: {"успешно" if results["firewall"] else "ошибочно"}'
+                ],
+                'results': results
             }
-        
+
             print(f"📤 Отправка ответа: {response}")
             self._send_json(response)
-        
+
         except Exception as e:
             print(f"❌ КРИТИЧЕСКАЯ Ошибка добавления сотрудника: {e}")
             traceback.print_exc()

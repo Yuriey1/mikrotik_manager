@@ -46,5 +46,13 @@
     "username": "nur001",
     "password": "enc:WjVNZjN4cGs=",
     "description": ""
+  },
+  "Веселый Теле2": {
+    "name": "Веселый Теле2",
+    "ip": "81.26.81.192",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
   }
 }

@@ -60,22 +60,33 @@ class MikroTikManager:
             print(f"⚠️  Ошибка при отключении: {e}")
     
     # ========== DHCP LEASES ==========
-
-    def find_dhcp_lease(self, ip: str = "", mac: str = "") -> Optional[Dict]:
-        """Найти DHCP lease по IP или MAC"""
+    def find_dhcp_lease(self, ip: str, mac: Optional[str] = None) -> Optional[dict]:
+        """Найти DHCP lease по IP адресу."""
         try:
-            leases = list(self.api('/ip/dhcp-server/lease/print'))
-
-            for lease in leases:
-                if ip and lease.get('address') == ip:
+            if not self.api:
+                return None
+        
+            print(f"🔍 Поиск DHCP lease для IP: {ip}")
+        
+            # Используем librouteros API - получаем все DHCP аренды
+            leases = self.api.path('/ip/dhcp-server/lease')
+            all_leases = list(leases)
+        
+            print(f"📊 Всего DHCP leases: {len(all_leases)}")
+        
+            # Проходим по всем записям и ищем match по IP
+            for lease in all_leases:
+                if lease.get('address') == ip:
+                    print(f"✅ Найден DHCP lease для {ip}, MAC: {lease.get('mac-address', '')}")
                     return lease
-                if mac and lease.get('mac-address', '').lower() == mac.lower():
-                    return lease
-
+        
+            print(f"⚠️  DHCP lease для {ip} не найден среди {len(all_leases)} записей")
+            return None
+        
         except Exception as e:
-            print(f"❌ Ошибка поиска DHCP lease: {e}")
-
-        return None
+            print(f"❌ Ошибка поиска DHCP lease для {ip}: {e}")
+            traceback.print_exc()
+            return None
     
     def create_static_lease(self, ip: str, mac: str, comment: str = "") -> bool:
         """Создать/обновить статический DHCP lease (УМНАЯ ЛОГИКА)"""
