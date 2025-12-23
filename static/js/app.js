@@ -616,6 +616,33 @@ function sendEmployeeData(employeeData, resultsDiv) {
 
 // ========== НОВЫЕ ФУНКЦИИ ДЛЯ ДЕРЕВА ОЧЕРЕДЕЙ ==========
 
+// Функция для рекурсивной фильтрации платных очередей
+function filterPaidQueuesRecursive(nodes) {
+    const filtered = [];
+    let paidCount = 0;
+    
+    nodes.forEach(node => {
+        // Пропускаем платные очереди (начинающиеся с "paid")
+        if (node.name.toLowerCase().startsWith('paid')) {
+            paidCount++;
+            return;
+        }
+        
+        const newNode = { ...node };
+        
+        // Рекурсивно фильтруем детей
+        if (newNode.children && newNode.children.length > 0) {
+            const childResult = filterPaidQueuesRecursive(newNode.children);
+            newNode.children = childResult.filtered;
+            paidCount += childResult.paidCount;
+        }
+        
+        filtered.push(newNode);
+    });
+    
+    return { filtered, paidCount };
+}
+
 // Загрузка дерева очередей с фильтрацией платных на клиенте
 function loadQueueTree() {
     if (!currentDevice) {
@@ -628,33 +655,8 @@ function loadQueueTree() {
         .then(data => {
             if (data.success) {
                 // ФИЛЬТРУЕМ ПЛАТНЫЕ ОЧЕРЕДИ НА КЛИЕНТЕ
-                const filterPaidQueues = (nodes) => {
-                    const filtered = [];
-                    let paidCount = 0;
-                    
-                    nodes.forEach(node => {
-                        // Пропускаем платные очереди (начинающиеся с "paid")
-                        if (node.name.toLowerCase().startsWith('paid')) {
-                            paidCount++;
-                            return;
-                        }
-                        
-                        const newNode = { ...node };
-                        
-                        // Рекурсивно фильтруем детей
-                        if (newNode.children && newNode.children.length > 0) {
-                            const childResult = filterPaidQueues(newNode.children);
-                            newNode.children = childResult.filtered;
-                            paidCount += childResult.paidCount;
-                        }
-                        
-                        filtered.push(newNode);
-                    });
-                    
-                    return { filtered, paidCount };
-                };
+                const result = filterPaidQueuesRecursive(data.tree);
                 
-                const result = filterPaidQueues(data.tree);
                 queueTreeData = result.filtered;
                 queueTreeFiltered = [...queueTreeData];
                 
@@ -664,8 +666,8 @@ function loadQueueTree() {
                 // Обновляем статистику
                 updateQueueTreeStats(result.filtered, result.paidCount);
                 
-                // Отрисовываем дерево
-                renderQueueTreeV2(result.filtered);
+                // Отрисовываем дерево КАК ЕСТЬ (без перестройки)
+                renderQueueTree(queueTreeFiltered);
                 
                 // Обновляем глобальную статистику в шапке
                 if (data.stats) {
@@ -712,108 +714,16 @@ function updateQueueTreeStats(tree, paidCount = 0) {
     document.getElementById('queue-tree-stats').textContent = statsText;
 }
 
-// Отрисовка нового дерева очереди с DST как корневыми узлами
-function renderQueueTreeV2(tree, level = 0) {
+// Отрисовка дерева очередей КАК ЕСТЬ (без перестройки)
+function renderQueueTree(nodes, level = 0, parentName = '') {
     const container = document.getElementById('queue-tree-v2');
     
-    if (!tree || tree.length === 0) {
+    if (!nodes || nodes.length === 0) {
         showEmptyQueueTree();
         return;
     }
     
     container.innerHTML = '';
-    
-    // Группируем очереди по DST для создания корневых узлов
-    const queuesByDst = {};
-    
-    function processNode(node, parentDst = null) {
-        // Определяем DST для текущего узла
-        let dstText = '';
-        if (node.dst && node.dst !== 'none') {
-            dstText = node.dst;
-        } else if (node.short_dst && node.short_dst !== 'none') {
-            dstText = node.short_dst;
-        } else if (parentDst) {
-            dstText = parentDst;
-        }
-        
-        // Если у узла нет DST, используем "Без DST"
-        if (!dstText) {
-            dstText = 'Без DST';
-        }
-        
-        // Добавляем узел в соответствующую группу DST
-        if (!queuesByDst[dstText]) {
-            queuesByDst[dstText] = {
-                name: dstText,
-                enabled: true, // DST всегда включен
-                children: [],
-                isDstRoot: true
-            };
-        }
-        
-        // Создаем копию узла без детей (дети будут обработаны отдельно)
-        const nodeCopy = {
-            ...node,
-            children: [] // Дети будут добавлены позже
-        };
-        
-        // Добавляем узел в группу DST
-        queuesByDst[dstText].children.push(nodeCopy);
-        
-        // Обрабатываем детей рекурсивно
-        if (node.children && node.children.length > 0) {
-            node.children.forEach(child => {
-                processNode(child, dstText);
-            });
-        }
-    }
-    
-    // Обрабатываем все узлы дерева
-    tree.forEach(node => {
-        processNode(node);
-    });
-    
-    // Преобразуем группы DST в массив для отрисовки
-    const dstRoots = Object.values(queuesByDst);
-    
-    // Определяем максимальные ширины для колонок
-    let maxTargetWidth = 0;
-    let maxDstWidth = 0;
-    
-    function calculateMaxWidths(nodes) {
-        nodes.forEach(node => {
-            if (node.isDstRoot) {
-                // Для корневого DST вычисляем ширину имени
-                const dstWidth = node.name.length * 8;
-                maxDstWidth = Math.max(maxDstWidth, dstWidth);
-            } else {
-                // Для обычных очередей вычисляем ширину TARGET
-                let targetText = '';
-                if (node.short_target && node.short_target !== 'none') {
-                    targetText = node.short_target;
-                } else if (node.target && Array.isArray(node.target) && node.target.length > 0) {
-                    targetText = node.target[0];
-                }
-                
-                if (targetText) {
-                    const targetWidth = targetText.length * 7;
-                    maxTargetWidth = Math.max(maxTargetWidth, targetWidth);
-                }
-            }
-            
-            // Рекурсивно для детей
-            if (node.children && node.children.length > 0) {
-                calculateMaxWidths(node.children);
-            }
-        });
-    }
-    
-    calculateMaxWidths(dstRoots);
-    
-    // Ограничиваем максимальную ширину
-    maxTargetWidth = Math.min(maxTargetWidth, 200);
-    maxDstWidth = Math.min(maxDstWidth, 200);
     
     // Создаем табличную структуру
     const table = document.createElement('div');
@@ -821,251 +731,108 @@ function renderQueueTreeV2(tree, level = 0) {
     table.style.width = '100%';
     table.style.borderCollapse = 'collapse';
     
-    // Отрисовываем каждый корневой DST и его очереди
-    dstRoots.forEach(dstRoot => {
-        // Рендерим корневой DST узел
-        renderDstRootRow(dstRoot, table, maxTargetWidth, maxDstWidth, 0);
-        
-        // Рендерим все очереди этого DST
-        if (dstRoot.children && dstRoot.children.length > 0) {
-            dstRoot.children.forEach(queue => {
-                renderQueueRow(queue, table, maxTargetWidth, maxDstWidth, 1, dstRoot.name);
-            });
-        }
-    });
+    // Отрисовываем каждый узел рекурсивно
+    function renderNodes(nodes, level, parentName) {
+        nodes.forEach(node => {
+            // Проверяем, развернут ли родитель
+            if (parentName && queueTreeExpanded[parentName] === false) {
+                return;
+            }
+            
+            // Рендерим строку узла
+            renderTreeNodeRow(node, table, level, parentName);
+            
+            // Рекурсивно рендерим детей (если узел развернут)
+            if (node.children && node.children.length > 0 && queueTreeExpanded[node.name] !== false) {
+                renderNodes(node.children, level + 1, node.name);
+            }
+        });
+    }
     
+    renderNodes(nodes, 0, '');
     container.appendChild(table);
 }
 
-// Функция для отрисовки корневого DST узла
-function renderDstRootRow(dstNode, table, maxTargetWidth, maxDstWidth, level) {
+// Функция для отрисовки строки узла дерева
+function renderTreeNodeRow(node, table, level, parentName = '') {
     const row = document.createElement('div');
     row.style.display = 'table-row';
-    row.style.backgroundColor = '#f8f9fa'; // Светлый фон для корневых DST
-    
-    // Ячейка с именем DST
-    const nameCell = document.createElement('div');
-    nameCell.style.display = 'table-cell';
-    nameCell.style.verticalAlign = 'middle';
-    nameCell.style.padding = '12px 0';
-    nameCell.style.borderBottom = '2px solid #dee2e6';
-    nameCell.style.fontWeight = 'bold';
-    
-    // Проверяем, развернут ли узел
-    const isExpanded = queueTreeExpanded[dstNode.name] !== false;
-    const hasChildren = dstNode.children && dstNode.children.length > 0;
-    
-    // Создаем элемент DST
-    const dstDiv = document.createElement('div');
-    dstDiv.className = 'dst-root-item';
-    dstDiv.style.display = 'flex';
-    dstDiv.style.alignItems = 'center';
-    dstDiv.style.cursor = 'pointer';
-    
-    // Индикатор развертывания
-    if (hasChildren) {
-        const expandIcon = document.createElement('i');
-        expandIcon.className = `fas ${isExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}`;
-        expandIcon.style.cursor = 'pointer';
-        expandIcon.style.fontSize = '12px';
-        expandIcon.style.color = '#3498db';
-        expandIcon.style.marginRight = '8px';
-        expandIcon.style.width = '15px';
-        expandIcon.style.textAlign = 'center';
-        expandIcon.onclick = (e) => {
-            e.stopPropagation();
-            toggleQueueNode(dstNode.name);
-        };
-        dstDiv.appendChild(expandIcon);
-    } else {
-        const spacer = document.createElement('span');
-        spacer.style.width = '15px';
-        spacer.style.display = 'inline-block';
-        dstDiv.appendChild(spacer);
-    }
-
-    // Иконка DST
-    const dstIcon = document.createElement('i');
-    dstIcon.className = 'fas fa-project-diagram';
-    dstIcon.style.color = '#3498db';
-    dstIcon.style.fontSize = '14px';
-    dstIcon.style.marginRight = '8px';
-    dstDiv.appendChild(dstIcon);
-
-    // Имя DST
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'dst-name';
-    nameSpan.textContent = dstNode.name;
-    nameSpan.style.color = '#2c3e50';
-    nameSpan.style.fontSize = '15px';
-    nameSpan.style.fontWeight = 'bold';
-    dstDiv.appendChild(nameSpan);
-
-    // Количество очередей в этом DST
-    if (hasChildren) {
-        const countSpan = document.createElement('span');
-        countSpan.textContent = ` (${dstNode.children.length} очередей)`;
-        countSpan.style.color = '#7f8c8d';
-        countSpan.style.fontSize = '12px';
-        countSpan.style.marginLeft = '10px';
-        dstDiv.appendChild(countSpan);
-    }
-
-    // Иконка комментария (если есть комментарий у DST)
-    if (dstNode.comment) {
-        const commentIcon = document.createElement('i');
-        commentIcon.className = 'fas fa-comment-alt';
-        commentIcon.style.color = '#7f8c8d';
-        commentIcon.style.fontSize = '11px';
-        commentIcon.style.marginLeft = '15px';
-        commentIcon.style.cursor = 'help';
-        commentIcon.title = `Комментарий DST: ${dstNode.comment}`;
-        commentIcon.onclick = (e) => {
-            e.stopPropagation();
-            showAlert(dstNode.comment, 'info');
-        };
-        dstDiv.appendChild(commentIcon);
-    }
-
-    // Пустое пространство для выравнивания
-    const spacer = document.createElement('div');
-    spacer.style.flex = '1';
-    dstDiv.appendChild(spacer);
-
-    // Статус DST (всегда включен)
-    const statusDiv = document.createElement('div');
-    statusDiv.className = 'dst-status';
-    statusDiv.title = 'DST активен';
-    statusDiv.style.width = '14px';
-    statusDiv.style.height = '14px';
-    statusDiv.style.borderRadius = '50%';
-    statusDiv.style.backgroundColor = '#2ecc71';
-    statusDiv.style.border = '2px solid #27ae60';
-    statusDiv.style.marginLeft = 'auto';
-    dstDiv.appendChild(statusDiv);
-
-    dstDiv.onclick = () => {
-        if (hasChildren) {
-            toggleQueueNode(dstNode.name);
-        }
-    };
-
-    nameCell.appendChild(dstDiv);
-    
-    // Пустые ячейки для TARGET и DST (так как это корневой DST)
-    const targetCell = document.createElement('div');
-    targetCell.style.display = 'table-cell';
-    targetCell.style.verticalAlign = 'middle';
-    targetCell.style.padding = '12px 10px';
-    targetCell.style.borderBottom = '2px solid #dee2e6';
-    targetCell.style.width = `${maxTargetWidth + 20}px`;
-    targetCell.style.minWidth = '150px';
-    
-    // Пустая ячейка DST (так как это сам DST)
-    const dstCell = document.createElement('div');
-    dstCell.style.display = 'table-cell';
-    dstCell.style.verticalAlign = 'middle';
-    dstCell.style.padding = '12px 10px';
-    dstCell.style.borderBottom = '2px solid #dee2e6';
-    dstCell.style.width = `${maxDstWidth + 20}px`;
-    dstCell.style.minWidth = '150px';
-    
-    // Ячейка лимита скорости (пустая для DST)
-    const limitCell = document.createElement('div');
-    limitCell.style.display = 'table-cell';
-    limitCell.style.verticalAlign = 'middle';
-    limitCell.style.padding = '12px 10px';
-    limitCell.style.borderBottom = '2px solid #dee2e6';
-    limitCell.style.textAlign = 'right';
-    limitCell.style.width = '120px';
-    limitCell.style.whiteSpace = 'nowrap';
-    
-    // Добавляем ячейки в строку
-    row.appendChild(nameCell);
-    row.appendChild(targetCell);
-    row.appendChild(dstCell);
-    row.appendChild(limitCell);
-    
-    table.appendChild(row);
-}
-
-// Функция для отрисовки строки очереди
-function renderQueueRow(node, table, maxTargetWidth, maxDstWidth, level, parentDst = '') {
-    const row = document.createElement('div');
-    row.style.display = 'table-row';
-    
-    // Проверяем, развернут ли родительский DST
-    if (parentDst && queueTreeExpanded[parentDst] === false) {
-        return; // Не отображаем, если родительский DST свернут
-    }
     
     // Ячейка с деревом и именем
     const nameCell = document.createElement('div');
     nameCell.style.display = 'table-cell';
     nameCell.style.verticalAlign = 'middle';
-    nameCell.style.padding = level === 1 ? '8px 0' : '6px 0';
-    nameCell.style.borderBottom = '1px solid #eee';
+    nameCell.style.padding = level === 0 ? '10px 0' : '8px 0';
+    nameCell.style.borderBottom = level === 0 ? '2px solid #dee2e6' : '1px solid #eee';
     
     // Проверяем, развернут ли узел
     const isExpanded = queueTreeExpanded[node.name] !== false;
     const hasChildren = node.children && node.children.length > 0;
     
     // Создаем элемент очереди
-    const queueDiv = document.createElement('div');
-    queueDiv.className = `queue-item-v2 ${node.enabled ? '' : 'disabled'}`;
-    queueDiv.style.display = 'flex';
-    queueDiv.style.alignItems = 'center';
-    queueDiv.style.cursor = 'pointer';
+    const nodeDiv = document.createElement('div');
+    nodeDiv.className = `queue-item-v2 ${node.enabled ? '' : 'disabled'}`;
+    nodeDiv.style.display = 'flex';
+    nodeDiv.style.alignItems = 'center';
+    nodeDiv.style.cursor = hasChildren ? 'pointer' : 'default';
     
-    let prefix = '─ '.repeat(level - 1);
-    if (level > 1) {
-        prefix = '├' + prefix;
-    }
-
     // Отступ для уровня вложенности
     const indent = document.createElement('span');
-    indent.style.width = `${(level - 1) * 20 + 15}px`;
+    indent.style.width = `${level * 20 + 15}px`;
     indent.style.display = 'inline-block';
-    queueDiv.appendChild(indent);
+    nodeDiv.appendChild(indent);
 
-    // Индикатор развертывания
+    // Индикатор развертывания (только если есть дети)
     if (hasChildren) {
         const expandIcon = document.createElement('i');
         expandIcon.className = `fas ${isExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}`;
         expandIcon.style.cursor = 'pointer';
-        expandIcon.style.fontSize = level === 1 ? '11px' : '10px';
-        expandIcon.style.color = '#666';
-        expandIcon.style.marginRight = '5px';
+        expandIcon.style.fontSize = level === 0 ? '12px' : '11px';
+        expandIcon.style.color = level === 0 ? '#3498db' : '#666';
+        expandIcon.style.marginRight = '8px';
         expandIcon.style.width = '15px';
         expandIcon.style.textAlign = 'center';
         expandIcon.onclick = (e) => {
             e.stopPropagation();
             toggleQueueNode(node.name);
         };
-        queueDiv.appendChild(expandIcon);
+        nodeDiv.appendChild(expandIcon);
     } else {
         const spacer = document.createElement('span');
         spacer.style.width = '15px';
         spacer.style.display = 'inline-block';
-        queueDiv.appendChild(spacer);
+        nodeDiv.appendChild(spacer);
     }
+
+    // Иконка узла (разная для корневых и дочерних)
+    const icon = document.createElement('i');
+    if (level === 0) {
+        icon.className = 'fas fa-project-diagram';
+        icon.style.color = '#3498db';
+    } else {
+        icon.className = 'fas fa-code-branch';
+        icon.style.color = '#7f8c8d';
+    }
+    icon.style.fontSize = level === 0 ? '14px' : '12px';
+    icon.style.marginRight = '8px';
+    nodeDiv.appendChild(icon);
 
     // Имя очереди
     const nameSpan = document.createElement('span');
     nameSpan.className = 'queue-name';
-    nameSpan.textContent = `${prefix} ${node.name}`;
-    nameSpan.style.fontWeight = level === 1 ? 'bold' : 'normal';
-    nameSpan.style.color = level === 1 ? '#2c3e50' : '#34495e';
-    nameSpan.style.fontSize = level === 1 ? '14px' : '13px';
-    nameSpan.style.marginRight = '20px';
-    queueDiv.appendChild(nameSpan);
+    nameSpan.textContent = node.name;
+    nameSpan.style.fontWeight = level === 0 ? 'bold' : 'normal';
+    nameSpan.style.color = level === 0 ? '#2c3e50' : '#34495e';
+    nameSpan.style.fontSize = level === 0 ? '15px' : '14px';
+    nameSpan.style.marginRight = '15px';
+    nodeDiv.appendChild(nameSpan);
 
     // Иконка комментария (если есть комментарий)
     if (node.comment) {
         const commentIcon = document.createElement('i');
         commentIcon.className = 'fas fa-comment-alt';
         commentIcon.style.color = '#7f8c8d';
-        commentIcon.style.fontSize = level === 1 ? '11px' : '10px';
+        commentIcon.style.fontSize = level === 0 ? '11px' : '10px';
         commentIcon.style.marginRight = '10px';
         commentIcon.style.cursor = 'help';
         commentIcon.title = `Комментарий: ${node.comment}`;
@@ -1073,36 +840,41 @@ function renderQueueRow(node, table, maxTargetWidth, maxDstWidth, level, parentD
             e.stopPropagation();
             showAlert(node.comment, 'info');
         };
-        queueDiv.appendChild(commentIcon);
+        nodeDiv.appendChild(commentIcon);
     }
+
+    // Пустое пространство для выравнивания
+    const spacer = document.createElement('div');
+    spacer.style.flex = '1';
+    nodeDiv.appendChild(spacer);
 
     // Статус
     const statusDiv = document.createElement('div');
     statusDiv.className = `queue-status ${node.enabled ? '' : 'disabled'}`;
     statusDiv.title = node.enabled ? 'Включена' : 'Выключена';
-    statusDiv.style.width = level === 1 ? '12px' : '10px';
-    statusDiv.style.height = level === 1 ? '12px' : '10px';
+    statusDiv.style.width = level === 0 ? '14px' : '12px';
+    statusDiv.style.height = level === 0 ? '14px' : '12px';
     statusDiv.style.borderRadius = '50%';
     statusDiv.style.backgroundColor = node.enabled ? '#2ecc71' : '#e74c3c';
-    statusDiv.style.border = `${level === 1 ? '2px' : '1px'} solid ${node.enabled ? '#27ae60' : '#c0392b'}`;
+    statusDiv.style.border = `${level === 0 ? '2px' : '1px'} solid ${node.enabled ? '#27ae60' : '#c0392b'}`;
     statusDiv.style.marginLeft = 'auto';
-    queueDiv.appendChild(statusDiv);
+    nodeDiv.appendChild(statusDiv);
 
-    queueDiv.onclick = () => {
-        if (hasChildren) {
+    if (hasChildren) {
+        nodeDiv.onclick = () => {
             toggleQueueNode(node.name);
-        }
-    };
+        };
+    }
 
-    nameCell.appendChild(queueDiv);
+    nameCell.appendChild(nodeDiv);
     
     // Ячейка TARGET
     const targetCell = document.createElement('div');
     targetCell.style.display = 'table-cell';
     targetCell.style.verticalAlign = 'middle';
-    targetCell.style.padding = level === 1 ? '8px 10px' : '6px 10px';
-    targetCell.style.borderBottom = '1px solid #eee';
-    targetCell.style.width = `${maxTargetWidth + 20}px`;
+    targetCell.style.padding = level === 0 ? '10px 10px' : '8px 10px';
+    targetCell.style.borderBottom = level === 0 ? '2px solid #dee2e6' : '1px solid #eee';
+    targetCell.style.width = '200px';
     targetCell.style.minWidth = '150px';
     
     let targetText = '';
@@ -1120,7 +892,7 @@ function renderQueueRow(node, table, maxTargetWidth, maxDstWidth, level, parentD
         targetDiv.className = 'queue-target';
         
         let displayTarget = targetText;
-        const maxLength = level === 1 ? 25 : 20;
+        const maxLength = level === 0 ? 25 : 20;
         if (displayTarget.length > maxLength) {
             displayTarget = displayTarget.substring(0, maxLength - 3) + '...';
         }
@@ -1129,33 +901,66 @@ function renderQueueRow(node, table, maxTargetWidth, maxDstWidth, level, parentD
         targetDiv.title = `TARGET: ${targetText}`;
         targetDiv.style.backgroundColor = '#e8f4fd';
         targetDiv.style.color = '#2980b9';
-        targetDiv.style.padding = level === 1 ? '4px 8px' : '3px 6px';
-        targetDiv.style.borderRadius = '3px';
-        targetDiv.style.fontSize = level === 1 ? '11px' : '10px';
+        targetDiv.style.padding = level === 0 ? '5px 10px' : '4px 8px';
+        targetDiv.style.borderRadius = '4px';
+        targetDiv.style.fontSize = level === 0 ? '12px' : '11px';
         targetDiv.style.fontFamily = 'monospace';
         targetDiv.style.border = '1px solid #b3e0ff';
         targetDiv.style.whiteSpace = 'nowrap';
         targetDiv.style.overflow = 'hidden';
         targetDiv.style.textOverflow = 'ellipsis';
-        targetDiv.style.maxWidth = `${maxTargetWidth}px`;
+        targetDiv.style.maxWidth = '180px';
         targetCell.appendChild(targetDiv);
     }
     
-    // Ячейка DST (пустая для обычных очередей, так как DST теперь в корне)
+    // Ячейка DST
     const dstCell = document.createElement('div');
     dstCell.style.display = 'table-cell';
     dstCell.style.verticalAlign = 'middle';
-    dstCell.style.padding = level === 1 ? '8px 10px' : '6px 10px';
-    dstCell.style.borderBottom = '1px solid #eee';
-    dstCell.style.width = `${maxDstWidth + 20}px`;
+    dstCell.style.padding = level === 0 ? '10px 10px' : '8px 10px';
+    dstCell.style.borderBottom = level === 0 ? '2px solid #dee2e6' : '1px solid #eee';
+    dstCell.style.width = '200px';
     dstCell.style.minWidth = '150px';
+    
+    let dstText = '';
+    if (node.dst && node.dst !== 'none') {
+        dstText = node.dst;
+    } else if (node.short_dst && node.short_dst !== 'none') {
+        dstText = node.short_dst;
+    }
+    
+    if (dstText) {
+        const dstDiv = document.createElement('div');
+        dstDiv.className = 'queue-dst';
+        
+        let displayDst = dstText;
+        const maxLength = level === 0 ? 25 : 20;
+        if (displayDst.length > maxLength) {
+            displayDst = displayDst.substring(0, maxLength - 3) + '...';
+        }
+        
+        dstDiv.textContent = displayDst;
+        dstDiv.title = `DST: ${dstText}`;
+        dstDiv.style.backgroundColor = '#f0f7ff';
+        dstDiv.style.color = '#3498db';
+        dstDiv.style.padding = level === 0 ? '5px 10px' : '4px 8px';
+        dstDiv.style.borderRadius = '4px';
+        dstDiv.style.fontSize = level === 0 ? '12px' : '11px';
+        dstDiv.style.fontFamily = 'monospace';
+        dstDiv.style.border = '1px solid #a8d4ff';
+        dstDiv.style.whiteSpace = 'nowrap';
+        dstDiv.style.overflow = 'hidden';
+        dstDiv.style.textOverflow = 'ellipsis';
+        dstDiv.style.maxWidth = '180px';
+        dstCell.appendChild(dstDiv);
+    }
     
     // Ячейка лимита скорости (с выравниванием по правому краю)
     const limitCell = document.createElement('div');
     limitCell.style.display = 'table-cell';
     limitCell.style.verticalAlign = 'middle';
-    limitCell.style.padding = level === 1 ? '8px 10px' : '6px 10px';
-    limitCell.style.borderBottom = '1px solid #eee';
+    limitCell.style.padding = level === 0 ? '10px 10px' : '8px 10px';
+    limitCell.style.borderBottom = level === 0 ? '2px solid #dee2e6' : '1px solid #eee';
     limitCell.style.textAlign = 'right';
     limitCell.style.width = '120px';
     limitCell.style.whiteSpace = 'nowrap';
@@ -1168,9 +973,9 @@ function renderQueueRow(node, table, maxTargetWidth, maxDstWidth, level, parentD
         limitDiv.title = 'Макс. скорость';
         limitDiv.style.backgroundColor = '#fef9e7';
         limitDiv.style.color = '#f39c12';
-        limitDiv.style.padding = level === 1 ? '4px 8px' : '3px 6px';
-        limitDiv.style.borderRadius = '3px';
-        limitDiv.style.fontSize = level === 1 ? '11px' : '10px';
+        limitDiv.style.padding = level === 0 ? '5px 10px' : '4px 8px';
+        limitDiv.style.borderRadius = '4px';
+        limitDiv.style.fontSize = level === 0 ? '12px' : '11px';
         limitDiv.style.border = '1px solid #f8c471';
         limitDiv.style.display = 'inline-block';
         limitCell.appendChild(limitDiv);
@@ -1183,19 +988,12 @@ function renderQueueRow(node, table, maxTargetWidth, maxDstWidth, level, parentD
     row.appendChild(limitCell);
     
     table.appendChild(row);
-    
-    // Рекурсивно отрисовываем детей (если узел развернут)
-    if (hasChildren && isExpanded) {
-        node.children.forEach(child => {
-            renderQueueRow(child, table, maxTargetWidth, maxDstWidth, level + 1, parentDst);
-        });
-    }
 }
 
 // Переключение состояния узла (развернуть/свернуть)
 function toggleQueueNode(queueName) {
     queueTreeExpanded[queueName] = !queueTreeExpanded[queueName];
-    renderQueueTreeV2(queueTreeFiltered);
+    renderQueueTree(queueTreeFiltered);
 }
 
 // Развернуть все узлы
@@ -1209,7 +1007,7 @@ function expandAllQueues() {
         });
     }
     expandNode(queueTreeFiltered);
-    renderQueueTreeV2(queueTreeFiltered);
+    renderQueueTree(queueTreeFiltered);
 }
 
 // Свернуть все узлы
@@ -1223,14 +1021,14 @@ function collapseAllQueues() {
         });
     }
     collapseNode(queueTreeFiltered);
-    renderQueueTreeV2(queueTreeFiltered);
+    renderQueueTree(queueTreeFiltered);
 }
 
 // Фильтрация дерева по имени
 function filterQueueTree(searchTerm) {
     if (!searchTerm.trim()) {
         queueTreeFiltered = [...queueTreeData];
-        renderQueueTreeV2(queueTreeFiltered);
+        renderQueueTree(queueTreeFiltered);
         return;
     }
     
@@ -1264,7 +1062,7 @@ function filterQueueTree(searchTerm) {
     }
     
     queueTreeFiltered = filterNodes(queueTreeData);
-    renderQueueTreeV2(queueTreeFiltered);
+    renderQueueTree(queueTreeFiltered);
 }
 
 // Показать пустое состояние дерева
@@ -1456,7 +1254,8 @@ function updateQueueSelect(queues) {
     if (queues.length === 0) {
         select.innerHTML += '<option value="">-- Нет бесплатных очередей --</option>';
     } else {
-        queues.sort((a, b) => a.name.localeCompare(b.name));
+        // НЕ СОРТИРУЕМ! Оставляем в естественном порядке как пришли с сервера
+        // queues.sort((a, b) => a.name.localeCompare(b.name));
         
         queues.forEach(queue => {
             const option = document.createElement('option');

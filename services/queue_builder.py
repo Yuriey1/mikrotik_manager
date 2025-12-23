@@ -6,7 +6,7 @@ from collections import defaultdict
 from typing import Dict, List, Optional, Any
 import ipaddress
 import traceback
-import re  # Добавим для извлечения номеров
+import re
 
 from models.queue_node import QueueNode
 
@@ -15,15 +15,22 @@ class QueueTreeBuilder:
         self.manager = mikrotik_manager
         self.nodes: Dict[str, QueueNode] = {}
         self.root_nodes: List[QueueNode] = []
+        self.queue_order: Dict[str, int] = {}  # Для сохранения порядка
         
     def build_tree(self) -> bool:
         """Построить дерево очередей"""
         try:
             print("📡 Загрузка очередей с MikroTik...")
-            queues_raw = self.manager.get_queues()  # get_queues уже возвращает отсортированные активные очереди
-            print(f"✅ Загружено {len(queues_raw)} активных очередей")
+            queues_raw = self.manager.get_queues()
+            print(f"✅ Загружено {len(queues_raw)} очередей")
             
-            # Создаем все узлы (все очереди здесь уже активные и отсортированные)
+            # Сохраняем порядок как он пришел с устройства
+            for index, queue_data in enumerate(queues_raw):
+                queue_name = queue_data.get('name', '')
+                if queue_name:
+                    self.queue_order[queue_name] = index
+            
+            # Создаем все узлы
             for queue_data in queues_raw:
                 self._create_node(queue_data)
             
@@ -66,11 +73,11 @@ class QueueTreeBuilder:
                     except:
                         pass
             
-            # Создаем узел (все очереди здесь уже активные)
+            # Создаем узел
             node = QueueNode(
                 id=data.get('.id', ''),
                 name=name,
-                enabled=True,  # Все узлы здесь активные
+                enabled='X' not in data.get('flags', ''),
                 target=targets,
                 dst=data.get('dst', ''),
                 parent=data.get('parent', 'none'),
@@ -91,53 +98,55 @@ class QueueTreeBuilder:
             return None
     
     def _build_hierarchy(self):
-        """Построить иерархию родитель-потомок с сохранением порядка"""
+        """Построить иерархию родитель-потомок"""
         # Группируем по родителям
         parent_map = defaultdict(list)
         for node in self.nodes.values():
             if node.parent and node.parent != 'none':
                 parent_map[node.parent].append(node)
         
-        # Сохраняем порядок детей (дети уже отсортированы на уровне получения от MikroTik)
+        # Сортируем детей по порядку их создания (как они идут в конфигурации)
         for parent_name, children in parent_map.items():
-            # Сортируем детей для сохранения порядка иерархии
-            parent_map[parent_name] = sorted(children, key=lambda x: x.name)
+            # Сортируем по порядку, сохраненному при загрузке
+            children.sort(key=lambda x: self.queue_order.get(x.name, 9999))
+            parent_map[parent_name] = children
         
         # Строим дерево
         self.root_nodes = []
         
-        # Находим корневые узлы (без родителей или с parent='none')
-        root_candidates = [node for node in self.nodes.values() if not node.parent or node.parent == 'none']
+        # Находим корневые узлы (без родителей) и сортируем их по порядку
+        root_candidates = []
+        for node in self.nodes.values():
+            if node.parent == 'none':
+                root_candidates.append(node)
         
-        # Сортируем корневые узлы для сохранения порядка
-        root_candidates = sorted(root_candidates, key=lambda x: x.name)
-        
-        for node in root_candidates:
-            node.level = 0
-            self.root_nodes.append(node)
+        # Сортируем корневые узлы по порядку
+        root_candidates.sort(key=lambda x: self.queue_order.get(x.name, 9999))
+        self.root_nodes = root_candidates
         
         # Рекурсивно устанавливаем уровни и детей
         for root in self.root_nodes:
+            root.level = 0
             self._set_children_and_levels(root, parent_map, 0)
     
     def _set_children_and_levels(self, node: QueueNode, parent_map: Dict, level: int):
         """Рекурсивно установить детей и уровни"""
-        node.level = level
         if node.name in parent_map:
-            # Дети уже отсортированы в parent_map
-            for child in parent_map[node.name]:
+            children = parent_map[node.name]  # Уже отсортировано в _build_hierarchy
+            for child in children:
+                child.level = level + 1
                 node.children.append(child)
                 self._set_children_and_levels(child, parent_map, level + 1)
     
     def get_stats(self) -> Dict[str, Any]:
         """Получить статистику"""
-        # Все узлы здесь активные
+        enabled_count = sum(1 for n in self.nodes.values() if n.enabled)
         total_ips = sum(n.ip_count for n in self.nodes.values())
         
         return {
             'total_queues': len(self.nodes),
-            'enabled_queues': len(self.nodes),  # Все активные
-            'disabled_queues': 0,  # Отключенных нет
+            'enabled_queues': enabled_count,
+            'disabled_queues': len(self.nodes) - enabled_count,
             'root_queues': len(self.root_nodes),
             'total_ips': total_ips
         }
@@ -147,7 +156,7 @@ class QueueTreeBuilder:
         return [node.to_dict() for node in self.root_nodes]
     
     def find_suitable_queues_for_ip(self, ip: str) -> List[QueueNode]:
-        """Найти подходящие очереди для IP (только активные)"""
+        """Найти подходящие очереди для IP"""
         suitable = []
         
         # Проверяем формат IP
@@ -159,8 +168,15 @@ class QueueTreeBuilder:
         except ValueError:
             return []
         
-        # Все узлы уже активные, проверяем все
-        for node in self.nodes.values():
+        # Проверяем все узлы в порядке их следования в конфигурации
+        # Сортируем узлы по порядку
+        sorted_nodes = sorted(self.nodes.values(), 
+                            key=lambda x: self.queue_order.get(x.name, 9999))
+        
+        for node in sorted_nodes:
+            if not node.enabled:
+                continue
+            
             # Проверяем, нет ли уже IP
             if node.has_ip(ip):
                 continue
