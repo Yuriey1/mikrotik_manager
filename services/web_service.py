@@ -89,6 +89,8 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 self._serve_stats()
             elif path == '/api/find_queues':
                 self._find_queues(parsed)
+            elif path == '/api/check_ip':  # ← НОВЫЙ ENDPOINT ДЛЯ ПРОВЕРКИ IP!
+                self._check_ip_belongs(parsed)
             # =====  ЭТА СТРОКА ДЛЯ CSS/JS =====
             elif path.startswith('/static/'):
                 self._serve_static_file(path)
@@ -101,6 +103,46 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
         except Exception as e:
             print(f"❌ Ошибка обработки GET запроса: {e}")
             self._send_json({'error': str(e)}, 500)
+
+    def _check_ip_belongs(self, parsed):
+        """Проверить принадлежность IP к сетям микротика"""
+        global mikrotik_manager
+        
+        query = parse_qs(parsed.query)
+        ip = query.get('ip', [''])[0].strip()
+        
+        if not ip:
+            self._send_json({'success': False, 'error': 'Не указан IP адрес'}, 400)
+            return
+            
+        if not mikrotik_manager or not mikrotik_manager.connected:
+            self._send_json({'success': False, 'error': 'Не подключено к устройству'}, 400)
+            return
+            
+        try:
+            # Проверяем формат IP
+            ipaddress.ip_address(ip)
+            
+            # Используем метод из MikroTikManager для проверки
+            belongs, interface = mikrotik_manager.is_ip_in_mikrotik_networks(ip)
+            
+            if belongs:
+                self._send_json({
+                    'success': True,
+                    'message': f'IP {ip} принадлежит сетям микротика',
+                    'interface': interface
+                })
+            else:
+                self._send_json({
+                    'success': False,
+                    'error': f'IP {ip} не принадлежит сетям микротика'
+                })
+                
+        except ValueError as e:
+            self._send_json({'success': False, 'error': f'Неверный формат IP: {str(e)}'}, 400)
+        except Exception as e:
+            print(f"❌ Ошибка проверки IP: {e}")
+            self._send_json({'success': False, 'error': str(e)}, 500)
 
     def _disconnect_api(self):
         """API метод для отключения"""

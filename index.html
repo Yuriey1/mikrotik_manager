@@ -149,21 +149,51 @@
                     </div>
                 </div>
 
-                <!-- ВКЛАДКА: ДЕРЕВО ОЧЕРЕДЕЙ -->
-                <div id="queues-tab" class="tab-content">
-                    <div class="section">
-                        <h2><i class="fas fa-sitemap"></i> Дерево очередей</h2>
-                        <button class="btn btn-primary" onclick="loadQueueTree()">
-                            <i class="fas fa-sync-alt"></i> Обновить дерево
-                        </button>
-                        <div id="queue-tree" class="queue-tree mt-20">
-                            <div class="empty-state">
-                                <i class="fas fa-sitemap"></i>
-                                <p>Подключитесь к устройству для загрузки дерева очередей</p>
-                            </div>
-                        </div>
-                    </div>
+<!-- ВКЛАДКА: ДЕРЕВО ОЧЕРЕДЕЙ -->
+<div id="queues-tab" class="tab-content">
+    <div class="section">
+        <h2><i class="fas fa-sitemap"></i> Дерево очередей</h2>
+        
+        <!-- Панель управления -->
+        <div class="tree-controls">
+            <button class="tree-control-btn" onclick="loadQueueTree()">
+                <i class="fas fa-sync-alt"></i> Обновить
+            </button>
+            <button class="tree-control-btn" onclick="expandAllQueues()">
+                <i class="fas fa-expand-alt"></i> Развернуть все
+            </button>
+            <button class="tree-control-btn" onclick="collapseAllQueues()">
+                <i class="fas fa-compress-alt"></i> Свернуть все
+            </button>
+            <input type="text" class="tree-filter" placeholder="Фильтр по имени очереди..." 
+                   oninput="filterQueueTree(this.value)">
+        </div>
+        
+        <!-- Заголовок дерева -->
+        <div class="queue-tree-header">
+            <div class="queue-tree-title">
+                <i class="fas fa-project-diagram"></i> Иерархия очередей
+            </div>
+            <div class="queue-tree-stats" id="queue-tree-stats">
+                Загружаем статистику...
+            </div>
+        </div>
+        
+        <!-- Контейнер для дерева -->
+        <div id="queue-tree-container" class="queue-tree-container">
+            <div id="queue-tree-v2" class="queue-tree-v2">
+                <!-- Дерево будет отрисовано здесь -->
+                <div class="queue-tree-empty">
+                    <i class="fas fa-sitemap"></i>
+                    <p>Подключитесь к устройству для загрузки дерева очередей</p>
+                    <button class="btn btn-primary mt-10" onclick="loadQueueTree()">
+                        <i class="fas fa-sync-alt"></i> Загрузить дерево
+                    </button>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
 
                 <!-- ВКЛАДКА: ИНСТРУМЕНТЫ -->
                 <div id="tools-tab" class="tab-content">

@@ -54,5 +54,93 @@
     "username": "nur001",
     "password": "enc:WjVNZjN4cGs=",
     "description": ""
+  },
+  "Бессоновский": {
+    "name": "Бессоновский",
+    "ip": "192.168.2.246",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Юхтахта": {
+    "name": "Юхтахта",
+    "ip": "178.218.10.110",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "ПИТ-городок": {
+    "name": "ПИТ-городок",
+    "ip": "178.218.2.165",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Горевая": {
+    "name": "Горевая",
+    "ip": "31.173.162.11",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Полуденовка": {
+    "name": "Полуденовка",
+    "ip": "85.175.87.43",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Полуд.Главстан": {
+    "name": "Полуд.Главстан",
+    "ip": "85.175.87.42",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Непряхино": {
+    "name": "Непряхино",
+    "ip": "192.168.2.249",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Шумиха Нижняя": {
+    "name": "Шумиха Нижняя",
+    "ip": "91.109.231.84",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Ильинский": {
+    "name": "Ильинский",
+    "ip": "185.17.39.90",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Безымянка-Северный": {
+    "name": "Безымянка-Северный",
+    "ip": "217.21.106.173",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Новый Мамон": {
+    "name": "Новый Мамон",
+    "ip": "46.52.193.216",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
   }
 }
