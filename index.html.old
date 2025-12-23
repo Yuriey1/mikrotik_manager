@@ -92,76 +92,62 @@
                     </div>
                 </div>
 
-<!-- ВКЛАДКА: ДОБАВЛЕНИЕ СОТРУДНИКА -->
-<div id="employee-tab" class="tab-content active">
-    <div class="section">
-        <h2><i class="fas fa-user-plus"></i> Добавить сотрудника</h2>
-        
-        <div class="form-group">
-            <label>ФИО *</label>
-            <input type="text" id="full-name" placeholder="Иванов Иван Иванович">
-        </div>
-        
-        <div class="form-group">
-            <label>Должность *</label>
-            <input type="text" id="position" placeholder="Инженер">
-        </div>
-        
-        <div class="form-group">
-            <label>IP адрес *</label>
-            <div class="flex gap-10">
-                <input type="text" id="ip-address" placeholder="192.168.1.100" class="flex-1">
-                <button class="btn btn-warning" onclick="checkDHCP()">
-                    <i class="fas fa-search"></i> Проверить DHCP
-                </button>
-            </div>
-        </div>
-        
-        <div class="form-group">
-            <label>MAC адрес</label>
-            <input type="text" id="mac-address" placeholder="00:11:22:33:44:55">
-        </div>
-        
-        <div class="form-group">
-            <label class="checkbox-group">
-                <input type="checkbox" id="internet-access">
-                <span>Доступ в интернет</span>
-            </label>
-        </div>
-        
-        <div class="form-group">
-            <label>Очереди (можно выбрать несколько)</label>
-            <div class="flex gap-10 align-start">
-                <div class="queue-select-container flex-1">
-                    <select id="queue-select" multiple size="8" class="queue-select-multiple">
-                        <option value="">-- Загрузка очередей... --</option>
-                    </select>
-                    <div class="queue-select-info">
-                        <small>Удерживайте Ctrl/Cmd для выбора нескольких очередей</small>
-                        <div id="selected-queues-count">Выбрано: 0</div>
+                <!-- ВКЛАДКА: ДОБАВЛЕНИЕ СОТРУДНИКА -->
+                <div id="employee-tab" class="tab-content active">
+                    <div class="section">
+                        <h2><i class="fas fa-user-plus"></i> Добавить сотрудника</h2>
+                        
+                        <div class="form-group">
+                            <label>ФИО *</label>
+                            <input type="text" id="full-name" placeholder="Иванов Иван Иванович">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Должность *</label>
+                            <input type="text" id="position" placeholder="Инженер">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>IP адрес *</label>
+                            <div class="flex gap-10">
+                                <input type="text" id="ip-address" placeholder="192.168.1.100" class="flex-1">
+                                <button class="btn btn-warning" onclick="checkDHCP()">
+                                    <i class="fas fa-search"></i> Проверить DHCP
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>MAC адрес</label>
+                            <input type="text" id="mac-address" placeholder="00:11:22:33:44:55">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="checkbox-group">
+                                <input type="checkbox" id="internet-access">
+                                <span>Доступ в интернет</span>
+                            </label>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Очередь</label>
+                            <div class="flex gap-10">
+                                <select id="queue-select" class="flex-1">
+                                    <option value="">-- Не выбрана --</option>
+                                </select>
+                                <button class="btn btn-warning" onclick="findQueues()">
+                                    <i class="fas fa-search"></i> Найти очереди для IP
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <button class="btn btn-success w-full" onclick="addEmployee()">
+                            <i class="fas fa-check"></i> Добавить сотрудника
+                        </button>
+                        
+                        <div id="employee-results" class="results"></div>
                     </div>
                 </div>
-                <div class="queue-controls">
-                    <button class="btn btn-warning" onclick="findQueues()">
-                        <i class="fas fa-search"></i> Найти очереди для IP
-                    </button>
-                    <button class="btn btn-secondary mt-10" onclick="clearQueueSelection()">
-                        <i class="fas fa-times"></i> Очистить выбор
-                    </button>
-                    <button class="btn btn-info mt-10" onclick="showQueuePreview()">
-                        <i class="fas fa-eye"></i> Показать выбранные
-                    </button>
-                </div>
-            </div>
-        </div>
-        
-        <button class="btn btn-success w-full" onclick="addEmployee()">
-            <i class="fas fa-check"></i> Добавить сотрудника
-        </button>
-        
-        <div id="employee-results" class="results"></div>
-    </div>
-</div>
 
 <!-- ВКЛАДКА: ДЕРЕВО ОЧЕРЕДЕЙ -->
 <div id="queues-tab" class="tab-content">

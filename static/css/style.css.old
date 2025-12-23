@@ -220,19 +220,23 @@ textarea {
     font-size: 14px;
 }
 
-/* Grafana-style buttons */
+/* ===== КНОПКИ ===== */
 .btn {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 4px;
-    font-weight: 500;
-    font-size: 14px;
-    cursor: pointer;
-    transition: all 0.2s ease;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 10px;
+    padding: 14px 24px;
+    border-radius: var(--border-radius);
+    border: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    text-decoration: none;
+    font-family: inherit;
+    line-height: 1;
+    white-space: nowrap;
 }
 
 .btn:hover {
@@ -241,52 +245,39 @@ textarea {
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, #6e9fff 0%, #4a7dff 100%);
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
     color: white;
 }
 
 .btn-primary:hover {
-    background: linear-gradient(135deg, #4a7dff 0%, #2a5bff 100%);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(110, 159, 255, 0.4);
-}
-
-.btn-secondary {
-    background: #2c3e50;
-    color: #d8d9da;
-    border: 1px solid #3a4a5a;
-}
-
-.btn-secondary:hover {
-    background: #3a4a5a;
-    border-color: #4a5a6a;
+    background: linear-gradient(135deg, var(--accent-hover), var(--accent-secondary));
 }
 
 .btn-success {
-    background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+    background: linear-gradient(135deg, var(--success), #8edb84);
     color: white;
 }
 
 .btn-success:hover {
-    background: linear-gradient(135deg, #27ae60 0%, #219653 100%);
+    background: linear-gradient(135deg, #62a659, var(--success));
 }
 
 .btn-warning {
-    background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+    background: linear-gradient(135deg, var(--warning), #ffb057);
     color: white;
 }
 
 .btn-warning:hover {
-    background: linear-gradient(135deg, #e67e22 0%, #d35400 100%);
+    background: linear-gradient(135deg, #e68900, var(--warning));
 }
 
 .btn-danger {
-    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    background: linear-gradient(135deg, var(--error), #e35c4f);
     color: white;
 }
 
 .btn-danger:hover {
-    background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
+    background: linear-gradient(135deg, #b83e2f, var(--error));
 }
 
 /* ===== СПИСОК УСТРОЙСТВ ===== */

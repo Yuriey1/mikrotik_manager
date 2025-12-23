@@ -375,7 +375,12 @@ function addEmployee() {
     const ip = document.getElementById('ip-address').value.trim();          // IP адрес сотрудника
     const manualMac = document.getElementById('mac-address').value.trim();   // MAC адрес сотрудника (может быть пустым)
     const internetAccess = document.getElementById('internet-access').checked; // Доступ в интернет
-    const queue = document.getElementById('queue-select').value;             // Название очереди (может быть пустым)
+    
+    // Получаем ВСЕ выбранные очереди
+    const select = document.getElementById('queue-select');
+    const selectedQueues = Array.from(select.selectedOptions)
+        .map(option => option.value)
+        .filter(value => value && value !== "-- Нет бесплатных очередей --" && value !== "-- Загрузка очередей...");
 
     // Проверка заполнения обязательных полей
     if (!fullName || !position || !ip) {
@@ -439,104 +444,89 @@ function addEmployee() {
                         return;
                     }
 
-                    // ШАГ 3: Получаем все очереди для выбора
-                    fetch('/api/find_queues')
-                        .then(response => response.json())
-                        .then(queuesData => {
-                            // Если очередь не выбрана, можно предложить пользователю выбрать из списка
-                            if (!queue && queuesData.queues && queuesData.queues.length > 0) {
-                                // Здесь можно добавить логику для предложения очередей
-                                // Пока просто продолжаем без очереди
-                            }
+                    // ШАГ 3: Если очереди не выбраны, можно предложить автоматический поиск
+                    if (selectedQueues.length === 0) {
+                        const proceed = confirm('Вы не выбрали очереди. Хотите автоматически найти подходящие очереди?');
+                        if (proceed) {
+                            findQueues();
+                            resultsDiv.innerHTML = `
+                                <div class="toast toast-info">
+                                    🔍 Поиск подходящих очередей...
+                                </div>
+                            `;
+                            return;
+                        } else {
+                            // Пользователь хочет продолжить без очередей
+                            showAlert('Продолжаем без выбора очередей', 'info');
+                        }
+                    }
 
-                            // Готовые данные для отправки
-                            const dataToSend = {
-                                full_name: fullName,
-                                position: position,
-                                ip: ip,
-                                mac: finalMac,
-                                internet_access: internetAccess,
-                                queue: queue
-                            };
+                    // Готовые данные для отправки
+                    const dataToSend = {
+                        full_name: fullName,
+                        position: position,
+                        ip: ip,
+                        mac: finalMac,
+                        internet_access: internetAccess,
+                        queues: selectedQueues // Теперь передаем массив очередей
+                    };
 
-                            // Отправляем данные на сервер
-                            fetch('/api/add_employee', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify(dataToSend)
-                            })
-                            .then(response => response.json())
-                            .then(result => {
-                                if (result.success) {
-                                    showAlert(`Сотрудник ${fullName} успешно добавлен`, 'success');
-                                    resultsDiv.innerHTML = `
-                                        <div class="toast toast-success">
-                                            ✅ Сотрудник ${fullName} успешно добавлен!
-                                        </div>
-                                    `;
-                                } else {
-                                    let message = result.message || 'Ошибка добавления сотрудника';
-                                    showAlert(message, 'error');
-                                    resultsDiv.innerHTML = `
-                                        <div class="toast toast-error">
-                                            ❌ ${message}
-                                        </div>
-                                    `;
-                                }
-                            })
-                            .catch(error => {
-                                console.error('Ошибка отправки данных:', error);
-                                showAlert('Ошибка отправки данных', 'error');
-                                resultsDiv.innerHTML = '';
-                            });
-                        })
-                        .catch(error => {
-                            console.error('Ошибка получения очередей:', error);
-                            // Продолжаем без очередей
-                            const dataToSend = {
-                                full_name: fullName,
-                                position: position,
-                                ip: ip,
-                                mac: finalMac,
-                                internet_access: internetAccess,
-                                queue: queue
-                            };
+                    // Отправляем данные на сервер
+                    fetch('/api/add_employee', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(dataToSend)
+                    })
+                    .then(response => response.json())
 
-                            // Отправляем данные на сервер
-                            fetch('/api/add_employee', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify(dataToSend)
-                            })
-                            .then(response => response.json())
-                            .then(result => {
-                                if (result.success) {
-                                    showAlert(`Сотрудник ${fullName} успешно добавлен`, 'success');
-                                    resultsDiv.innerHTML = `
-                                        <div class="toast toast-success">
-                                            ✅ Сотрудник ${fullName} успешно добавлен!
-                                        </div>
-                                    `;
-                                } else {
-                                    let message = result.message || 'Ошибка добавления сотрудника';
-                                    showAlert(message, 'error');
-                                    resultsDiv.innerHTML = `
-                                        <div class="toast toast-error">
-                                            ❌ ${message}
-                                        </div>
-                                    `;
-                                }
-                            })
-                            .catch(error => {
-                                console.error('Ошибка отправки данных:', error);
-                                showAlert('Ошибка отправки данных', 'error');
-                                resultsDiv.innerHTML = '';
-                            });
-                        });
+.then(result => {
+    if (result.success) {
+        let successMessage = result.message;
+        
+        // Показываем детализированную информацию
+        let detailsHTML = '<div class="toast toast-success">';
+        detailsHTML += `<div>✅ ${successMessage}</div>`;
+        
+        // Добавляем детали из details_list
+        if (result.details_list && result.details_list.length > 0) {
+            detailsHTML += '<div style="margin-top: 10px; font-size: 12px;">';
+            result.details_list.forEach(detail => {
+                detailsHTML += `<div>${detail}</div>`;
+            });
+            detailsHTML += '</div>';
+        }
+        
+        detailsHTML += '</div>';
+        resultsDiv.innerHTML = detailsHTML;
+        
+        // Обновляем дерево очередей, если сотрудник был добавлен в очередь
+        if (selectedQueues.length > 0 && result.details && result.details.queues) {
+            const successfulQueues = result.details.queues.filter(q => q.success);
+            if (successfulQueues.length > 0) {
+                loadQueueTree();
+            }
+        }
+        
+        // Сбрасываем значения формы
+        resetEmployeeForm();
+        
+    } else {
+        let message = result.message || 'Ошибка добавления сотрудника';
+        showAlert(message, 'error');
+        resultsDiv.innerHTML = `
+            <div class="toast toast-error">
+                ❌ ${message}
+            </div>
+        `;
+    }
+})
+                    .catch(error => {
+                        console.error('Ошибка отправки данных:', error);
+                        showAlert('Ошибка отправки данных', 'error');
+                        resultsDiv.innerHTML = '';
+                    });
                 })
                 .catch(error => {
                     console.error('Ошибка проверки DHCP:', error);
@@ -549,15 +539,76 @@ function addEmployee() {
             showAlert('Ошибка проверки IP', 'error');
             resultsDiv.innerHTML = '';
         });
-    
-    // Сбросим значения на пустые
+}
+
+// Функция для сброса формы сотрудника
+function resetEmployeeForm() {
     document.getElementById('full-name').value = "";                // Имя и фамилия сотрудника
     document.getElementById('position').value = "";                 // Должность сотрудника
     document.getElementById('ip-address').value = "";               // IP адрес сотрудника
-    document.getElementById('mac-address').value = "";              // MAC адрес сотрудника (может быть пустым)
-    document.getElementById('internet-access').unchecked;           // Доступ в интернет
-    document.getElementById('queue-select').value = "";             // Название очереди (может быть пустым)
+    document.getElementById('mac-address').value = "";              // MAC адрес сотрудника
+    document.getElementById('internet-access').checked = false;     // Доступ в интернет
+    
+    // Очищаем выбор очередей
+    const select = document.getElementById('queue-select');
+    if (select) {
+        Array.from(select.options).forEach(option => {
+            option.selected = false;
+        });
+        updateSelectedQueuesCount();
+    }
 }
+
+// Отправка данных сотрудника на сервер (старая версия, оставлена для совместимости)
+function sendEmployeeData(employeeData, resultsDiv) {
+    resultsDiv.innerHTML = '<div class="toast toast-info">Добавляем сотрудника...</div>';
+
+    fetch('/api/add_employee', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(employeeData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        resultsDiv.innerHTML = '';
+
+        if (data.success || data.results) {
+            let html = '<div class="result-item success">✅ Сотрудник добавлен</div>';
+
+            if (data.results) {
+                for (const [key, value] of Object.entries(data.results)) {
+                    const resultText = {
+                        'dhcp': 'DHCP запись',
+                        'arp': 'ARP запись',
+                        'queue': 'Очередь',
+                        'firewall': 'Firewall правило'
+                    }[key] || key;
+
+                    html += `<div class="result-item ${value ? 'success' : 'error'}">
+                        ${value ? '✅' : '❌'} ${resultText}
+                    </div>`;
+                }
+            }
+
+            resultsDiv.innerHTML = html;
+
+            // Очищаем форму
+            resetEmployeeForm();
+
+            // Обновляем дерево очередей
+            loadQueueTree();
+        } else {
+            showAlert(data.error || 'Ошибка добавления', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка добавления:', error);
+        showAlert('Ошибка добавления сотрудника', 'error');
+    });
+}
+
 
 // Отправка данных сотрудника на сервер
 function sendEmployeeData(employeeData, resultsDiv) {
@@ -1200,7 +1251,7 @@ function showAlert(message, type = 'info') {
     return showToast(message, type);
 }
 
-// Загружает ВСЕ очереди при подключении с фильтрацией платных на клиенте
+// Загружает ВСЕ очереди при подключении с группировкой по DST
 function loadAllQueues() {
     if (!currentDevice) {
         console.log('loadAllQueues: Нет подключенного устройства');
@@ -1223,7 +1274,7 @@ function loadAllQueues() {
                     return !queueName.startsWith('paid');
                 });
                 
-                updateQueueSelect(freeQueues);
+                updateQueueSelectWithGroups(freeQueues);
                 
                 const paidCount = data.queues.length - freeQueues.length;
                 let message = `Загружено ${freeQueues.length} бесплатных очередей`;
@@ -1242,6 +1293,349 @@ function loadAllQueues() {
             showAlert('Ошибка соединения с сервером', 'error');
             resetQueueSelect();
         });
+}
+
+// Обновляет select с группировкой по DST
+function updateQueueSelectWithGroups(queues) {
+    const select = document.getElementById('queue-select');
+    if (!select) return;
+    
+    select.innerHTML = '';
+    
+    if (queues.length === 0) {
+        const option = document.createElement('option');
+        option.value = "";
+        option.textContent = "-- Нет бесплатных очередей --";
+        select.appendChild(option);
+        select.disabled = true;
+        return;
+    }
+    
+    // Группируем очереди по DST
+    const queuesByDst = {};
+    const queuesWithoutDst = [];
+    
+    queues.forEach(queue => {
+        let dst = '';
+        if (queue.dst && queue.dst !== 'none') {
+            dst = queue.dst;
+        } else if (queue.short_dst && queue.short_dst !== 'none') {
+            dst = queue.short_dst;
+        }
+        
+        if (dst) {
+            if (!queuesByDst[dst]) {
+                queuesByDst[dst] = [];
+            }
+            queuesByDst[dst].push(queue);
+        } else {
+            queuesWithoutDst.push(queue);
+        }
+    });
+    
+    // Создаем optgroup для каждой DST группы
+    Object.keys(queuesByDst).forEach(dstName => {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = `DST: ${dstName}`;
+        optgroup.className = 'queue-group-header';
+        
+        queuesByDst[dstName].forEach(queue => {
+            const option = createQueueOption(queue, dstName);
+            optgroup.appendChild(option);
+        });
+        
+        select.appendChild(optgroup);
+    });
+    
+    // Очереди без DST
+    if (queuesWithoutDst.length > 0) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = "Без DST";
+        optgroup.className = 'queue-group-header';
+        
+        queuesWithoutDst.forEach(queue => {
+            const option = createQueueOption(queue, '');
+            optgroup.appendChild(option);
+        });
+        
+        select.appendChild(optgroup);
+    }
+    
+    select.disabled = false;
+    
+    // Добавляем обработчик для подсчета выбранных
+    select.addEventListener('change', updateSelectedQueuesCount);
+    updateSelectedQueuesCount();
+}
+
+// Создает option элемент для очереди в стиле Grafana
+function createQueueOption(queue, dstName) {
+    const option = document.createElement('option');
+    option.value = queue.name;
+    option.className = `queue-option ${queue.enabled ? 'enabled' : 'disabled'}`;
+    
+    // Создаем HTML для отображения в стиле Grafana
+    let html = '<div class="queue-option-header">';
+    html += `<div style="display: flex; align-items: center; gap: 8px;">`;
+    html += `<span class="queue-status-dot ${queue.enabled ? 'enabled' : 'disabled'}"></span>`;
+    html += `<span class="queue-name">${queue.name}</span>`;
+    html += `</div>`;
+    
+    if (queue.max_limit && queue.max_limit !== '0/0') {
+        html += `<span class="status-indicator status-active" style="font-size: 10px; padding: 2px 6px;">${queue.max_limit}</span>`;
+    }
+    html += '</div>';
+    
+    html += '<div class="queue-details">';
+    
+    // TARGET
+    if (queue.short_target && queue.short_target !== 'none') {
+        let targetText = queue.short_target;
+        if (targetText.length > 20) {
+            targetText = targetText.substring(0, 20) + '...';
+        }
+        html += `<span class="queue-detail target" data-tooltip="TARGET: ${queue.short_target}">${targetText}</span>`;
+    }
+    
+    // DST (если есть и отличается от родительской группы)
+    if (dstName && queue.dst && queue.dst !== 'none' && queue.dst !== dstName) {
+        let dstText = queue.dst;
+        if (dstText.length > 15) {
+            dstText = dstText.substring(0, 15) + '...';
+        }
+        html += `<span class="queue-detail dst" data-tooltip="DST: ${queue.dst}">${dstText}</span>`;
+    }
+    
+    // IP Count
+    if (queue.ip_count > 0) {
+        html += `<span class="queue-detail count" data-tooltip="${queue.ip_count} IP адресов">${queue.ip_count} IP</span>`;
+    }
+    
+    // Comment
+    if (queue.comment) {
+        let commentText = queue.comment;
+        if (commentText.length > 25) {
+            commentText = commentText.substring(0, 25) + '...';
+        }
+        html += `<span class="queue-detail comment" data-tooltip="Комментарий: ${queue.comment}">${commentText}</span>`;
+    }
+    
+    html += '</div>';
+    
+    option.innerHTML = html;
+    
+    // Добавляем расширенную информацию для tooltip
+    let tooltipText = `Очередь: ${queue.name}\n`;
+    tooltipText += `Статус: ${queue.enabled ? 'Включена' : 'Выключена'}\n`;
+    if (queue.short_target && queue.short_target !== 'none') {
+        tooltipText += `TARGET: ${queue.short_target}\n`;
+    }
+    if (queue.dst && queue.dst !== 'none') {
+        tooltipText += `DST: ${queue.dst}\n`;
+    }
+    if (queue.max_limit && queue.max_limit !== '0/0') {
+        tooltipText += `Лимит: ${queue.max_limit}\n`;
+    }
+    if (queue.ip_count > 0) {
+        tooltipText += `IP адресов: ${queue.ip_count}\n`;
+    }
+    if (queue.comment) {
+        tooltipText += `Комментарий: ${queue.comment}`;
+    }
+    
+    option.setAttribute('data-tooltip', tooltipText);
+    
+    return option;
+}
+
+// Обновляет счетчик выбранных очередей
+function updateSelectedQueuesCount() {
+    const select = document.getElementById('queue-select');
+    const countElement = document.getElementById('selected-queues-count');
+    
+    if (!select || !countElement) return;
+    
+    const selectedCount = Array.from(select.selectedOptions).length;
+    countElement.textContent = `Выбрано: ${selectedCount}`;
+    
+    // Меняем цвет в зависимости от количества
+    if (selectedCount === 0) {
+        countElement.style.background = '#95a5a6';
+    } else if (selectedCount === 1) {
+        countElement.style.background = '#3498db';
+    } else {
+        countElement.style.background = '#2ecc71';
+    }
+}
+
+// Показывает превью выбранных очередей в стиле Grafana
+function showQueuePreview() {
+    const select = document.getElementById('queue-select');
+    if (!select) return;
+    
+    const selectedOptions = Array.from(select.selectedOptions);
+    
+    if (selectedOptions.length === 0) {
+        showAlert('Не выбрано ни одной очереди', 'warning');
+        return;
+    }
+    
+    // Создаем модальное окно в стиле Grafana
+    let modal = document.getElementById('queue-preview-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'queue-preview-modal';
+        modal.className = 'queue-preview-modal';
+        modal.innerHTML = `
+            <div class="queue-preview-content">
+                <h2><i class="fas fa-eye"></i> Выбранные очереди</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <span class="status-indicator status-active">
+                        <i class="fas fa-check-circle"></i> Выбрано: ${selectedOptions.length}
+                    </span>
+                    <button class="btn btn-secondary" onclick="hideQueuePreview()" style="padding: 6px 12px;">
+                        <i class="fas fa-times"></i> Закрыть
+                    </button>
+                </div>
+                <div class="queue-preview-list" id="queue-preview-list"></div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+        modal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                hideQueuePreview();
+            }
+        });
+    }
+    
+    // Заполняем список
+    const list = document.getElementById('queue-preview-list');
+    list.innerHTML = '';
+    
+    selectedOptions.forEach((option, index) => {
+        const item = document.createElement('div');
+        item.className = 'queue-preview-item';
+        
+        // Парсим HTML option для получения данных
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = option.innerHTML;
+        
+        const queueName = option.value;
+        const statusDot = tempDiv.querySelector('.queue-status-dot');
+        const isEnabled = statusDot.classList.contains('enabled');
+        
+        item.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <div class="queue-name">#${index + 1}. ${queueName}</div>
+                    <div class="queue-details" style="margin-top: 8px;">
+                        ${tempDiv.querySelector('.queue-details').innerHTML}
+                    </div>
+                </div>
+                <span class="status-indicator ${isEnabled ? 'status-active' : 'status-inactive'}" 
+                      style="font-size: 10px; padding: 3px 8px;">
+                    <i class="fas fa-${isEnabled ? 'check' : 'times'}"></i>
+                    ${isEnabled ? 'Активна' : 'Неактивна'}
+                </span>
+            </div>
+            <div style="margin-top: 10px; font-size: 11px; color: #7f8c8d; opacity: 0.8;">
+                <i class="fas fa-info-circle"></i> ${option.getAttribute('data-tooltip')?.replace(/\n/g, ' • ') || 'Нет дополнительной информации'}
+            </div>
+        `;
+        
+        list.appendChild(item);
+    });
+    
+    modal.style.display = 'block';
+}
+
+// Скрывает превью очередей
+function hideQueuePreview() {
+    const modal = document.getElementById('queue-preview-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Обновляем функцию findQueues для работы с мультиселектом
+function findQueues() {
+    const ip = document.getElementById('ip-address').value.trim();
+    if (!ip) {
+        showAlert('Введите IP адрес', 'error');
+        return;
+    }
+
+    if (!currentDevice) {
+        showAlert('Сначала подключитесь к устройству', 'error');
+        return;
+    }
+
+    fetch(`/api/find_queues?ip=${encodeURIComponent(ip)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const select = document.getElementById('queue-select');
+                
+                if (data.existing && data.existing.length > 0) {
+                    showAlert(`IP уже находится в очередях: ${data.existing.join(', ')}`, 'warning');
+                }
+
+                if (data.queues && data.queues.length > 0) {
+                    // ФИЛЬТРАЦИЯ НА КЛИЕНТЕ
+                    const freeQueues = data.queues.filter(queue => {
+                        const queueName = queue.name.toLowerCase();
+                        return !queueName.startsWith('paid');
+                    });
+
+                    if (freeQueues.length > 0) {
+                        // Снимаем все предыдущие выделения
+                        clearQueueSelection();
+                        
+                        // Выделяем подходящие очереди
+                        freeQueues.forEach(queue => {
+                            const option = Array.from(select.options).find(
+                                opt => opt.value === queue.name
+                            );
+                            if (option) {
+                                option.selected = true;
+                            }
+                        });
+                        
+                        updateSelectedQueuesCount();
+                        
+                        const paidCount = data.queues.length - freeQueues.length;
+                        let message = `Выделено ${freeQueues.length} подходящих очередей`;
+                        if (paidCount > 0) {
+                            message += ` (${paidCount} платных исключено)`;
+                        }
+                        showAlert(message, 'success');
+                    } else {
+                        showAlert('Бесплатных очередей не найдено', 'info');
+                    }
+                } else {
+                    showAlert('Подходящих очередей не найдено', 'info');
+                }
+            } else {
+                showAlert(data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка поиска очередей:', error);
+            showAlert('Ошибка поиска очередей', 'error');
+        });
+}
+
+// Очищает выбранные очереди
+function clearQueueSelection() {
+    const select = document.getElementById('queue-select');
+    if (select) {
+        Array.from(select.options).forEach(option => {
+            option.selected = false;
+        });
+        updateSelectedQueuesCount();
+        showAlert('Выбор очередей очищен', 'info');
+    }
 }
 
 // Обновляет select с очередями
