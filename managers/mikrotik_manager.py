@@ -438,11 +438,96 @@ class MikroTikManager:
             return False
     
     def get_queues(self) -> List[Dict]:
-        """Получить все очереди"""
+        """Получить все активные очереди, отсортированные по порядку"""
         try:
-            return list(self.api('/queue/simple/print'))
+            print("📡 Получение очередей с MikroTik...")
+            queues = list(self.api('/queue/simple/print'))
+            print(f"📊 Получено {len(queues)} очередей")
+            
+            # Фильтруем отключенные очереди (disabled=true или flags содержит X)
+            active_queues = []
+            disabled_count = 0
+            
+            for queue in queues:
+                flags = queue.get('flags', '')
+                
+                # БЕЗОПАСНАЯ ПРОВЕРКА disabled ПОЛЯ
+                disabled = False
+                disabled_value = queue.get('disabled', '')
+                
+                if isinstance(disabled_value, bool):
+                    disabled = disabled_value
+                elif isinstance(disabled_value, str):
+                    disabled = disabled_value.lower() == 'true'
+                elif disabled_value is True:  # на случай, если это 1 или что-то подобное
+                    disabled = True
+                
+                is_disabled_by_flags = 'X' in flags
+                
+                if disabled or is_disabled_by_flags:
+                    disabled_count += 1
+                    name = queue.get('name', 'N/A')
+                    reason = "disabled" if disabled else "flags contains 'X'"
+                    print(f"   ❌ Отключена: {name} ({reason})")
+                else:
+                    active_queues.append(queue)
+            
+            print(f"✅ Активных: {len(active_queues)}, отключенных: {disabled_count}")
+            
+            # Сортируем по порядку нумерации
+            def extract_queue_number(queue_name):
+                """Извлечь номер очереди из имени для сортировки"""
+                name = str(queue_name).strip()
+                
+                # Попробуем найти число в начале имени
+                match = re.match(r'^(\d+)[\s\.\-_]*', name)
+                if match:
+                    return int(match.group(1))
+                
+                # Или если имя полностью состоит из цифр
+                if name.isdigit():
+                    return int(name)
+                
+                # Или попробуем найти любую последовательность цифр
+                numbers = re.findall(r'\d+', name)
+                if numbers:
+                    return int(numbers[0])
+                
+                # Возвращаем большое число для несортированных
+                return 999999
+            
+            # Сортируем очереди
+            active_queues.sort(key=lambda q: (extract_queue_number(q.get('name', '')), q.get('name', '')))
+            
+            # Логируем порядок для отладки
+            if active_queues:
+                print("📝 Порядок активных очередей:")
+                for i, queue in enumerate(active_queues[:15], 1):  # Первые 15 для примера
+                    name = queue.get('name', 'N/A')
+                    disabled_val = queue.get('disabled', '')
+                    flags_val = queue.get('flags', '')
+                    
+                    # Проверяем статус для отладки
+                    is_disabled = False
+                    if isinstance(disabled_val, bool):
+                        is_disabled = disabled_val
+                    elif isinstance(disabled_val, str):
+                        is_disabled = disabled_val.lower() == 'true'
+                    
+                    is_disabled_by_flags = 'X' in flags_val
+                    status = '❌' if (is_disabled or is_disabled_by_flags) else '✅'
+                    print(f"   {i:2d}. {status} {name}")
+                
+                if len(active_queues) > 15:
+                    print(f"   ... и еще {len(active_queues) - 15}")
+            else:
+                print("⚠️  Нет активных очередей!")
+            
+            return active_queues
+            
         except Exception as e:
             print(f"❌ Ошибка получения очередей: {e}")
+            traceback.print_exc()
             return []
     
     def add_ip_to_queue(self, queue_id: str, ip: str) -> bool:

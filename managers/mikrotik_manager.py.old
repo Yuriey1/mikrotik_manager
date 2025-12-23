@@ -59,6 +59,84 @@ class MikroTikManager:
         except Exception as e:
             print(f"⚠️  Ошибка при отключении: {e}")
     
+    # ========== НОВЫЕ МЕТОДЫ ДЛЯ ПРОВЕРКИ IP ==========
+    def is_ip_in_mikrotik_networks(self, ip: str) -> Tuple[bool, Optional[str]]:
+        """
+        Проверить, принадлежит ли IP сетям микротика
+        
+        Возвращает:
+            (принадлежит, интерфейс) или (False, None) если не принадлежит
+        """
+        try:
+            print(f"🔍 Проверка IP {ip} на принадлежность сетям микротика...")
+            
+            # Получаем все адреса интерфейсов
+            ipaddr_cmd = self.api.path('/ip/address')
+            addresses = list(ipaddr_cmd)
+            
+            # Преобразуем IP в объект для проверки
+            try:
+                ip_obj = ipaddress.ip_address(ip)
+            except ValueError:
+                print(f"❌ Неверный формат IP: {ip}")
+                return False, None
+            
+            # Проверяем каждый адрес интерфейса
+            for addr in addresses:
+                try:
+                    network_str = addr['address']  # Формат: 192.168.1.1/24
+                    interface = addr['interface']
+                    
+                    # Создаем объект сети
+                    network = ipaddress.ip_network(network_str, strict=False)
+                    
+                    # Проверяем принадлежность IP к сети
+                    if ip_obj in network:
+                        print(f"✅ IP {ip} принадлежит сети {network} на интерфейсе '{interface}'")
+                        return True, interface
+                        
+                except (ValueError, KeyError) as e:
+                    print(f"⚠️  Ошибка обработки адреса {addr}: {e}")
+                    continue
+            
+            print(f"❌ IP {ip} НЕ принадлежит ни одной сети микротика!")
+            print(f"   Найдено сетей: {len(addresses)}")
+            return False, None
+            
+        except Exception as e:
+            print(f"❌ Ошибка проверки IP: {e}")
+            traceback.print_exc()
+            return False, None
+    
+    def get_mac_from_dhcp(self, ip: str) -> Optional[str]:
+        """Получить MAC адрес из DHCP по IP"""
+        try:
+            print(f"🔍 Поиск MAC для IP {ip} в DHCP...")
+            
+            lease = self.find_dhcp_lease(ip)
+            if lease and 'mac-address' in lease:
+                mac = lease['mac-address']
+                print(f"✅ MAC найден в DHCP: {mac}")
+                return mac
+            else:
+                print(f"⚠️ MAC для IP {ip} не найден в DHCP")
+                return None
+                
+        except Exception as e:
+            print(f"❌ Ошибка поиска MAC в DHCP: {e}")
+            return None
+    
+    def get_all_queues(self) -> List[Dict]:
+        """Получить все очереди микротика"""
+        try:
+            print("🔍 Получение списка очередей...")
+            queues = list(self.api('/queue/simple/print'))
+            print(f"✅ Получено {len(queues)} очередей")
+            return queues
+        except Exception as e:
+            print(f"❌ Ошибка получения очередей: {e}")
+            return []
+    
     # ========== DHCP LEASES ==========
     def find_dhcp_lease(self, ip: str, mac: Optional[str] = None) -> Optional[dict]:
         """Найти DHCP lease по IP адресу."""
@@ -239,18 +317,20 @@ class MikroTikManager:
             traceback.print_exc()
             return False
     
-    def add_static_arp(self, ip: str, mac: str, comment: str = "") -> bool:
+    def add_static_arp(self, ip: str, mac: str, comment: str = "", interface: Optional[str] = None) -> bool:
         """Добавить статическую ARP запись"""
         try:
             print(f"\n🔧 ARP: Начинаем работу с {ip} -> {mac}")
             
+            # 1. Проверяем принадлежность IP к сетям микротика
+            if interface is None:
+                belongs, found_interface = self.is_ip_in_mikrotik_networks(ip)
+                if not belongs:
+                    raise ValueError(f"IP {ip} не принадлежит сетям микротика! ARP запись не может быть добавлена.")
+                interface = found_interface
+            
             # Получаем объект пути
             arp_cmd = self.api.path('/ip/arp')
-            
-            # 1. Ищем интерфейс
-            print(f"🔍 ARP: Ищем интерфейс для IP {ip}")
-            interface = self._find_interface_for_ip(ip)
-            print(f"✅ ARP: Найден интерфейс: {interface}")
             
             # 2. Проверяем существующую запись
             print(f"🔍 ARP: Проверяем существующие ARP записи")
@@ -262,6 +342,7 @@ class MikroTikManager:
             
             # 3. Добавляем новую запись
             print(f"➕ ARP: Добавляем новую запись")
+            print(f"   📍 Интерфейс: {interface}")
             mikrotik_comment = russian_to_mikrotik_comment(comment) if comment else ""
             
             try:
@@ -279,37 +360,34 @@ class MikroTikManager:
                 print(f"❌ ARP: Ошибка добавления: {e}")
                 return False
             
+        except ValueError as e:
+            print(f"❌ ARP: {e}")
+            raise  # Пробрасываем наружу для обработки в UI
         except Exception as e:
             print(f"❌ ARP: Критическая ошибка: {e}")
             traceback.print_exc()
             return False
 
     def _find_interface_for_ip(self, ip: str) -> str:
-        """Найти интерфейс для IP"""
+        """Найти интерфейс для IP (старая версия - оставлена для совместимости)"""
         try:
             print(f"🔍 Interface: Ищем интерфейс для IP {ip}")
             
-            # Получаем объект пути
-            ipaddr_cmd = self.api.path('/ip/address')
-            addresses = list(ipaddr_cmd)
+            # Используем новую функцию проверки
+            belongs, interface = self.is_ip_in_mikrotik_networks(ip)
             
-            for addr in addresses:
-                try:
-                    network_addr, prefix = addr['address'].split('/')
-                    interface = addr['interface']
-                    
-                    if self._ip_in_network(ip, network_addr, int(prefix)):
-                        print(f"✅ Interface: Найден интерфейс '{interface}' для IP {ip}")
-                        return interface
-                except (ValueError, KeyError):
-                    continue
+            if belongs and interface:
+                print(f"✅ Interface: Найден интерфейс '{interface}' для IP {ip}")
+                return interface
+            else:
+                raise ValueError(f"IP {ip} не принадлежит сетям микротика!")
             
-            print(f"⚠️ Interface: Интерфейс не найден, использую 'bridge-local'")
-            return 'bridge-local'
-            
+        except ValueError as e:
+            print(f"❌ Interface: {e}")
+            raise  # Пробрасываем ошибку
         except Exception as e:
             print(f"⚠️ Interface: Ошибка поиска интерфейса: {e}")
-            return 'bridge-local'
+            raise ValueError(f"Ошибка поиска интерфейса для IP {ip}: {e}")
 
     def _ip_in_network(self, ip: str, network_addr: str, prefix: int) -> bool:
         """Проверить принадлежность IP к сети"""
