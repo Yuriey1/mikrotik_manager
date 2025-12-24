@@ -298,6 +298,7 @@ textarea {
     gap: 10px;
 }
 
+/* Улучшаем карточку устройства */
 .device-item {
     padding: 16px;
     background: var(--bg-secondary);
@@ -309,44 +310,77 @@ textarea {
     justify-content: space-between;
     align-items: center;
     gap: 12px;
+    margin-bottom: 8px;
 }
 
 .device-item:hover {
     border-color: var(--accent-primary);
     background: var(--bg-hover);
     transform: translateY(-2px);
+    box-shadow: var(--shadow);
 }
 
 .device-item.active {
     border-color: var(--success);
     background: rgba(115, 191, 105, 0.1);
-    box-shadow: 0 0 0 1px var(--success);
+    box-shadow: 0 0 0 1px var(--success), 0 4px 12px rgba(115, 191, 105, 0.2);
 }
 
+/* Улучшаем отображение информации об устройстве */
 .device-info {
-    margin: 0 8px;
     flex: 1;
     min-width: 0;
+    overflow: hidden;
 }
 
 .device-name {
     font-weight: 600;
     color: var(--text-primary);
-    font-size: 13px;
-    line-height: 1.2;
-    margin-bottom: 2px;
+    font-size: 14px;
+    margin-bottom: 4px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .device-ip {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
-    color: #666;
-    line-height: 1.2;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
+.device-ip:before {
+    content: "🌐";
+    font-size: 11px;
+}
+
+/* Иконка статуса устройства */
+.device-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 10px;
+}
+
+.device-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.device-status-dot.active {
+    background: var(--success);
+    box-shadow: 0 0 0 3px rgba(115, 191, 105, 0.3);
+}
+
+.device-status-dot.inactive {
+    background: var(--error);
+}
+
+/* Стили для кнопки подключения */
 .connect-btn {
     padding: 8px 16px;
     border-radius: 6px;
@@ -357,10 +391,35 @@ textarea {
     transition: var(--transition);
     flex-shrink: 0;
     white-space: nowrap;
+    background: linear-gradient(135deg, #6e9fff 0%, #4a7dff 100%);
+    color: white;
+    min-width: 110px;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .connect-btn:hover {
-    transform: translateY(-1px);
+    background: linear-gradient(135deg, #4a7dff 0%, #2a5bff 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Стиль для активного подключения (кнопка отключения) */
+.btn-danger {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%) !important;
+    color: white !important;
+}
+
+.btn-danger:hover {
+    background: linear-gradient(135deg, #c0392b 0%, #a93226 100%) !important;
+}
+
+/* Убедимся, что кнопки в списке устройств правильного цвета */
+.device-item .btn {
+    padding: 8px 16px !important;
+    font-size: 12px !important;
+    border: none !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
 }
 
 /* ===== ВКЛАДКИ ===== */

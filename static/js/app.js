@@ -1770,20 +1770,29 @@ function setupSimpleTooltips() {
     document.body.appendChild(tooltip);
     
     let hoverTimer;
-    let currentOption = null;
+    let mouseX = 0;
+    let mouseY = 0;
+    
+    // Отслеживаем позицию мыши
+    document.addEventListener('mousemove', function(e) {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+        
+        // Если тултип видим, обновляем его позицию
+        if (tooltip.style.display === 'block') {
+            positionTooltipAtMouse(tooltip);
+        }
+    });
     
     select.addEventListener('mouseover', function(e) {
         if (e.target.tagName === 'OPTION' && e.target.value) {
             const option = e.target;
-            currentOption = option;
             
             // Отменяем предыдущий таймер
             if (hoverTimer) clearTimeout(hoverTimer);
             
             // Запускаем новый таймер
             hoverTimer = setTimeout(() => {
-                if (currentOption !== option) return;
-                
                 const tooltipHTML = option.getAttribute('data-tooltip-html');
                 if (!tooltipHTML) return;
                 
@@ -1791,16 +1800,9 @@ function setupSimpleTooltips() {
                 tooltip.innerHTML = tooltipHTML;
                 tooltip.style.display = 'block';
                 
-                // Позиционируем
-                positionTooltip(option, tooltip);
+                // Позиционируем относительно курсора мыши
+                positionTooltipAtMouse(tooltip);
             }, 600); // Задержка 600ms
-        }
-    });
-    
-    select.addEventListener('mousemove', function(e) {
-        if (e.target.tagName === 'OPTION' && tooltip.style.display === 'block') {
-            const option = e.target;
-            positionTooltip(option, tooltip);
         }
     });
     
@@ -1809,33 +1811,32 @@ function setupSimpleTooltips() {
             clearTimeout(hoverTimer);
             hoverTimer = null;
         }
-        currentOption = null;
         tooltip.style.display = 'none';
     });
     
-    function positionTooltip(option, tooltipElement) {
-        const rect = option.getBoundingClientRect();
-        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-        const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+    function positionTooltipAtMouse(tooltipElement) {
+        const tooltipWidth = tooltipElement.offsetWidth;
+        const tooltipHeight = tooltipElement.offsetHeight;
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
         
-        // Рассчитываем позицию
-        let left = rect.right + 10;
-        let top = rect.top;
+        // Начальная позиция - справа от курсора
+        let left = mouseX + 15;
+        let top = mouseY + 15;
         
-        // Проверяем, помещается ли справа
-        if (left + 300 > window.innerWidth) {
-            left = rect.left - 300 - 10;
+        // Если не помещается справа - показываем слева
+        if (left + tooltipWidth > windowWidth - 10) {
+            left = mouseX - tooltipWidth - 15;
         }
         
-        // Проверяем, помещается ли снизу
-        const tooltipHeight = tooltipElement.offsetHeight;
-        if (top + tooltipHeight > window.innerHeight) {
-            top = window.innerHeight - tooltipHeight - 10;
+        // Если не помещается снизу - показываем сверху
+        if (top + tooltipHeight > windowHeight - 10) {
+            top = mouseY - tooltipHeight - 15;
         }
         
         // Устанавливаем позицию
-        tooltipElement.style.left = (left + scrollLeft) + 'px';
-        tooltipElement.style.top = (top + scrollTop) + 'px';
+        tooltipElement.style.left = left + 'px';
+        tooltipElement.style.top = top + 'px';
     }
     
     // Скрываем при скролле
