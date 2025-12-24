@@ -1370,7 +1370,8 @@ function updateQueueSelectWithGroups(queues) {
     updateSelectedQueuesCount();
 
     //Выводим кастомный тултип
-    setTimeout(setupSimpleTooltips, 100);
+    //setTimeout(setupSimpleTooltips, 100);
+    setupSimpleTooltips();
 }
 
 // Добавьте в updateQueueSelectWithGroups() после создания select:
@@ -1421,42 +1422,68 @@ function showCustomTooltip(option) {
     }, 3000);
 }
 
-
 function createQueueOption(queue, dstName) {
     const option = document.createElement('option');
     option.value = queue.name;
     option.className = `queue-option ${queue.enabled ? 'enabled' : 'disabled'}`;
     
-    // В селекторе имя очереди + цветной символ
+    // В селекторе имя очереди + иконка статуса
     const statusIcon = queue.enabled ? '🟢' : '🔴';
     option.textContent = `${statusIcon} ${queue.name}`;
     
-    // Формируем тултип с цветными эмодзи
-    let tooltipText = `📊 ${queue.name}\n`;
-    tooltipText += `━━━━━━━━━━━━━━━━━━\n`;
-    tooltipText += `${queue.enabled ? '🟢' : '🔴'} Статус: ${queue.enabled ? 'ВКЛ' : 'ВЫКЛ'}\n\n`;
+    // Формируем HTML для тултипа (с переносами строк через <br>)
+    let tooltipHTML = `<div style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; line-height: 1.5; color: #d8d9da;">`;
+    tooltipHTML += `<div style="color: #3498db; font-weight: bold; margin-bottom: 8px;">📊 ${queue.name}</div>`;
+    tooltipHTML += `<div style="border-bottom: 1px solid #3498db; margin-bottom: 10px; padding-bottom: 5px;"></div>`;
+    
+    tooltipHTML += `<div style="margin-bottom: 8px;">`;
+    tooltipHTML += `<span style="color: ${queue.enabled ? '#2ecc71' : '#e74c3c'}; margin-right: 8px;">${queue.enabled ? '🟢' : '🔴'}</span>`;
+    tooltipHTML += `<span>Статус: <strong>${queue.enabled ? 'ВКЛ' : 'ВЫКЛ'}</strong></span>`;
+    tooltipHTML += `</div>`;
     
     if (queue.short_target && queue.short_target !== 'none') {
-        tooltipText += `🎯 TARGET:\n${queue.short_target}\n\n`;
+        tooltipHTML += `<div style="margin-bottom: 8px;">`;
+        tooltipHTML += `<span style="color: #f39c12; margin-right: 8px;">🎯</span>`;
+        tooltipHTML += `<span>TARGET:</span><br>`;
+        tooltipHTML += `<div style="margin-left: 24px; margin-top: 4px; color: #ecf0f1; font-family: monospace; font-size: 12px;">${queue.short_target}</div>`;
+        tooltipHTML += `</div>`;
     }
     
     if (queue.dst && queue.dst !== 'none') {
-        tooltipText += `📍 DST:\n${queue.dst}\n\n`;
+        tooltipHTML += `<div style="margin-bottom: 8px;">`;
+        tooltipHTML += `<span style="color: #9b59b6; margin-right: 8px;">📍</span>`;
+        tooltipHTML += `<span>DST:</span><br>`;
+        tooltipHTML += `<div style="margin-left: 24px; margin-top: 4px; color: #ecf0f1; font-family: monospace; font-size: 12px;">${queue.dst}</div>`;
+        tooltipHTML += `</div>`;
     }
     
     if (queue.max_limit && queue.max_limit !== '0/0') {
-        tooltipText += `⚡ Лимит:\n${queue.max_limit}\n\n`;
+        tooltipHTML += `<div style="margin-bottom: 8px;">`;
+        tooltipHTML += `<span style="color: #f1c40f; margin-right: 8px;">⚡</span>`;
+        tooltipHTML += `<span>Лимит:</span><br>`;
+        tooltipHTML += `<div style="margin-left: 24px; margin-top: 4px; color: #f1c40f; font-weight: bold;">${queue.max_limit}</div>`;
+        tooltipHTML += `</div>`;
     }
     
     if (queue.ip_count > 0) {
-        tooltipText += `👥 IP адресов: ${queue.ip_count}\n\n`;
+        tooltipHTML += `<div style="margin-bottom: 8px;">`;
+        tooltipHTML += `<span style="color: #e67e22; margin-right: 8px;">👥</span>`;
+        tooltipHTML += `<span>IP адресов: <strong style="color: #e67e22;">${queue.ip_count}</strong></span>`;
+        tooltipHTML += `</div>`;
     }
     
     if (queue.comment) {
-        tooltipText += `💬 ${queue.comment}`;
+        tooltipHTML += `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #2c3e50;">`;
+        tooltipHTML += `<span style="color: #3498db; margin-right: 8px;">💬</span>`;
+        tooltipHTML += `<span style="font-style: italic; color: #7f8c8d;">${queue.comment}</span>`;
+        tooltipHTML += `</div>`;
     }
     
-    option.title = tooltipText;
+    tooltipHTML += `</div>`;
+    
+    // Сохраняем HTML в data-атрибут
+    option.setAttribute('data-tooltip-html', tooltipHTML);
+    option.title = ''; // Пустой title убирает системный тултип
     
     return option;
 }
@@ -1721,7 +1748,6 @@ function resetQueueSelect() {
     }
 }
 
-// Добавьте эту функцию в конец файла app.js
 function setupSimpleTooltips() {
     const select = document.getElementById('queue-select');
     if (!select) return;
@@ -1730,44 +1756,94 @@ function setupSimpleTooltips() {
     const tooltip = document.createElement('div');
     tooltip.id = 'custom-queue-tooltip';
     tooltip.style.cssText = `
-        position: absolute;
+        position: fixed;
         background: #1a1d23;
-        color: #d8d9da;
         border: 1px solid #3498db;
-        border-radius: 4px;
-        padding: 8px 10px;
-        max-width: 280px;
+        border-radius: 6px;
+        padding: 12px;
+        max-width: 300px;
         z-index: 10000;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-        font-family: Arial, sans-serif;
-        font-size: 12px;
-        line-height: 1.4;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
         display: none;
         pointer-events: none;
     `;
     document.body.appendChild(tooltip);
     
+    let hoverTimer;
+    let currentOption = null;
+    
     select.addEventListener('mouseover', function(e) {
         if (e.target.tagName === 'OPTION' && e.target.value) {
             const option = e.target;
-            const tooltipContent = option.title || '';
+            currentOption = option;
             
-            if (tooltipContent) {
-                // Показываем тултип с задержкой
-                setTimeout(() => {
-                    tooltip.innerHTML = tooltipContent.replace(/\n/g, '<br>');
-                    tooltip.style.display = 'block';
-                    
-                    // Позиционируем
-                    const rect = option.getBoundingClientRect();
-                    tooltip.style.left = (rect.left + rect.width + 10) + 'px';
-                    tooltip.style.top = rect.top + 'px';
-                }, 500); // Задержка 500ms
-            }
+            // Отменяем предыдущий таймер
+            if (hoverTimer) clearTimeout(hoverTimer);
+            
+            // Запускаем новый таймер
+            hoverTimer = setTimeout(() => {
+                if (currentOption !== option) return;
+                
+                const tooltipHTML = option.getAttribute('data-tooltip-html');
+                if (!tooltipHTML) return;
+                
+                // Вставляем HTML
+                tooltip.innerHTML = tooltipHTML;
+                tooltip.style.display = 'block';
+                
+                // Позиционируем
+                positionTooltip(option, tooltip);
+            }, 600); // Задержка 600ms
+        }
+    });
+    
+    select.addEventListener('mousemove', function(e) {
+        if (e.target.tagName === 'OPTION' && tooltip.style.display === 'block') {
+            const option = e.target;
+            positionTooltip(option, tooltip);
         }
     });
     
     select.addEventListener('mouseout', function() {
+        if (hoverTimer) {
+            clearTimeout(hoverTimer);
+            hoverTimer = null;
+        }
+        currentOption = null;
         tooltip.style.display = 'none';
+    });
+    
+    function positionTooltip(option, tooltipElement) {
+        const rect = option.getBoundingClientRect();
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+        
+        // Рассчитываем позицию
+        let left = rect.right + 10;
+        let top = rect.top;
+        
+        // Проверяем, помещается ли справа
+        if (left + 300 > window.innerWidth) {
+            left = rect.left - 300 - 10;
+        }
+        
+        // Проверяем, помещается ли снизу
+        const tooltipHeight = tooltipElement.offsetHeight;
+        if (top + tooltipHeight > window.innerHeight) {
+            top = window.innerHeight - tooltipHeight - 10;
+        }
+        
+        // Устанавливаем позицию
+        tooltipElement.style.left = (left + scrollLeft) + 'px';
+        tooltipElement.style.top = (top + scrollTop) + 'px';
+    }
+    
+    // Скрываем при скролле
+    window.addEventListener('scroll', function() {
+        tooltip.style.display = 'none';
+        if (hoverTimer) {
+            clearTimeout(hoverTimer);
+            hoverTimer = null;
+        }
     });
 }
