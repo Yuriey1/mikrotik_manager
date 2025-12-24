@@ -1368,42 +1368,94 @@ function updateQueueSelectWithGroups(queues) {
     // Добавляем обработчик для подсчета выбранных
     select.addEventListener('change', updateSelectedQueuesCount);
     updateSelectedQueuesCount();
+
+    //Выводим кастомный тултип
+    setTimeout(setupSimpleTooltips, 100);
 }
+
+// Добавьте в updateQueueSelectWithGroups() после создания select:
+select.addEventListener('mouseenter', function(e) {
+    if (e.target.tagName === 'OPTION') {
+        const option = e.target;
+        setTimeout(() => {
+            showCustomTooltip(option);
+        }, 800);
+    }
+});
+
+function showCustomTooltip(option) {
+    // Удаляем старый тултип если есть
+    const oldTooltip = document.getElementById('simple-queue-tooltip');
+    if (oldTooltip) oldTooltip.remove();
+    
+    // Создаем новый
+    const tooltip = document.createElement('div');
+    tooltip.id = 'simple-queue-tooltip';
+    tooltip.style.cssText = `
+        position: fixed;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        max-width: 250px;
+        z-index: 9999;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        white-space: pre-line;
+        line-height: 1.5;
+    `;
+    
+    // Используем тот же текст что в title
+    tooltip.textContent = option.title;
+    
+    document.body.appendChild(tooltip);
+    
+    // Позиционируем возле курсора
+    const rect = option.getBoundingClientRect();
+    tooltip.style.left = (rect.right + 10) + 'px';
+    tooltip.style.top = rect.top + 'px';
+    
+    // Удаляем через 3 секунды или при уходе мыши
+    setTimeout(() => {
+        tooltip.remove();
+    }, 3000);
+}
+
 
 function createQueueOption(queue, dstName) {
     const option = document.createElement('option');
     option.value = queue.name;
     option.className = `queue-option ${queue.enabled ? 'enabled' : 'disabled'}`;
     
-    // В селекторе ТОЛЬКО имя очереди
-    option.textContent = queue.name;
+    // В селекторе имя очереди + цветной символ
+    const statusIcon = queue.enabled ? '🟢' : '🔴';
+    option.textContent = `${statusIcon} ${queue.name}`;
     
-    // Формируем простой и понятный текст для тултипа
-    let tooltipText = `Очередь: ${queue.name}\n`;
-    tooltipText += `──────────────\n`;
-    tooltipText += `Статус: ${queue.enabled ? '✅ Включена' : '❌ Выключена'}\n`;
+    // Формируем тултип с цветными эмодзи
+    let tooltipText = `📊 ${queue.name}\n`;
+    tooltipText += `━━━━━━━━━━━━━━━━━━\n`;
+    tooltipText += `${queue.enabled ? '🟢' : '🔴'} Статус: ${queue.enabled ? 'ВКЛ' : 'ВЫКЛ'}\n\n`;
     
     if (queue.short_target && queue.short_target !== 'none') {
-        tooltipText += `TARGET: ${queue.short_target}\n`;
+        tooltipText += `🎯 TARGET:\n${queue.short_target}\n\n`;
     }
     
     if (queue.dst && queue.dst !== 'none') {
-        tooltipText += `DST: ${queue.dst}\n`;
+        tooltipText += `📍 DST:\n${queue.dst}\n\n`;
     }
     
     if (queue.max_limit && queue.max_limit !== '0/0') {
-        tooltipText += `Лимит: ${queue.max_limit}\n`;
+        tooltipText += `⚡ Лимит:\n${queue.max_limit}\n\n`;
     }
     
     if (queue.ip_count > 0) {
-        tooltipText += `IP адресов: ${queue.ip_count}\n`;
+        tooltipText += `👥 IP адресов: ${queue.ip_count}\n\n`;
     }
     
     if (queue.comment) {
-        tooltipText += `Комментарий: ${queue.comment}\n`;
+        tooltipText += `💬 ${queue.comment}`;
     }
     
-    // Простой тултип через title
     option.title = tooltipText;
     
     return option;
@@ -1667,4 +1719,55 @@ function resetQueueSelect() {
         select.innerHTML = '<option value="">-- Не подключено --</option>';
         select.disabled = true;
     }
+}
+
+// Добавьте эту функцию в конец файла app.js
+function setupSimpleTooltips() {
+    const select = document.getElementById('queue-select');
+    if (!select) return;
+    
+    // Создаем кастомный тултип
+    const tooltip = document.createElement('div');
+    tooltip.id = 'custom-queue-tooltip';
+    tooltip.style.cssText = `
+        position: absolute;
+        background: #1a1d23;
+        color: #d8d9da;
+        border: 1px solid #3498db;
+        border-radius: 4px;
+        padding: 8px 10px;
+        max-width: 280px;
+        z-index: 10000;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        font-family: Arial, sans-serif;
+        font-size: 12px;
+        line-height: 1.4;
+        display: none;
+        pointer-events: none;
+    `;
+    document.body.appendChild(tooltip);
+    
+    select.addEventListener('mouseover', function(e) {
+        if (e.target.tagName === 'OPTION' && e.target.value) {
+            const option = e.target;
+            const tooltipContent = option.title || '';
+            
+            if (tooltipContent) {
+                // Показываем тултип с задержкой
+                setTimeout(() => {
+                    tooltip.innerHTML = tooltipContent.replace(/\n/g, '<br>');
+                    tooltip.style.display = 'block';
+                    
+                    // Позиционируем
+                    const rect = option.getBoundingClientRect();
+                    tooltip.style.left = (rect.left + rect.width + 10) + 'px';
+                    tooltip.style.top = rect.top + 'px';
+                }, 500); // Задержка 500ms
+            }
+        }
+    });
+    
+    select.addEventListener('mouseout', function() {
+        tooltip.style.display = 'none';
+    });
 }
