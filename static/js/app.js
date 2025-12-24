@@ -1370,82 +1370,41 @@ function updateQueueSelectWithGroups(queues) {
     updateSelectedQueuesCount();
 }
 
-// Создает option элемент для очереди в стиле Grafana
 function createQueueOption(queue, dstName) {
     const option = document.createElement('option');
     option.value = queue.name;
     option.className = `queue-option ${queue.enabled ? 'enabled' : 'disabled'}`;
     
-    // Создаем HTML для отображения в стиле Grafana
-    let html = '<div class="queue-option-header">';
-    html += `<div style="display: flex; align-items: center; gap: 8px;">`;
-    html += `<span class="queue-status-dot ${queue.enabled ? 'enabled' : 'disabled'}"></span>`;
-    html += `<span class="queue-name">${queue.name}</span>`;
-    html += `</div>`;
+    // В селекторе ТОЛЬКО имя очереди
+    option.textContent = queue.name;
     
-    if (queue.max_limit && queue.max_limit !== '0/0') {
-        html += `<span class="status-indicator status-active" style="font-size: 10px; padding: 2px 6px;">${queue.max_limit}</span>`;
-    }
-    html += '</div>';
-    
-    html += '<div class="queue-details">';
-    
-    // TARGET
-    if (queue.short_target && queue.short_target !== 'none') {
-        let targetText = queue.short_target;
-        if (targetText.length > 20) {
-            targetText = targetText.substring(0, 20) + '...';
-        }
-        html += `<span class="queue-detail target" data-tooltip="TARGET: ${queue.short_target}">${targetText}</span>`;
-    }
-    
-    // DST (если есть и отличается от родительской группы)
-    if (dstName && queue.dst && queue.dst !== 'none' && queue.dst !== dstName) {
-        let dstText = queue.dst;
-        if (dstText.length > 15) {
-            dstText = dstText.substring(0, 15) + '...';
-        }
-        html += `<span class="queue-detail dst" data-tooltip="DST: ${queue.dst}">${dstText}</span>`;
-    }
-    
-    // IP Count
-    if (queue.ip_count > 0) {
-        html += `<span class="queue-detail count" data-tooltip="${queue.ip_count} IP адресов">${queue.ip_count} IP</span>`;
-    }
-    
-    // Comment
-    if (queue.comment) {
-        let commentText = queue.comment;
-        if (commentText.length > 25) {
-            commentText = commentText.substring(0, 25) + '...';
-        }
-        html += `<span class="queue-detail comment" data-tooltip="Комментарий: ${queue.comment}">${commentText}</span>`;
-    }
-    
-    html += '</div>';
-    
-    option.innerHTML = html;
-    
-    // Добавляем расширенную информацию для tooltip
+    // Формируем простой и понятный текст для тултипа
     let tooltipText = `Очередь: ${queue.name}\n`;
-    tooltipText += `Статус: ${queue.enabled ? 'Включена' : 'Выключена'}\n`;
+    tooltipText += `──────────────\n`;
+    tooltipText += `Статус: ${queue.enabled ? '✅ Включена' : '❌ Выключена'}\n`;
+    
     if (queue.short_target && queue.short_target !== 'none') {
         tooltipText += `TARGET: ${queue.short_target}\n`;
     }
+    
     if (queue.dst && queue.dst !== 'none') {
         tooltipText += `DST: ${queue.dst}\n`;
     }
+    
     if (queue.max_limit && queue.max_limit !== '0/0') {
         tooltipText += `Лимит: ${queue.max_limit}\n`;
     }
+    
     if (queue.ip_count > 0) {
         tooltipText += `IP адресов: ${queue.ip_count}\n`;
     }
+    
     if (queue.comment) {
-        tooltipText += `Комментарий: ${queue.comment}`;
+        tooltipText += `Комментарий: ${queue.comment}\n`;
     }
     
-    option.setAttribute('data-tooltip', tooltipText);
+    // Простой тултип через title
+    option.title = tooltipText;
     
     return option;
 }
