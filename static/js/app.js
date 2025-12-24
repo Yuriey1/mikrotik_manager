@@ -72,7 +72,7 @@ function loadDevices() {
                     }
 
                     const buttonText = currentDevice === name ? '🔓 Отключить' : '🔗 Подключить';
-                    const buttonClass = currentDevice === name ? 'btn-danger' : '';
+                    const buttonClass = currentDevice === name ? 'btn-danger' : 'connect-btn';
 
                     li.innerHTML = `
                         <div class="device-info">

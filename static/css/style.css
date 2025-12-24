@@ -320,10 +320,40 @@ textarea {
     box-shadow: var(--shadow);
 }
 
+/* Карточка активного устройства */
 .device-item.active {
-    border-color: var(--success);
-    background: rgba(115, 191, 105, 0.1);
-    box-shadow: 0 0 0 1px var(--success), 0 4px 12px rgba(115, 191, 105, 0.2);
+    border: 2px solid var(--success);
+    background: linear-gradient(135deg, 
+        rgba(115, 191, 105, 0.15) 0%, 
+        rgba(39, 174, 96, 0.15) 100%);
+    position: relative;
+    overflow: hidden;
+}
+
+.device-item.active:before {
+    content: '✓';
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    color: var(--success);
+    font-size: 10px;
+    font-weight: bold;
+    background: rgba(115, 191, 105, 0.2);
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.device-item.active .device-name {
+    color: var(--success);
+    font-weight: 700;
+}
+
+.device-item.active .device-ip {
+    color: rgba(115, 191, 105, 0.8);
 }
 
 /* Улучшаем отображение информации об устройстве */
@@ -381,27 +411,87 @@ textarea {
 }
 
 /* Стили для кнопки подключения */
+/* Grafana-style buttons for device list */
 .connect-btn {
-    padding: 8px 16px;
-    border-radius: 6px;
+    padding: 10px 20px;
     border: none;
+    border-radius: 4px;
+    font-weight: 600;
     font-size: 12px;
-    font-weight: 500;
     cursor: pointer;
-    transition: var(--transition);
-    flex-shrink: 0;
-    white-space: nowrap;
-    background: linear-gradient(135deg, #6e9fff 0%, #4a7dff 100%);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 120px;
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+    background: linear-gradient(135deg, 
+        rgba(110, 159, 255, 0.9) 0%, 
+        rgba(74, 125, 255, 0.9) 100%);
     color: white;
-    min-width: 110px;
-    text-align: center;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 8px rgba(110, 159, 255, 0.4);
+    letter-spacing: 0.3px;
+}
+
+.connect-btn:before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, 
+        rgba(42, 91, 255, 0.9) 0%, 
+        rgba(26, 67, 230, 0.9) 100%);
+    z-index: -1;
+    transition: opacity 0.3s ease;
+    opacity: 0;
+}
+
+.connect-btn:hover:before {
+    opacity: 1;
 }
 
 .connect-btn:hover {
-    background: linear-gradient(135deg, #4a7dff 0%, #2a5bff 100%);
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 6px 16px rgba(110, 159, 255, 0.6);
+}
+
+.connect-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(110, 159, 255, 0.4);
+}
+
+/* Кнопка отключения (красная) */
+.connect-btn.btn-danger {
+    background: linear-gradient(135deg, 
+        rgba(231, 76, 60, 0.9) 0%, 
+        rgba(192, 57, 43, 0.9) 100%);
+    box-shadow: 0 2px 8px rgba(231, 76, 60, 0.4);
+}
+
+.connect-btn.btn-danger:before {
+    background: linear-gradient(135deg, 
+        rgba(192, 57, 43, 0.9) 0%, 
+        rgba(169, 50, 38, 0.9) 100%);
+}
+
+.connect-btn.btn-danger:hover {
+    box-shadow: 0 6px 16px rgba(231, 76, 60, 0.6);
+}
+
+/* Иконки на кнопках */
+.connect-btn i {
+    font-size: 11px;
+}
+
+/* Текст на кнопках */
+.connect-btn span {
+    font-size: 12px;
+    font-weight: 500;
 }
 
 /* Стиль для активного подключения (кнопка отключения) */
