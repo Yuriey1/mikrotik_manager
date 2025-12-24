@@ -376,13 +376,13 @@ function addEmployee() {
     const manualMac = document.getElementById('mac-address').value.trim();   // MAC адрес сотрудника (может быть пустым)
     const internetAccess = document.getElementById('internet-access').checked; // Доступ в интернет
     
-    // Получаем ВСЕ выбранные очереди (ОПЦИОНАЛЬНО)
+    // Получаем ВСЕ выбранные очереди
     const select = document.getElementById('queue-select');
     const selectedQueues = Array.from(select.selectedOptions)
         .map(option => option.value)
         .filter(value => value && value !== "-- Нет бесплатных очередей --" && value !== "-- Загрузка очередей...");
 
-    // Проверка заполнения обязательных полей (очереди НЕ обязательны)
+    // Проверка заполнения обязательных полей
     if (!fullName || !position || !ip) {
         showAlert('Заполните обязательные поля (ФИО, Должность, IP)', 'error');
         return;
@@ -401,7 +401,7 @@ function addEmployee() {
     // ШАГ 1: Проверка принадлежности IP к сетям микротика
     showAlert('Проверка принадлежности IP к сетям микротика...', 'info');
     
-    // Сначала делаем проверку IP
+    // Сначала делаем проверку IP (это новый шаг)
     fetch(`/api/check_ip?ip=${encodeURIComponent(ip)}`)
         .then(response => response.json())
         .then(ipCheckData => {
@@ -444,21 +444,20 @@ function addEmployee() {
                         return;
                     }
 
-                    // ШАГ 3: Подтверждение для работы без очередей (если не выбраны)
+                    // ШАГ 3: Если очереди не выбраны, можно предложить автоматический поиск
                     if (selectedQueues.length === 0) {
-                        const proceed = confirm(
-                            'Вы не выбрали очереди. Сотрудник будет добавлен без ограничений очередей.\n\n' +
-                            'Вы можете использовать настройки по умолчанию или добавить в очередь позже.\n\n' +
-                            'Продолжить?'
-                        );
-                        
-                        if (!proceed) {
+                        const proceed = confirm('Вы не выбрали очереди. Хотите автоматически найти подходящие очереди?');
+                        if (proceed) {
+                            findQueues();
                             resultsDiv.innerHTML = `
                                 <div class="toast toast-info">
-                                    📋 Отменено пользователем
+                                    🔍 Поиск подходящих очередей...
                                 </div>
                             `;
                             return;
+                        } else {
+                            // Пользователь хочет продолжить без очередей
+                            showAlert('Продолжаем без выбора очередей', 'info');
                         }
                     }
 
@@ -469,7 +468,7 @@ function addEmployee() {
                         ip: ip,
                         mac: finalMac,
                         internet_access: internetAccess,
-                        queues: selectedQueues // Может быть пустым массивом
+                        queues: selectedQueues // Теперь передаем массив очередей
                     };
 
                     // Отправляем данные на сервер
@@ -481,49 +480,48 @@ function addEmployee() {
                         body: JSON.stringify(dataToSend)
                     })
                     .then(response => response.json())
-                    .then(result => {
-                        if (result.success) {
-                            let successMessage = `Сотрудник ${fullName} успешно добавлен`;
-                            
-                            // Добавляем информацию об очередях в сообщение
-                            if (selectedQueues.length > 0) {
-                                successMessage += ` в ${selectedQueues.length} очередь(ей): ${selectedQueues.join(', ')}`;
-                            } else {
-                                successMessage += ' (без ограничений очередей)';
-                            }
-                            
-                            showAlert(successMessage, 'success');
-                            resultsDiv.innerHTML = `
-                                <div class="toast toast-success">
-                                    ✅ ${successMessage}
-                                    ${result.details_list ? '<div style="margin-top: 10px; font-size: 12px;">' + 
-                                      result.details_list.join('<br>') + '</div>' : ''}
-                                </div>
-                            `;
-                            
-                            // Обновляем дерево очередей, только если сотрудник был добавлен в очередь
-                            if (selectedQueues.length > 0 && result.details && result.details.queues) {
-                                const successfulQueues = result.details.queues.filter(q => q.success);
-                                if (successfulQueues.length > 0) {
-                                    loadQueueTree();
-                                }
-                            }
-                            
-                            // Сбрасываем значения формы
-                            resetEmployeeForm();
-                            
-                        } else {
-                            let message = result.message || 'Ошибка добавления сотрудника';
-                            showAlert(message, 'error');
-                            resultsDiv.innerHTML = `
-                                <div class="toast toast-error">
-                                    ❌ ${message}
-                                    ${result.details_list ? '<div style="margin-top: 10px; font-size: 12px;">' + 
-                                      result.details_list.join('<br>') + '</div>' : ''}
-                                </div>
-                            `;
-                        }
-                    })
+
+.then(result => {
+    if (result.success) {
+        let successMessage = result.message;
+        
+        // Показываем детализированную информацию
+        let detailsHTML = '<div class="toast toast-success">';
+        detailsHTML += `<div>✅ ${successMessage}</div>`;
+        
+        // Добавляем детали из details_list
+        if (result.details_list && result.details_list.length > 0) {
+            detailsHTML += '<div style="margin-top: 10px; font-size: 12px;">';
+            result.details_list.forEach(detail => {
+                detailsHTML += `<div>${detail}</div>`;
+            });
+            detailsHTML += '</div>';
+        }
+        
+        detailsHTML += '</div>';
+        resultsDiv.innerHTML = detailsHTML;
+        
+        // Обновляем дерево очередей, если сотрудник был добавлен в очередь
+        if (selectedQueues.length > 0 && result.details && result.details.queues) {
+            const successfulQueues = result.details.queues.filter(q => q.success);
+            if (successfulQueues.length > 0) {
+                loadQueueTree();
+            }
+        }
+        
+        // Сбрасываем значения формы
+        resetEmployeeForm();
+        
+    } else {
+        let message = result.message || 'Ошибка добавления сотрудника';
+        showAlert(message, 'error');
+        resultsDiv.innerHTML = `
+            <div class="toast toast-error">
+                ❌ ${message}
+            </div>
+        `;
+    }
+})
                     .catch(error => {
                         console.error('Ошибка отправки данных:', error);
                         showAlert('Ошибка отправки данных', 'error');
@@ -1560,7 +1558,7 @@ function hideQueuePreview() {
     }
 }
 
-// Поиск очередей для IP с подсказкой, но без автоматического выделения
+// Обновляем функцию findQueues для работы с мультиселектом
 function findQueues() {
     const ip = document.getElementById('ip-address').value.trim();
     if (!ip) {
@@ -1577,8 +1575,10 @@ function findQueues() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
+                const select = document.getElementById('queue-select');
+                
                 if (data.existing && data.existing.length > 0) {
-                    showAlert(`Внимание: IP уже находится в очередях: ${data.existing.join(', ')}`, 'warning');
+                    showAlert(`IP уже находится в очередях: ${data.existing.join(', ')}`, 'warning');
                 }
 
                 if (data.queues && data.queues.length > 0) {
@@ -1589,28 +1589,27 @@ function findQueues() {
                     });
 
                     if (freeQueues.length > 0) {
-                        // Показываем найденные очереди, но НЕ выделяем автоматически
+                        // Снимаем все предыдущие выделения
+                        clearQueueSelection();
+                        
+                        // Выделяем подходящие очереди
+                        freeQueues.forEach(queue => {
+                            const option = Array.from(select.options).find(
+                                opt => opt.value === queue.name
+                            );
+                            if (option) {
+                                option.selected = true;
+                            }
+                        });
+                        
+                        updateSelectedQueuesCount();
+                        
                         const paidCount = data.queues.length - freeQueues.length;
-                        let message = `Найдено ${freeQueues.length} подходящих очередей`;
+                        let message = `Выделено ${freeQueues.length} подходящих очередей`;
                         if (paidCount > 0) {
                             message += ` (${paidCount} платных исключено)`;
                         }
-                        
-                        // Предлагаем пользователю посмотреть очереди
-                        const viewQueues = confirm(
-                            `${message}\n\n` +
-                            'Хотите посмотреть найденные очереди в селекторе?\n\n' +
-                            'Примечание: Вы можете не выбирать очереди и использовать настройки по умолчанию.'
-                        );
-                        
-                        if (viewQueues) {
-                            // Прокручиваем к селектору очередей
-                            const queueSelect = document.getElementById('queue-select');
-                            if (queueSelect) {
-                                queueSelect.focus();
-                                showAlert('Найденные очереди доступны для выбора в списке', 'info');
-                            }
-                        }
+                        showAlert(message, 'success');
                     } else {
                         showAlert('Бесплатных очередей не найдено', 'info');
                     }
@@ -1623,7 +1622,7 @@ function findQueues() {
         })
         .catch(error => {
             console.error('Ошибка поиска очередей:', error);
-            showAlert('Ошибка поиска очереди', 'error');
+            showAlert('Ошибка поиска очередей', 'error');
         });
 }
 

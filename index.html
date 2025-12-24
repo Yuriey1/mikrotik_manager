@@ -129,31 +129,35 @@
             </label>
         </div>
         
-        <div class="form-group">
-            <label>Очереди (можно выбрать несколько)</label>
-            <div class="flex gap-10 align-start">
-                <div class="queue-select-container flex-1">
-                    <select id="queue-select" multiple size="8" class="queue-select-multiple">
-                        <option value="">-- Загрузка очередей... --</option>
-                    </select>
-                    <div class="queue-select-info">
-                        <small>Удерживайте Ctrl/Cmd для выбора нескольких очередей</small>
-                        <div id="selected-queues-count">Выбрано: 0</div>
-                    </div>
-                </div>
-                <div class="queue-controls">
-                    <button class="btn btn-warning" onclick="findQueues()">
-                        <i class="fas fa-search"></i> Найти очереди для IP
-                    </button>
-                    <button class="btn btn-secondary mt-10" onclick="clearQueueSelection()">
-                        <i class="fas fa-times"></i> Очистить выбор
-                    </button>
-                    <button class="btn btn-info mt-10" onclick="showQueuePreview()">
-                        <i class="fas fa-eye"></i> Показать выбранные
-                    </button>
-                </div>
+
+<div class="form-group">
+    <label>Очереди (опционально)</label>
+    <div class="help-text" style="font-size: 12px; color: #7f8c8d; margin-bottom: 8px;">
+        <i class="fas fa-info-circle"></i> Если не выбрать очередь, сотрудник будет работать без ограничений очередей
+    </div>
+    <div class="flex gap-10 align-start">
+        <div class="queue-select-container flex-1">
+            <select id="queue-select" multiple size="8" class="queue-select-multiple">
+                <option value="">-- Очереди не требуются, но доступны для выбора --</option>
+            </select>
+            <div class="queue-select-info">
+                <small>Удерживайте Ctrl/Cmd для выбора нескольких очередей</small>
+                <div id="selected-queues-count">Выбрано: 0</div>
             </div>
         </div>
+        <div class="queue-controls">
+            <button class="btn btn-warning" onclick="findQueues()">
+                <i class="fas fa-search"></i> Найти подходящие очереди
+            </button>
+            <button class="btn btn-secondary mt-10" onclick="clearQueueSelection()">
+                <i class="fas fa-times"></i> Очистить выбор
+            </button>
+            <button class="btn btn-info mt-10" onclick="showQueuePreview()">
+                <i class="fas fa-eye"></i> Показать выбранные
+            </button>
+        </div>
+    </div>
+</div>
         
         <button class="btn btn-success w-full" onclick="addEmployee()">
             <i class="fas fa-check"></i> Добавить сотрудника
