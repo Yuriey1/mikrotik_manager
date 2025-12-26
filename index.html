@@ -313,14 +313,15 @@
             </div>
         </div>
         
-<!-- Обновите footer модального окна в index.html -->
-<div class="ip-modal-footer">
-    <button class="btn btn-secondary" onclick="hideIPSelector()">
-        <i class="fas fa-times"></i> Отмена
-    </button>
-    <button class="btn btn-primary" onclick="useSelectedIP()" id="use-ip-btn" disabled>
-        <i class="fas fa-check-circle"></i> Использовать выбранный IP
-    </button>
+        <div class="ip-modal-footer">
+            <button class="btn btn-secondary" onclick="cancelIPSelection()">
+                <i class="fas fa-times"></i> Отмена
+            </button>
+            <button class="btn btn-primary" onclick="saveSelectedIP()" id="use-ip-btn">
+                <i class="fas fa-check-circle"></i> Сохранить
+            </button>
+        </div>
+    </div>
 </div>
 
     </div>

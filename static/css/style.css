@@ -1872,19 +1872,18 @@ textarea {
     border-top: 1px solid var(--border-color);
     background: var(--bg-secondary);
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    justify-content: flex-end;
     gap: 10px;
+    align-items: center;
 }
 
-/* Меняем порядок кнопок через flex-direction */
 .ip-modal-footer .btn {
-    flex: 1;
+    min-width: 150px;
+    padding: 10px 20px;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    padding: 10px 16px;
     font-weight: 500;
     transition: all 0.2s ease;
 }
@@ -1900,17 +1899,36 @@ textarea {
     }
 }
 
+/* Улучшаем стиль кнопки Сохранить */
+.ip-modal-footer .btn-primary {
+    background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+    color: white;
+    border: none;
+}
+
+.ip-modal-footer .btn-primary:hover:not(:disabled) {
+    background: linear-gradient(135deg, #27ae60 0%, #219653 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(46, 204, 113, 0.3);
+}
+
+.ip-modal-footer .btn-primary:disabled {
+    background: #95a5a6;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
 /* Улучшаем стиль кнопок в модальном окне */
 .ip-modal-footer .btn-secondary {
-    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-    color: #d8d9da;
-    border: 1px solid #3a4a5a;
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
 }
 
 .ip-modal-footer .btn-secondary:hover {
-    background: linear-gradient(135deg, #34495e 0%, #3a4a5a 100%);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--accent-secondary);
 }
 
 .ip-modal-footer .btn-warning {
