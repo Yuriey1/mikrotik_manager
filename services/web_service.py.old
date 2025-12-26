@@ -626,30 +626,22 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 try:
                     lease = mikrotik_manager.find_dhcp_lease(ip=ip)
                     if lease:
-                        # Ищем MAC адрес в разных возможных полях
-                        mac = lease.get('mac-address') or lease.get('mac_address') or lease.get('mac.address', '')
-                        if mac:
-                            print(f"✅ Найден MAC в DHCP: {mac}")
-                        else:
-                            print(f"⚠️  DHCP lease найден, но MAC не обнаружен в полях")
-                    else:
-                        print(f"⚠️  DHCP lease для {ip} не найден")
+                        mac = lease.get('mac-address', '')
+                        print(f"✅ Найден MAC в DHCP: {mac}")
                 except Exception as e:
                     print(f"⚠️  Ошибка поиска DHCP lease: {e}")
 
             # Проверяем формат MAC (если он есть)
             if mac:
-                # Приводим к правильному формату перед проверкой
-                mac = mac.lower().replace('-', ':').replace('.', ':')
-                mac_pattern = re.compile(r'^([0-9a-f]{2}[:-]){5}([0-9a-f]{2})$')
+                mac_pattern = re.compile(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$')
                 if not mac_pattern.match(mac):
                     error_msg = 'Неверный формат MAC'
                     print(f"❌ {error_msg}")
                     self._send_json({'error': error_msg}, 400)
                     return
-                print(f"✅ MAC адрес валиден: {mac}")
-            else:
-                print(f"⚠️  MAC адрес не указан и не найден в DHCP")
+                # Приводим к формату MikroTik (через двоеточие)
+                mac = ':'.join(mac.split(':')).lower()
+                print(f"✅ MAC адрес приведен: {mac}")
 
             # Создаем комментарий
             comment = f"{position} - {full_name}"
@@ -662,96 +654,28 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 'firewall': False
             }
 
-            # 1. DHCP Lease - создаем/обновляем статический lease
-            # ВАЖНО: вызываем create_static_lease даже если нет MAC (для проверки существующего)
-            print(f"\n🔧 ШАГ 1: Работа с DHCP lease для {ip}...")
+            # 1. DHCP Lease - только если есть MAC
             if mac:
-                print(f"  Используем MAC: {mac}")
+                print(f"🔧 Создание DHCP lease для {ip} -> {mac}")
                 results['dhcp'] = mikrotik_manager.create_static_lease(ip, mac, comment)
-                print(f"  Результат DHCP: {results['dhcp']}")
+                print(f"   Результат DHCP: {results['dhcp']}")
             else:
-                # Если нет MAC, пробуем найти существующий lease и сделать его статическим
-                print(f"  Без MAC, проверяем существующий lease...")
-                lease = mikrotik_manager.find_dhcp_lease(ip=ip)
-                if lease:
-                    print(f"  Найден существующий lease: {lease}")
-                    lease_id = lease.get('.id')
-                    if lease_id:
-                        print(f"  Lease ID: {lease_id}")
-                        
-                        # Проверяем, динамический ли lease
-                        is_dynamic = lease.get('dynamic') == 'true'
-                        print(f"  Динамический: {is_dynamic}")
-                        
-                        try:
-                            dhcp_cmd = mikrotik_manager.api.path('/ip/dhcp-server/lease')
-                            
-                            # Если lease динамический, делаем его статическим
-                            if is_dynamic:
-                                print(f"  🔄 Делаем динамический lease статическим...")
-                                try:
-                                    tuple(dhcp_cmd('make-static', **{'.id': lease_id}))
-                                    print(f"  ✅ Lease сделан статическим через make-static")
-                                except Exception as e:
-                                    print(f"  ⚠️ Ошибка make-static: {e}")
-                                    # Пробуем другой способ
-                                    try:
-                                        tuple(dhcp_cmd('set', **{
-                                            '.id': lease_id,
-                                            'dynamic': 'no'
-                                        }))
-                                        print(f"  ✅ Lease сделан статическим через set")
-                                    except Exception as e2:
-                                        print(f"  ❌ Ошибка set: {e2}")
-                            
-                            # Добавляем комментарий
-                            from utils.helpers import russian_to_mikrotik_comment
-                            mikrotik_comment = russian_to_mikrotik_comment(comment)
-                            print(f"  📝 Добавляем комментарий: {comment}")
-                            
-                            try:
-                                tuple(dhcp_cmd('comment', **{
-                                    'numbers': lease_id,
-                                    'comment': mikrotik_comment
-                                }))
-                                print(f"  ✅ Комментарий добавлен через comment")
-                            except Exception as e:
-                                print(f"  ⚠️ Ошибка comment, пробуем set: {e}")
-                                try:
-                                    tuple(dhcp_cmd('set', **{
-                                        '.id': lease_id,
-                                        'comment': mikrotik_comment
-                                    }))
-                                    print(f"  ✅ Комментарий добавлен через set")
-                                except Exception as e2:
-                                    print(f"  ❌ Ошибка добавления комментария: {e2}")
-                            
-                            results['dhcp'] = True
-                            
-                        except Exception as e:
-                            print(f"  ❌ Ошибка обработки существующего lease: {e}")
-                            results['dhcp'] = False
-                    else:
-                        print(f"  ❌ Не найден ID lease")
-                        results['dhcp'] = False
-                else:
-                    print(f"  ⚠️  Нет существующего lease, пропускаем DHCP")
-                    results['dhcp'] = True  # Пропускаем если нет MAC и нет существующего lease
+                results['dhcp'] = True  # Пропускаем если нет MAC
+                print(f"⚠️  MAC не указан, пропускаем DHCP")
 
             # 2. ARP таблица - только если есть MAC
-            print(f"\n🔧 ШАГ 2: Работа с ARP таблицей...")
             if mac:
-                print(f"  Добавление ARP записи для {ip} -> {mac}")
+                print(f"🔧 Добавление ARP записи для {ip} -> {mac}")
                 results['arp'] = mikrotik_manager.add_static_arp(ip, mac, comment)
-                print(f"  Результат ARP: {results['arp']}")
+                print(f"   Результат ARP: {results['arp']}")
             else:
                 results['arp'] = True
-                print(f"  ⚠️  MAC не указан, пропускаем ARP")
+                print(f"⚠️  MAC не указан, пропускаем ARP")
 
             # 3. Очереди (ОПЦИОНАЛЬНО - если указаны)
             queue_results = []
             if queues:
-                print(f"\n🔧 ШАГ 3: Поиск и добавление в {len(queues)} очередь(ей)...")
+                print(f"🔧 Поиск и добавление в {len(queues)} очередь(ей)...")
             
                 for queue_name in queues:
                     print(f"  🔍 Поиск очереди '{queue_name}'...")
@@ -782,27 +706,24 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 results['queues'] = queue_results
                 print(f"📊 Итог по очередям: {len([q for q in queue_results if q.get('success', False)])} из {len(queues)} успешно")
             else:
-                print(f"\nℹ️  ШАГ 3: Очереди не указаны, сотрудник будет работать без ограничений очередей")
+                print(f"ℹ️  Очереди не указаны, сотрудник будет работать без ограничений очередей")
                 results['queues'] = []
 
             # 4. Firewall Address List (интернет доступ)
-            print(f"\n🔧 ШАГ 4: Работа с Firewall...")
             if internet_access:
-                print(f"  Добавление {ip} в address-list 'internet_access'")
+                print(f"🔧 Добавление {ip} в address-list 'internet_access'")
                 results['firewall'] = mikrotik_manager.add_to_address_list(
                     'internet_access',
                     f"{ip}/32",
                     comment
                 )
-                print(f"  Результат firewall: {results['firewall']}")
+                print(f"   Результат firewall: {results['firewall']}")
             else:
                 results['firewall'] = True
-                print(f"  ℹ️  Интернет доступ отключен, пропускаем")
+                print(f"ℹ️  Интернет доступ отключен, пропускаем")
 
             # Завершение операции
-            print("\n" + "=" * 50)
-            print("✅ ЗАВЕРШЕНИЕ ОПЕРАЦИИ ДОБАВЛЕНИЯ СОТРУДНИКА")
-            print("=" * 50)
+            print("Завершилась операция добавления сотрудника")
 
             # Проверяем общий успех
             # Основные действия должны быть успешными, очереди - опциональны

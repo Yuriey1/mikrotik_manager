@@ -142,5 +142,21 @@
     "username": "nur001",
     "password": "enc:WjVNZjN4cGs=",
     "description": ""
+  },
+  "Тюрепино": {
+    "name": "Тюрепино",
+    "ip": "81.18.123.114",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Еленка": {
+    "name": "Еленка",
+    "ip": "217.21.106.174",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
   }
 }
