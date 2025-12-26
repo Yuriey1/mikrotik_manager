@@ -29,13 +29,20 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Обработчик Escape для закрытия
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
+    // Добавляем функцию для закрытия при клике на фон (опционально)
+    document.getElementById('ip-selector-modal').addEventListener('click', function(e) {
+        if (e.target === this) {
             hideIPSelector();
         }
     });
 
+    // Закрытие по Escape
+    document.addEventListener('keydown', function(e) {
+        const modal = document.getElementById('ip-selector-modal');
+        if (e.key === 'Escape' && modal.style.display === 'flex') {
+            hideIPSelector();
+        }
+    });
 });
 
 function showAddDeviceForm() {
@@ -1877,18 +1884,25 @@ function showFreeIPs() {
     const modal = document.getElementById('ip-selector-modal');
     modal.style.display = 'flex';
     
+    // Сохраняем текущее значение IP из поля ввода
+    window.originalIP = document.getElementById('ip-address').value.trim();
+    
     // Показываем загрузку
     document.getElementById('free-ips-loading').style.display = 'block';
     document.getElementById('free-ips-content').style.display = 'none';
     document.getElementById('free-ips-error').style.display = 'none';
     document.getElementById('use-ip-btn').disabled = true;
     
+    // Сбрасываем выбранный IP в модалке
+    window.modalSelectedIP = null;
+    window.modalSelectedPool = null;
+    
     // Загружаем свободные IP
     fetch('/api/free_ips')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                renderFreeIPs(data.free_ips);
+                renderFreeIPs(data.free_ips, window.originalIP);
             } else {
                 showFreeIPsError(data.error || 'Ошибка загрузки');
             }
@@ -1899,8 +1913,17 @@ function showFreeIPs() {
         });
 }
 
+// Отмена выбора IP
+function cancelIPSelection() {
+    // Восстанавливаем оригинальное значение IP
+    document.getElementById('ip-address').value = window.originalIP || '';
+    
+    // Закрываем модальное окно
+    hideIPSelector();
+}
+
 // Рендерит список свободных IP в стиле Grafana
-function renderFreeIPs(freeIPs) {
+function renderFreeIPs(freeIPs, currentIP = '') {
     const contentDiv = document.getElementById('free-ips-content');
     const loadingDiv = document.getElementById('free-ips-loading');
     const errorDiv = document.getElementById('free-ips-error');
@@ -1908,6 +1931,10 @@ function renderFreeIPs(freeIPs) {
     loadingDiv.style.display = 'none';
     errorDiv.style.display = 'none';
     contentDiv.style.display = 'block';
+    
+    // Сбрасываем выбранный IP
+    window.modalSelectedIP = null;
+    window.modalSelectedPool = null;
     
     if (!freeIPs || Object.keys(freeIPs).length === 0) {
         contentDiv.innerHTML = `
@@ -1923,14 +1950,26 @@ function renderFreeIPs(freeIPs) {
     let totalFree = 0;
     let totalPools = Object.keys(freeIPs).length;
     
-    // Переменная для хранения выбранного IP
-    window.selectedIP = null;
-    window.selectedPool = null;
-    
     // Общая статистика
     Object.values(freeIPs).forEach(pool => {
         totalFree += pool.free_ips;
     });
+    
+    // Проверяем, есть ли текущий IP в списке свободных
+    let currentIPInList = false;
+    let currentIPPool = '';
+    
+    if (currentIP) {
+        for (const [poolName, poolData] of Object.entries(freeIPs)) {
+            if (poolData.free_list && poolData.free_list.includes(currentIP)) {
+                currentIPInList = true;
+                currentIPPool = poolName;
+                window.modalSelectedIP = currentIP;
+                window.modalSelectedPool = poolName;
+                break;
+            }
+        }
+    }
     
     html += `
         <div class="ip-stats-panel">
@@ -1944,6 +1983,12 @@ function renderFreeIPs(freeIPs) {
             </div>
             <div class="ip-stats-text">
                 Найдено <strong>${totalFree}</strong> свободных IP адресов в <strong>${totalPools}</strong> пулах
+                ${currentIP && !currentIPInList ? 
+                    `<br><span style="color: var(--warning); margin-top: 5px; display: inline-block;">
+                        <i class="fas fa-exclamation-triangle"></i> Текущий IP (${currentIP}) не найден в списке свободных
+                    </span>` : 
+                    ''
+                }
             </div>
         </div>
         
@@ -1986,22 +2031,32 @@ function renderFreeIPs(freeIPs) {
         if (poolData.free_list && poolData.free_list.length > 0) {
             html += `<div class="ip-list-grid">`;
             
-            // В цикле создания IP карточек изменим строку с созданием ip-option:
-            poolData.free_list.forEach(ip => {
-                // Проверяем, не выбран ли уже этот IP из предыдущего сеанса
-                const isSelected = window.selectedIP === ip && window.selectedPool === poolName;
+        // В цикле создания IP карточек обновляем:
+        poolData.free_list.forEach(ip => {
+            const isCurrentIP = currentIP === ip;
+            const isSelectedInModal = window.modalSelectedIP === ip && window.modalSelectedPool === poolName;
+            const isSelected = isCurrentIP || isSelectedInModal;
     
-                html += `
-                    <div class="ip-option ${isSelected ? 'selected' : ''}" 
-                         onclick="selectIP('${ip}', '${poolName}')"
-                         data-ip="${ip}"
-                         data-pool="${poolName}">
-                         <div class="ip-address">${ip}</div>
-                         <div class="ip-pool-label">${poolName}</div>
-                         ${isSelected ? '<div class="ip-selected-indicator"><i class="fas fa-check"></i></div>' : ''}
+            if (isCurrentIP) {
+                window.modalSelectedIP = ip;
+                window.modalSelectedPool = poolName;
+            }
+    
+            html += `
+                <div class="ip-option ${isSelected ? 'selected' : ''} ${isCurrentIP ? 'current-ip-selected' : ''}" 
+                    onclick="${isCurrentIP ? 'showToast(\'Это текущий IP из поля ввода\', \'info\', 2000)' : `selectIP('${ip}', '${poolName}')`}"
+                    data-ip="${ip}"
+                    data-pool="${poolName}"
+                    title="${isCurrentIP ? 'Текущий IP из поля ввода' : `Выбрать IP ${ip}`}">
+                    <div class="ip-address">
+                        ${ip}
+                        ${isCurrentIP ? '<span class="current-ip-badge">Текущий</span>' : ''}
                     </div>
-                `;
-            });
+                    <div class="ip-pool-label">${poolName}</div>
+                    ${isSelected ? '<div class="ip-selected-indicator"><i class="fas fa-check"></i></div>' : ''}
+                </div>
+            `;
+        });
             
             html += `</div>`;
             
@@ -2034,6 +2089,12 @@ function renderFreeIPs(freeIPs) {
     html += `</div>`;
     
     contentDiv.innerHTML = html;
+    
+    // Если есть выбранный IP (из поля или в модалке), активируем кнопку
+    if (window.modalSelectedIP) {
+        document.getElementById('use-ip-btn').disabled = false;
+        document.getElementById('use-ip-btn').innerHTML = `<i class="fas fa-check-circle"></i> Использовать ${window.modalSelectedIP}`;
+    }
 }
 
 // Показывает ошибку при загрузке свободных IP
@@ -2046,28 +2107,27 @@ function showFreeIPsError(message) {
     document.getElementById('free-ips-error-text').textContent = message;
 }
 
-// В функции selectIP добавляем управление кнопкой очистки
+// Выбирает IP в модальном окне
 function selectIP(ip, poolName) {
     const selectedElement = event.currentTarget;
     
-    // Получаем кнопки
-    const useBtn = document.getElementById('use-ip-btn');
-    const clearBtn = document.getElementById('clear-ip-btn');
-    
     // Проверяем, не выбран ли уже этот IP
-    if (window.selectedIP === ip && window.selectedPool === poolName) {
-        // Снимаем выбор
-        selectedElement.classList.remove('selected');
-        window.selectedIP = null;
-        window.selectedPool = null;
-        
-        // Деактивируем кнопки
-        useBtn.disabled = true;
-        clearBtn.disabled = true;
-        useBtn.innerHTML = `<i class="fas fa-check"></i> Использовать выбранный IP`;
-        
-        // Показываем уведомление о снятии выбора
-        showToast('Выбор IP снят', 'info', 2000);
+    if (window.modalSelectedIP === ip && window.modalSelectedPool === poolName) {
+        // Снимаем выбор, но только если это не текущий IP из поля
+        const isCurrentIP = window.originalIP === ip;
+        if (!isCurrentIP) {
+            selectedElement.classList.remove('selected');
+            window.modalSelectedIP = null;
+            window.modalSelectedPool = null;
+            
+            // Деактивируем кнопку, если нет другого выбора
+            document.getElementById('use-ip-btn').disabled = true;
+            document.getElementById('use-ip-btn').innerHTML = `<i class="fas fa-check-circle"></i> Использовать выбранный IP`;
+            
+            showToast('Выбор IP снят', 'info', 2000);
+        } else {
+            showToast('Этот IP уже выбран из поля ввода', 'info', 2000);
+        }
     } else {
         // Снимаем выделение со всех IP
         document.querySelectorAll('.ip-option').forEach(el => {
@@ -2078,34 +2138,36 @@ function selectIP(ip, poolName) {
         selectedElement.classList.add('selected');
         
         // Сохраняем выбранный IP
-        window.selectedIP = ip;
-        window.selectedPool = poolName;
+        window.modalSelectedIP = ip;
+        window.modalSelectedPool = poolName;
         
-        // Активируем кнопки
+        // Активируем кнопку
+        const useBtn = document.getElementById('use-ip-btn');
         useBtn.disabled = false;
-        clearBtn.disabled = false;
-        useBtn.innerHTML = `<i class="fas fa-check"></i> Использовать ${ip}`;
+        useBtn.innerHTML = `<i class="fas fa-check-circle"></i> Использовать ${ip}`;
         
-        // Показываем уведомление о выборе
         showToast(`Выбран IP: ${ip} из пула ${poolName}`, 'success', 2000);
     }
 }
 
 // Использует выбранный IP
 function useSelectedIP() {
-    if (!window.selectedIP) {
+    if (!window.modalSelectedIP) {
         showAlert('Выберите IP адрес', 'warning');
         return;
     }
     
     // Вставляем IP в поле ввода
-    document.getElementById('ip-address').value = window.selectedIP;
+    document.getElementById('ip-address').value = window.modalSelectedIP;
     
     // Закрываем модальное окно
     hideIPSelector();
     
+    // Показываем сообщение о выбранном IP
+    showAlert(`Выбран IP: ${window.modalSelectedIP} из пула ${window.modalSelectedPool}`, 'success');
+    
     // Автоматически проверяем DHCP для этого IP
-    checkDHCPForIP(window.selectedIP);
+    checkDHCPForIP(window.modalSelectedIP);
 }
 
 // Проверяет DHCP для указанного IP
@@ -2129,15 +2191,11 @@ function checkDHCPForIP(ip) {
 function hideIPSelector() {
     const modal = document.getElementById('ip-selector-modal');
     modal.style.display = 'none';
-    
-    // Сбрасываем выбранный IP, если пользователь закрыл окно без выбора
-    if (window.selectedIP) {
-        showToast(`Выбран IP: ${window.selectedIP}`, 'success');
-    }
-    
-    // Не сбрасываем выбранный IP при закрытии, чтобы можно было снова открыть
-    // window.selectedIP = null;
-    // window.selectedPool = null;
+
+    // Очищаем временные переменные
+    window.originalIP = null;
+    window.modalSelectedIP = null;
+    window.modalSelectedPool = null;
 }
 
 // Добавляем CSS для выделения IP

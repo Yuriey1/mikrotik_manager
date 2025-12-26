@@ -1866,13 +1866,69 @@ textarea {
     flex: 1;
 }
 
+/* ===== ФУТЕР МОДАЛЬНОГО ОКНА ===== */
 .ip-modal-footer {
     padding: 16px 24px;
     border-top: 1px solid var(--border-color);
     background: var(--bg-secondary);
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
     gap: 10px;
+}
+
+/* Меняем порядок кнопок через flex-direction */
+.ip-modal-footer .btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+/* Для мобильных меняем на колонку */
+@media (max-width: 768px) {
+    .ip-modal-footer {
+        flex-direction: column;
+    }
+    
+    .ip-modal-footer .btn {
+        width: 100%;
+    }
+}
+
+/* Улучшаем стиль кнопок в модальном окне */
+.ip-modal-footer .btn-secondary {
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    color: #d8d9da;
+    border: 1px solid #3a4a5a;
+}
+
+.ip-modal-footer .btn-secondary:hover {
+    background: linear-gradient(135deg, #34495e 0%, #3a4a5a 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.ip-modal-footer .btn-warning {
+    background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+    color: white;
+}
+
+.ip-modal-footer .btn-warning:hover {
+    background: linear-gradient(135deg, #e67e22 0%, #d35400 100%);
+}
+
+.ip-modal-footer .btn-primary {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    color: white;
+}
+
+.ip-modal-footer .btn-primary:hover {
+    background: linear-gradient(135deg, #2980b9 0%, #1f6396 100%);
 }
 
 /* ===== ЗАГРУЗКА IP ===== */
@@ -2196,4 +2252,34 @@ textarea {
     background: linear-gradient(135deg, 
         rgba(115, 191, 105, 0.25) 0%, 
         rgba(39, 174, 96, 0.25) 100%);
+}
+
+/* ===== БЕЙДЖ "ТЕКУЩИЙ IP" ===== */
+.current-ip-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    color: white;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: 8px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    vertical-align: middle;
+}
+
+/* Специальный стиль для текущего IP (нельзя снять выбор) */
+.ip-option.current-ip-selected {
+    border-color: #3498db;
+    background: linear-gradient(135deg, 
+        rgba(52, 152, 219, 0.15) 0%, 
+        rgba(41, 128, 185, 0.15) 100%);
+    cursor: not-allowed;
+}
+
+.ip-option.current-ip-selected:hover {
+    border-color: #3498db;
+    background: linear-gradient(135deg, 
+        rgba(52, 152, 219, 0.2) 0%, 
+        rgba(41, 128, 185, 0.2) 100%);
 }
