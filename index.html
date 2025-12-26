@@ -316,14 +316,17 @@
             </div>
         </div>
         
-        <div class="ip-modal-footer">
-            <button class="btn btn-secondary" onclick="hideIPSelector()">
-                <i class="fas fa-times"></i> Отмена
-            </button>
-            <button class="btn btn-primary" onclick="useSelectedIP()" id="use-ip-btn" disabled>
-                <i class="fas fa-check"></i> Использовать выбранный IP
-            </button>
-        </div>
+<div class="ip-modal-footer">
+    <button class="btn btn-warning" onclick="clearIPSelection()" id="clear-ip-btn" disabled>
+        <i class="fas fa-times"></i> Очистить выбор
+    </button>
+    <button class="btn btn-secondary" onclick="hideIPSelector()">
+        <i class="fas fa-times"></i> Отмена
+    </button>
+    <button class="btn btn-primary" onclick="useSelectedIP()" id="use-ip-btn" disabled>
+        <i class="fas fa-check"></i> Использовать выбранный IP
+    </button>
+</div>
     </div>
 </div>
     <!-- JavaScript -->
