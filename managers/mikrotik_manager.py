@@ -872,3 +872,119 @@ class MikroTikManager:
             print(f"❌ Queue: Критическая ошибка: {e}")
             traceback.print_exc()
             return False
+
+    def get_free_dhcp_ips(self, max_per_pool: int = 20) -> Dict[str, List[str]]:
+        """Получить свободные IP адреса из DHCP пулов"""
+        try:
+            print(f"🔍 Поиск свободных IP адресов в DHCP пулах...")
+            
+            # Получаем все пулы
+            pools = self.get_dhcp_pools()
+            print(f"📊 Найдено пулов DHCP: {len(pools)}")
+            
+            # Получаем все leases
+            leases = self.get_dhcp_leases()
+            used_ips = {lease.get('address') for lease in leases if lease.get('address')}
+            print(f"📊 Используется IP адресов: {len(used_ips)}")
+            
+            # Анализируем каждый пул
+            free_ips_by_pool = {}
+            
+            for pool in pools:
+                pool_name = pool.get('name', 'unknown')
+                ranges = pool.get('ranges', '')
+                
+                if not ranges:
+                    continue
+                
+                print(f"🔍 Анализ пула '{pool_name}': {ranges}")
+                
+                # Парсим диапазоны IP
+                pool_ips = set()
+                for ip_range in ranges.split(','):
+                    if ip_range.strip():
+                        ips = self._parse_ip_range(ip_range.strip())
+                        pool_ips.update(ips)
+                
+                if not pool_ips:
+                    continue
+                
+                # Находим свободные IP
+                free_ips = sorted(
+                    pool_ips - used_ips,
+                    key=lambda x: [int(part) for part in x.split('.')]
+                )
+                
+                # Ограничиваем количество для отображения
+                display_ips = free_ips[:max_per_pool]
+                
+                free_ips_by_pool[pool_name] = {
+                    'total_ips': len(pool_ips),
+                    'used_ips': len(pool_ips.intersection(used_ips)),
+                    'free_ips': len(free_ips),
+                    'free_list': display_ips,
+                    'has_more': len(free_ips) > max_per_pool,
+                    'ranges': ranges
+                }
+                
+                print(f"   📊 Свободно: {len(free_ips)}/{len(pool_ips)}")
+            
+            return free_ips_by_pool
+            
+        except Exception as e:
+            print(f"❌ Ошибка поиска свободных IP: {e}")
+            traceback.print_exc()
+            return {}
+    
+    def _parse_ip_range(self, ip_range: str) -> List[str]:
+        """Преобразовать диапазон IP в список адресов"""
+        ip_range = ip_range.strip()
+        
+        if '-' in ip_range:
+            # Формат: 192.168.1.100-192.168.1.200
+            start_ip, end_ip = ip_range.split('-')
+            try:
+                start = ipaddress.IPv4Address(start_ip.strip())
+                end = ipaddress.IPv4Address(end_ip.strip())
+                return [str(ipaddress.IPv4Address(ip)) for ip in range(int(start), int(end) + 1)]
+            except (ipaddress.AddressValueError, ValueError) as e:
+                print(f"⚠️ Ошибка парсинга диапазона {ip_range}: {e}")
+                return []
+        elif '/' in ip_range:
+            # Формат: 192.168.1.0/24
+            try:
+                network = ipaddress.IPv4Network(ip_range, strict=False)
+                return [str(ip) for ip in network.hosts()]
+            except ipaddress.AddressValueError as e:
+                print(f"⚠️ Ошибка парсинга сети {ip_range}: {e}")
+                return []
+        else:
+            # Одиночный IP
+            try:
+                ipaddress.IPv4Address(ip_range)
+                return [ip_range]
+            except ipaddress.AddressValueError as e:
+                print(f"⚠️ Ошибка парсинга IP {ip_range}: {e}")
+                return []
+    
+    def get_dhcp_pools(self) -> List[Dict]:
+        """Получить все DHCP пулы"""
+        try:
+            print("🔍 Получение DHCP пулов...")
+            pools = list(self.api('/ip/pool/print'))
+            print(f"✅ Получено {len(pools)} пулов")
+            return pools
+        except Exception as e:
+            print(f"❌ Ошибка получения DHCP пулов: {e}")
+            return []
+    
+    def get_dhcp_leases(self) -> List[Dict]:
+        """Получить все DHCP leases"""
+        try:
+            print("🔍 Получение DHCP leases...")
+            leases = list(self.api('/ip/dhcp-server/lease/print'))
+            print(f"✅ Получено {len(leases)} leases")
+            return leases
+        except Exception as e:
+            print(f"❌ Ошибка получения DHCP leases: {e}")
+            return []

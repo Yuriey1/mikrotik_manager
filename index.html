@@ -107,15 +107,15 @@
             <input type="text" id="position" placeholder="Инженер">
         </div>
         
-        <div class="form-group">
-            <label>IP адрес *</label>
-            <div class="flex gap-10">
-                <input type="text" id="ip-address" placeholder="192.168.1.100" class="flex-1">
-                <button class="btn btn-warning" onclick="checkDHCP()">
-                    <i class="fas fa-search"></i> Проверить DHCP
-                </button>
-            </div>
-        </div>
+<div class="form-group">
+    <label>IP адрес *</label>
+    <div class="flex gap-10">
+        <input type="text" id="ip-address" placeholder="192.168.1.100" class="flex-1">
+        <button class="btn btn-info" onclick="showFreeIPs()" type="button">
+            <i class="fas fa-list"></i> Выбрать свободный IP
+        </button>
+    </div>
+</div>
         
         <div class="form-group">
             <label>MAC адрес</label>
@@ -287,6 +287,45 @@
             </div>
         </div>
     </div>
+
+<!-- Добавляем модальное окно для выбора свободных IP -->
+<div id="ip-selector-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+    <div style="background: white; width: 90%; max-width: 800px; max-height: 80vh; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;">
+        <div style="background: #3498db; color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin: 0; font-size: 18px;">
+                <i class="fas fa-search"></i> Выберите свободный IP адрес
+            </h3>
+            <button onclick="hideIPSelector()" style="background: none; border: none; color: white; font-size: 20px; cursor: pointer;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div style="padding: 20px; overflow-y: auto; flex: 1;">
+            <div id="free-ips-loading" style="text-align: center; padding: 40px;">
+                <i class="fas fa-spinner fa-spin fa-2x" style="color: #3498db;"></i>
+                <p style="margin-top: 15px; color: #7f8c8d;">Загружаем список свободных IP адресов...</p>
+            </div>
+            
+            <div id="free-ips-content" style="display: none;">
+                <!-- Контент будет загружен здесь -->
+            </div>
+            
+            <div id="free-ips-error" style="display: none; text-align: center; padding: 40px; color: #e74c3c;">
+                <i class="fas fa-exclamation-triangle fa-2x"></i>
+                <p style="margin-top: 15px;" id="free-ips-error-text"></p>
+            </div>
+        </div>
+        
+        <div style="padding: 15px 20px; border-top: 1px solid #eee; text-align: right;">
+            <button class="btn btn-secondary" onclick="hideIPSelector()" style="margin-right: 10px;">
+                <i class="fas fa-times"></i> Отмена
+            </button>
+            <button class="btn btn-primary" onclick="useSelectedIP()" id="use-ip-btn" disabled>
+                <i class="fas fa-check"></i> Использовать выбранный IP
+            </button>
+        </div>
+    </div>
+</div>
 
     <!-- JavaScript -->
     <script src="/static/js/app.js"></script>

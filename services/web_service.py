@@ -146,12 +146,38 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             # =========================================
             elif path == '/api/find_dhcp_lease':
                 self._find_dhcp_lease(parsed)
+            elif path == '/api/free_ips':  # ← НОВЫЙ ENDPOINT ДЛЯ СВОБОДНЫХ IP!
+                self._get_free_ips()
             else:
                 self.send_error(404, "Not Found")
                 
         except Exception as e:
             print(f"❌ Ошибка обработки GET запроса: {e}")
             self._send_json({'error': str(e)}, 500)
+
+    def _get_free_ips(self):
+        """Получить список свободных IP адресов из DHCP пулов"""
+        global mikrotik_manager
+    
+        if not mikrotik_manager or not mikrotik_manager.connected:
+            self._send_json({'error': 'Не подключено к устройству'}, 400)
+            return
+    
+        try:
+            # Используем логику из DhcpAnalyzer
+            free_ips = mikrotik_manager.get_free_dhcp_ips()
+        
+            self._send_json({
+                'success': True,
+                'free_ips': free_ips,
+                'count': len(free_ips)
+            })
+        
+        except Exception as e:
+            print(f"❌ Ошибка получения свободных IP: {e}")
+            traceback.print_exc()
+            self._send_json({'error': str(e)}, 500)
+
 
     def _check_ip_belongs(self, parsed):
         """Проверить принадлежность IP к сетям микротика"""

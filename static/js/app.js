@@ -18,6 +18,24 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    // Обработчик закрытия модального окна IP
+    const ipModal = document.getElementById('ip-selector-modal');
+    if (ipModal) {
+        ipModal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                hideIPSelector();
+            }
+        });
+    }
+    
+    // Обработчик Escape для закрытия
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            hideIPSelector();
+        }
+    });
+
 });
 
 function showAddDeviceForm() {
@@ -1848,3 +1866,248 @@ function setupSimpleTooltips() {
         }
     });
 }
+
+// Показывает модальное окно со свободными IP
+function showFreeIPs() {
+    if (!currentDevice) {
+        showAlert('Сначала подключитесь к устройству', 'error');
+        return;
+    }
+    
+    const modal = document.getElementById('ip-selector-modal');
+    modal.style.display = 'flex';
+    
+    // Показываем загрузку
+    document.getElementById('free-ips-loading').style.display = 'block';
+    document.getElementById('free-ips-content').style.display = 'none';
+    document.getElementById('free-ips-error').style.display = 'none';
+    document.getElementById('use-ip-btn').disabled = true;
+    
+    // Загружаем свободные IP
+    fetch('/api/free_ips')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                renderFreeIPs(data.free_ips);
+            } else {
+                showFreeIPsError(data.error || 'Ошибка загрузки');
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка загрузки свободных IP:', error);
+            showFreeIPsError('Ошибка соединения с сервером');
+        });
+}
+
+// Рендерит список свободных IP
+function renderFreeIPs(freeIPs) {
+    const contentDiv = document.getElementById('free-ips-content');
+    const loadingDiv = document.getElementById('free-ips-loading');
+    const errorDiv = document.getElementById('free-ips-error');
+    
+    loadingDiv.style.display = 'none';
+    errorDiv.style.display = 'none';
+    contentDiv.style.display = 'block';
+    
+    if (!freeIPs || Object.keys(freeIPs).length === 0) {
+        contentDiv.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #7f8c8d;">
+                <i class="fas fa-info-circle fa-2x"></i>
+                <p style="margin-top: 15px;">Нет свободных IP адресов в DHCP пулах</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    let totalFree = 0;
+    
+    // Переменная для хранения выбранного IP
+    window.selectedIP = null;
+    
+    for (const [poolName, poolData] of Object.entries(freeIPs)) {
+        totalFree += poolData.free_ips;
+        
+        html += `
+            <div class="pool-section" style="margin-bottom: 30px; border: 1px solid #dee2e6; border-radius: 6px; overflow: hidden;">
+                <div class="pool-header" style="background: #f8f9fa; padding: 12px 15px; border-bottom: 1px solid #dee2e6;">
+                    <h4 style="margin: 0; color: #2c3e50;">
+                        <i class="fas fa-database"></i> Пул: ${poolName}
+                    </h4>
+                    <div style="font-size: 13px; color: #7f8c8d; margin-top: 5px;">
+                        <span>Всего IP: ${poolData.total_ips}</span>
+                        <span style="margin-left: 15px;">Используется: ${poolData.used_ips}</span>
+                        <span style="margin-left: 15px; color: #27ae60; font-weight: bold;">
+                            Свободно: ${poolData.free_ips}
+                        </span>
+                    </div>
+                    <div style="font-size: 12px; color: #95a5a6; margin-top: 5px;">
+                        <i class="fas fa-info-circle"></i> Диапазон: ${poolData.ranges}
+                    </div>
+                </div>
+                
+                <div class="pool-ips" style="padding: 15px;">
+        `;
+        
+        if (poolData.free_list && poolData.free_list.length > 0) {
+            // Группируем IP по строкам (по 5 IP в строке)
+            const ips = poolData.free_list;
+            const chunkSize = 5;
+            
+            for (let i = 0; i < ips.length; i += chunkSize) {
+                const chunk = ips.slice(i, i + chunkSize);
+                html += `<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px;">`;
+                
+                chunk.forEach(ip => {
+                    html += `
+                        <div class="ip-option" 
+                             onclick="selectIP('${ip}', '${poolName}')"
+                             style="flex: 1; min-width: 120px; max-width: 140px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; text-align: center; transition: all 0.2s;">
+                            <div style="font-family: 'Courier New', monospace; font-weight: bold; color: #2c3e50;">${ip}</div>
+                            <div style="font-size: 10px; color: #7f8c8d; margin-top: 2px;">${poolName}</div>
+                        </div>
+                    `;
+                });
+                
+                html += `</div>`;
+            }
+            
+            if (poolData.has_more) {
+                html += `
+                    <div style="text-align: center; margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px; color: #7f8c8d; font-size: 12px;">
+                        <i class="fas fa-ellipsis-h"></i>
+                        И еще ${poolData.free_ips - poolData.free_list.length} свободных IP в этом пуле
+                    </div>
+                `;
+            }
+        } else {
+            html += `
+                <div style="text-align: center; padding: 20px; color: #95a5a6;">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <p>Нет свободных IP в этом пуле</p>
+                </div>
+            `;
+        }
+        
+        html += `
+                </div>
+            </div>
+        `;
+    }
+    
+    // Общая статистика
+    html = `
+        <div style="margin-bottom: 20px; padding: 15px; background: #e8f4fd; border-radius: 6px; border: 1px solid #b3e0ff;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h4 style="margin: 0 0 5px 0; color: #2980b9;">
+                        <i class="fas fa-chart-pie"></i> Общая статистика
+                    </h4>
+                    <p style="margin: 0; color: #3498db; font-size: 14px;">
+                        Всего найдено ${totalFree} свободных IP адресов в ${Object.keys(freeIPs).length} пулах
+                    </p>
+                </div>
+                <div style="font-size: 12px; color: #7f8c8d;">
+                    <i class="fas fa-mouse-pointer"></i> Кликните на IP для выбора
+                </div>
+            </div>
+        </div>
+    ` + html;
+    
+    contentDiv.innerHTML = html;
+}
+
+// Показывает ошибку при загрузке свободных IP
+function showFreeIPsError(message) {
+    document.getElementById('free-ips-loading').style.display = 'none';
+    document.getElementById('free-ips-content').style.display = 'none';
+    
+    const errorDiv = document.getElementById('free-ips-error');
+    errorDiv.style.display = 'block';
+    document.getElementById('free-ips-error-text').textContent = message;
+}
+
+// Выбирает IP в модальном окне
+function selectIP(ip, poolName) {
+    // Снимаем выделение со всех IP
+    document.querySelectorAll('.ip-option').forEach(el => {
+        el.style.background = 'white';
+        el.style.borderColor = '#ddd';
+        el.style.boxShadow = 'none';
+    });
+    
+    // Выделяем выбранный IP
+    event.currentTarget.style.background = '#e8f4fd';
+    event.currentTarget.style.borderColor = '#3498db';
+    event.currentTarget.style.boxShadow = '0 0 0 2px rgba(52, 152, 219, 0.2)';
+    
+    // Сохраняем выбранный IP
+    window.selectedIP = ip;
+    window.selectedPool = poolName;
+    
+    // Активируем кнопку "Использовать"
+    document.getElementById('use-ip-btn').disabled = false;
+}
+
+// Использует выбранный IP
+function useSelectedIP() {
+    if (!window.selectedIP) {
+        showAlert('Выберите IP адрес', 'warning');
+        return;
+    }
+    
+    // Вставляем IP в поле ввода
+    document.getElementById('ip-address').value = window.selectedIP;
+    
+    // Закрываем модальное окно
+    hideIPSelector();
+    
+    // Показываем уведомление
+    showAlert(`Выбран IP: ${window.selectedIP} из пула ${window.selectedPool}`, 'success');
+    
+    // Автоматически проверяем DHCP для этого IP
+    checkDHCPForIP(window.selectedIP);
+}
+
+// Проверяет DHCP для указанного IP
+function checkDHCPForIP(ip) {
+    fetch(`/api/find_dhcp_lease?ip=${encodeURIComponent(ip)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.found) {
+                showAlert(`Внимание: IP ${ip} уже есть в DHCP (${data.lease.status})`, 'warning');
+                if (data.lease.mac_address) {
+                    document.getElementById('mac-address').value = data.lease.mac_address;
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка проверки DHCP:', error);
+        });
+}
+
+// Скрывает модальное окно выбора IP
+function hideIPSelector() {
+    document.getElementById('ip-selector-modal').style.display = 'none';
+    window.selectedIP = null;
+    window.selectedPool = null;
+}
+
+// Добавляем CSS для выделения IP
+const style = document.createElement('style');
+style.textContent = `
+    .ip-option:hover {
+        background: #f8f9fa !important;
+        border-color: #3498db !important;
+    }
+    
+    .pool-section {
+        transition: transform 0.2s;
+    }
+    
+    .pool-section:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+`;
+document.head.appendChild(style);
