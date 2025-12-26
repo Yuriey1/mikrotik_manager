@@ -1899,7 +1899,7 @@ function showFreeIPs() {
         });
 }
 
-// Рендерит список свободных IP в стиле Grafana
+// Рендерит список свободных IP
 function renderFreeIPs(freeIPs) {
     const contentDiv = document.getElementById('free-ips-content');
     const loadingDiv = document.getElementById('free-ips-loading');
@@ -1911,9 +1911,9 @@ function renderFreeIPs(freeIPs) {
     
     if (!freeIPs || Object.keys(freeIPs).length === 0) {
         contentDiv.innerHTML = `
-            <div class="ip-empty-state">
-                <i class="fas fa-info-circle"></i>
-                <p>Нет свободных IP адресов в DHCP пулах</p>
+            <div style="text-align: center; padding: 40px; color: #7f8c8d;">
+                <i class="fas fa-info-circle fa-2x"></i>
+                <p style="margin-top: 15px;">Нет свободных IP адресов в DHCP пулах</p>
             </div>
         `;
         return;
@@ -1921,96 +1921,68 @@ function renderFreeIPs(freeIPs) {
     
     let html = '';
     let totalFree = 0;
-    let totalPools = Object.keys(freeIPs).length;
     
     // Переменная для хранения выбранного IP
     window.selectedIP = null;
-    window.selectedPool = null;
     
-    // Общая статистика
-    Object.values(freeIPs).forEach(pool => {
-        totalFree += pool.free_ips;
-    });
-    
-    html += `
-        <div class="ip-stats-panel">
-            <div class="ip-stats-header">
-                <h4>
-                    <i class="fas fa-chart-pie"></i> Общая статистика
-                </h4>
-                <span class="ip-stats-badge">
-                    ${totalFree} свободных IP
-                </span>
-            </div>
-            <div class="ip-stats-text">
-                Найдено <strong>${totalFree}</strong> свободных IP адресов в <strong>${totalPools}</strong> пулах
-            </div>
-        </div>
-        
-        <div class="ip-pool-container">
-    `;
-    
-    // Для каждого пула
     for (const [poolName, poolData] of Object.entries(freeIPs)) {
+        totalFree += poolData.free_ips;
+        
         html += `
-            <div class="ip-pool-card">
-                <div class="ip-pool-header">
-                    <div class="ip-pool-title">
-                        <i class="fas fa-database" style="color: var(--accent-secondary);"></i>
-                        <span class="ip-pool-name">${poolName}</span>
+            <div class="pool-section" style="margin-bottom: 30px; border: 1px solid #dee2e6; border-radius: 6px; overflow: hidden;">
+                <div class="pool-header" style="background: #f8f9fa; padding: 12px 15px; border-bottom: 1px solid #dee2e6;">
+                    <h4 style="margin: 0; color: #2c3e50;">
+                        <i class="fas fa-database"></i> Пул: ${poolName}
+                    </h4>
+                    <div style="font-size: 13px; color: #7f8c8d; margin-top: 5px;">
+                        <span>Всего IP: ${poolData.total_ips}</span>
+                        <span style="margin-left: 15px;">Используется: ${poolData.used_ips}</span>
+                        <span style="margin-left: 15px; color: #27ae60; font-weight: bold;">
+                            Свободно: ${poolData.free_ips}
+                        </span>
                     </div>
-                    <div class="ip-pool-stats">
-                        <div class="ip-pool-stat">
-                            <span class="stat-label">Всего:</span>
-                            <span class="stat-value">${poolData.total_ips}</span>
-                        </div>
-                        <div class="ip-pool-stat">
-                            <span class="stat-label">Используется:</span>
-                            <span class="stat-value">${poolData.used_ips}</span>
-                        </div>
-                        <div class="ip-pool-stat">
-                            <span class="stat-label" style="color: var(--success);">Свободно:</span>
-                            <span class="stat-value" style="color: var(--success); font-weight: 700;">${poolData.free_ips}</span>
-                        </div>
+                    <div style="font-size: 12px; color: #95a5a6; margin-top: 5px;">
+                        <i class="fas fa-info-circle"></i> Диапазон: ${poolData.ranges}
                     </div>
                 </div>
                 
-                <div class="ip-pool-range">
-                    <i class="fas fa-arrows-alt-h"></i>
-                    <span>${poolData.ranges}</span>
-                </div>
-                
-                <div class="ip-list-container">
+                <div class="pool-ips" style="padding: 15px;">
         `;
         
         if (poolData.free_list && poolData.free_list.length > 0) {
-            html += `<div class="ip-list-grid">`;
+            // Группируем IP по строкам (по 5 IP в строке)
+            const ips = poolData.free_list;
+            const chunkSize = 5;
             
-            poolData.free_list.forEach(ip => {
-                html += `
-                    <div class="ip-option" onclick="selectIP('${ip}', '${poolName}')">
-                        <div class="ip-address">${ip}</div>
-                        <div class="ip-pool-label">${poolName}</div>
-                    </div>
-                `;
-            });
-            
-            html += `</div>`;
+            for (let i = 0; i < ips.length; i += chunkSize) {
+                const chunk = ips.slice(i, i + chunkSize);
+                html += `<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px;">`;
+                
+                chunk.forEach(ip => {
+                    html += `
+                        <div class="ip-option" 
+                             onclick="selectIP('${ip}', '${poolName}')"
+                             style="flex: 1; min-width: 120px; max-width: 140px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; text-align: center; transition: all 0.2s;">
+                            <div style="font-family: 'Courier New', monospace; font-weight: bold; color: #2c3e50;">${ip}</div>
+                            <div style="font-size: 10px; color: #7f8c8d; margin-top: 2px;">${poolName}</div>
+                        </div>
+                    `;
+                });
+                
+                html += `</div>`;
+            }
             
             if (poolData.has_more) {
-                const moreCount = poolData.free_ips - poolData.free_list.length;
                 html += `
-                    <div style="text-align: center; margin-top: 15px; padding: 10px; background: var(--bg-card); border-radius: var(--border-radius); border: 1px solid var(--border-color);">
-                        <i class="fas fa-ellipsis-h" style="color: var(--text-muted);"></i>
-                        <span style="color: var(--text-muted); font-size: 12px; margin-left: 8px;">
-                            И еще ${moreCount} свободных IP в этом пуле
-                        </span>
+                    <div style="text-align: center; margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px; color: #7f8c8d; font-size: 12px;">
+                        <i class="fas fa-ellipsis-h"></i>
+                        И еще ${poolData.free_ips - poolData.free_list.length} свободных IP в этом пуле
                     </div>
                 `;
             }
         } else {
             html += `
-                <div class="ip-empty-state" style="padding: 30px 20px;">
+                <div style="text-align: center; padding: 20px; color: #95a5a6;">
                     <i class="fas fa-exclamation-circle"></i>
                     <p>Нет свободных IP в этом пуле</p>
                 </div>
@@ -2023,7 +1995,24 @@ function renderFreeIPs(freeIPs) {
         `;
     }
     
-    html += `</div>`;
+    // Общая статистика
+    html = `
+        <div style="margin-bottom: 20px; padding: 15px; background: #e8f4fd; border-radius: 6px; border: 1px solid #b3e0ff;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h4 style="margin: 0 0 5px 0; color: #2980b9;">
+                        <i class="fas fa-chart-pie"></i> Общая статистика
+                    </h4>
+                    <p style="margin: 0; color: #3498db; font-size: 14px;">
+                        Всего найдено ${totalFree} свободных IP адресов в ${Object.keys(freeIPs).length} пулах
+                    </p>
+                </div>
+                <div style="font-size: 12px; color: #7f8c8d;">
+                    <i class="fas fa-mouse-pointer"></i> Кликните на IP для выбора
+                </div>
+            </div>
+        </div>
+    ` + html;
     
     contentDiv.innerHTML = html;
 }
@@ -2038,16 +2027,19 @@ function showFreeIPsError(message) {
     document.getElementById('free-ips-error-text').textContent = message;
 }
 
-// Выбирает IP в модальном окне (Grafana стиль)
+// Выбирает IP в модальном окне
 function selectIP(ip, poolName) {
     // Снимаем выделение со всех IP
     document.querySelectorAll('.ip-option').forEach(el => {
-        el.classList.remove('selected');
+        el.style.background = 'white';
+        el.style.borderColor = '#ddd';
+        el.style.boxShadow = 'none';
     });
     
     // Выделяем выбранный IP
-    const selectedElement = event.currentTarget;
-    selectedElement.classList.add('selected');
+    event.currentTarget.style.background = '#e8f4fd';
+    event.currentTarget.style.borderColor = '#3498db';
+    event.currentTarget.style.boxShadow = '0 0 0 2px rgba(52, 152, 219, 0.2)';
     
     // Сохраняем выбранный IP
     window.selectedIP = ip;
@@ -2055,7 +2047,6 @@ function selectIP(ip, poolName) {
     
     // Активируем кнопку "Использовать"
     document.getElementById('use-ip-btn').disabled = false;
-    document.getElementById('use-ip-btn').innerHTML = `<i class="fas fa-check"></i> Использовать ${ip}`;
 }
 
 // Использует выбранный IP
