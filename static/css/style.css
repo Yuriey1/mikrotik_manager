@@ -2301,3 +2301,46 @@ textarea {
         rgba(52, 152, 219, 0.2) 0%, 
         rgba(41, 128, 185, 0.2) 100%);
 }
+
+/* Улучшенный стиль для кнопки info в стиле Grafana */
+.btn-info {
+    background: linear-gradient(135deg, 
+        rgba(52, 152, 219, 0.9) 0%, 
+        rgba(41, 128, 185, 0.9) 100%);
+    color: white;
+    border: none;
+    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.4);
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+    letter-spacing: 0.3px;
+}
+
+.btn-info:before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, 
+        rgba(31, 99, 150, 0.9) 0%, 
+        rgba(21, 85, 136, 0.9) 100%);
+    z-index: -1;
+    transition: opacity 0.3s ease;
+    opacity: 0;
+}
+
+.btn-info:hover:before {
+    opacity: 1;
+}
+
+.btn-info:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(52, 152, 219, 0.6);
+}
+
+.btn-info:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(52, 152, 219, 0.4);
+}
