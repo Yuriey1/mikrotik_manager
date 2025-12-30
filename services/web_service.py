@@ -496,70 +496,86 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             self._send_json({'error': str(e)}, 500)
     
     def _connect_device(self, parsed):
-        """Подключиться к устройству (с отключением от предыдущего)"""
-        global mikrotik_manager, tree_builder, current_device_name
-    
+        """Подключиться к устройству из NetBox"""
+        global mikrotik_manager, tree_builder, current_device_name, netbox_client
+
         query = parse_qs(parsed.query)
         device_name = query.get('device', [''])[0]
-    
+
         if not device_name:
             self._send_json({'error': 'Не указано устройство'}, 400)
             return
-    
-        devices = ConfigManager.load_devices()
-        device_data = devices.get(device_name)
-    
-        if not device_data:
-            self._send_json({'error': 'Устройство не найдено'}, 404)
-            return
-    
-        # Проверяем, не пытаемся ли подключиться к уже подключенному устройству
-        if current_device_name == device_name and mikrotik_manager and mikrotik_manager.connected:
-            print(f"⚠️  Уже подключены к {device_name}, отключаем...")
-            self._disconnect_current_device()
-            self._send_json({
-                'success': True,
-                'device': '',
-                'message': f'Отключено от {device_name}',
-                'action': 'disconnected'
-            })
-            return
-    
-        # Отключаемся от предыдущего устройства, если подключены
-        if mikrotik_manager and mikrotik_manager.connected:
-            print(f"🔌 Отключаемся от предыдущего устройства ({current_device_name})...")
-            self._disconnect_current_device()
-    
-        # Создаем менеджер и подключаемся
-        device = MikroTikDevice.from_dict(device_data)
-        mikrotik_manager = MikroTikManager(device)
-    
-        if mikrotik_manager.connect():
-            # Сохраняем имя текущего устройства
-            current_device_name = device_name
-        
-            # Строим дерево очередей
-            tree_builder = QueueTreeBuilder(mikrotik_manager)
-            tree_builder.build_tree()
-        
-            self._send_json({
-                'success': True,
-                'device': device_name,
-                'message': f'Подключено к {device.ip}',
-                'action': 'connected'
-            })
-        else:
-            current_device_name = None
-            self._send_json({
-                'success': False,
-                'error': 'Не удалось подключиться'
-            })
 
+        try:
+            # Проверяем, что NetBox клиент инициализирован
+            if not netbox_client:
+                self._send_json({'error': 'NetBox не настроен'}, 400)
+                return
+
+            print(f"🔗 Подключение к устройству: {device_name}")
+
+            # Получаем все устройства из NetBox и ищем нужное
+            nb_devices = netbox_client.get_devices()
+            target_device = None
+        
+            for device in nb_devices:
+                if device.name == device_name:
+                    target_device = device
+                    break
+
+            if not target_device:
+                self._send_json({'error': f'Устройство "{device_name}" не найдено в NetBox'}, 404)
+                return
+
+            # Отключаемся от предыдущего устройства, если подключены
+            if mikrotik_manager and mikrotik_manager.connected and current_device_name:
+                print(f"🔌 Отключаемся от предыдущего устройства ({current_device_name})...")
+                self._disconnect_current_device()
+
+            # Создаем объект устройства для MikroTikManager
+            device_dict = {
+                'name': target_device.name,
+                'ip': target_device.ip_address,
+                'port': target_device.port,
+                'username': 'admin',  # По умолчанию
+                'password': '',       # Пароль будет запрошен позже
+                'description': f"{target_device.device_type} - {target_device.site}"
+            }
+
+            # Создаем MikroTik устройство
+            device = MikroTikDevice.from_dict(device_dict)
+            mikrotik_manager = MikroTikManager(device)
+
+            # Пробуем подключиться
+            if mikrotik_manager.connect():
+                current_device_name = device_name
+            
+                # Строим дерево очередей
+                tree_builder = QueueTreeBuilder(mikrotik_manager)
+                tree_builder.build_tree()
+        
+                self._send_json({
+                    'success': True,
+                    'device': device_name,
+                    'message': f'Подключено к {device.ip}:{device.port}',
+                    'action': 'connected'
+                })
+            else:
+                current_device_name = None
+                self._send_json({
+                    'success': False,
+                    'error': 'Не удалось подключиться к устройству'
+                })
+
+        except Exception as e:
+            print(f"❌ Ошибка подключения: {e}")
+            traceback.print_exc()
+            self._send_json({'error': str(e)}, 500)
 
     def _disconnect_current_device(self):
         """Отключиться от текущего устройства"""
         global mikrotik_manager, tree_builder, current_device_name
-    
+
         try:
             if mikrotik_manager:
                 print(f"🔌 Отключение от {current_device_name}...")
