@@ -9,41 +9,37 @@ document.addEventListener('DOMContentLoaded', function() {
     loadDevices();
     loadSettings();
     
-    // Инициализация модального окна
-    const modal = document.getElementById('device-modal');
-    if (modal) {
-        modal.addEventListener('click', function(e) {
-            if (e.target === this) {
-                hideAddDeviceForm();
-            }
-        });
-    }
 
-    // Обработчик закрытия модального окна IP
-    const ipModal = document.getElementById('ip-selector-modal');
-    if (ipModal) {
-        ipModal.addEventListener('click', function(e) {
-            if (e.target === this) {
-                hideIPSelector();
-            }
-        });
-    }
+    loadNetBoxConfig();
     
-    // Добавляем функцию для закрытия при клике на фон (опционально)
-    document.getElementById('ip-selector-modal').addEventListener('click', function(e) {
-        if (e.target === this) {
-            hideIPSelector();
-        }
-    });
+    // Инициализация модальных окон
+    initModals();
 
-    // Закрытие по Escape
-    document.addEventListener('keydown', function(e) {
-        const modal = document.getElementById('ip-selector-modal');
-        if (e.key === 'Escape' && modal.style.display === 'flex') {
-            hideIPSelector();
+});
+
+
+// Инициализация модальных окон
+function initModals() {
+    const modals = ['netbox-config-modal'];
+    
+    modals.forEach(modalId => {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.addEventListener('click', function(e) {
+                if (e.target === this) {
+                    this.style.display = 'none';
+                }
+            });
+            
+            // Закрытие по Escape
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && modal.style.display === 'flex') {
+                    modal.style.display = 'none';
+                }
+            });
         }
     });
-});
+}
 
 function showAddDeviceForm() {
     document.getElementById('device-modal').style.display = 'block';
@@ -80,7 +76,7 @@ function getTabName(tabKey) {
     return tabs[tabKey] || tabKey;
 }
 
-// Загрузка устройств
+// Загрузка устройств из NetBox
 function loadDevices() {
     fetch('/api/devices')
         .then(response => response.json())
@@ -88,8 +84,35 @@ function loadDevices() {
             const deviceList = document.getElementById('device-list');
             deviceList.innerHTML = '';
 
-            if (data.devices && Object.keys(data.devices).length > 0) {
-                for (const [name, device] of Object.entries(data.devices)) {
+            netboxConfigured = data.netbox_configured || false;
+            
+            // Обновляем статус NetBox
+            updateNetBoxStatus();
+            
+            if (data.error) {
+                deviceList.innerHTML = `
+                    <li class="empty-state">
+                        <i class="fas fa-exclamation-triangle" style="color: #e74c3c;"></i>
+                        <p>Ошибка загрузки из NetBox</p>
+                        <p style="font-size: 12px; color: #7f8c8d;">${data.error}</p>
+                        <button class="btn btn-primary mt-10" onclick="showNetBoxConfig()">
+                            <i class="fas fa-cog"></i> Настроить NetBox
+                        </button>
+                    </li>
+                `;
+                return;
+            }
+
+            const devices = data.devices || {};
+            const deviceCount = Object.keys(devices).length;
+
+            if (deviceCount > 0) {
+                // Сортируем устройства по алфавиту
+                const sortedDevices = Object.entries(devices).sort((a, b) => 
+                    a[0].toLowerCase().localeCompare(b[0].toLowerCase())
+                );
+
+                sortedDevices.forEach(([name, device]) => {
                     const li = document.createElement('li');
                     li.className = 'device-item';
                     if (currentDevice === name) {
@@ -103,20 +126,161 @@ function loadDevices() {
                         <div class="device-info">
                             <div class="device-name">${name}</div>
                             <div class="device-ip">${device.ip}:${device.port}</div>
+                            ${device.site ? `<div class="device-site">${device.site}</div>` : ''}
+                            ${device.role ? `<div class="device-role">${device.role}</div>` : ''}
                         </div>
                         <button class="connect-btn ${buttonClass}" onclick="connectDevice('${name}')">
                             ${buttonText}
                         </button>
                     `;
                     deviceList.appendChild(li);
-                }
+                });
+                
+                // Обновляем счетчик устройств в заголовке
+                document.getElementById('device-count').textContent = `Устройств: ${deviceCount}`;
             } else {
-                deviceList.innerHTML = '<li style="color: #999; padding: 10px;">Нет устройств</li>';
+                deviceList.innerHTML = `
+                    <li class="empty-state">
+                        <i class="fas fa-server"></i>
+                        <p>Нет устройств в NetBox</p>
+                        ${netboxConfigured ? 
+                            '<button class="btn btn-primary mt-10" onclick="loadDevices()">' +
+                            '<i class="fas fa-sync-alt"></i> Обновить список</button>' :
+                            '<button class="btn btn-primary mt-10" onclick="showNetBoxConfig()">' +
+                            '<i class="fas fa-cog"></i> Настроить NetBox</button>'
+                        }
+                    </li>
+                `;
             }
         })
         .catch(error => {
             console.error('Ошибка загрузки устройств:', error);
             showAlert('Ошибка загрузки устройств', 'error');
+        });
+}
+
+// Обновление статуса NetBox
+function updateNetBoxStatus() {
+    const statusDot = document.getElementById('netbox-status');
+    const statusText = document.getElementById('netbox-status-text');
+    
+    if (netboxConfigured) {
+        statusDot.className = 'status-dot connected';
+        statusDot.title = 'NetBox подключен';
+        statusText.textContent = 'NetBox: подключен';
+    } else {
+        statusDot.className = 'status-dot';
+        statusDot.title = 'NetBox не настроен';
+        statusText.textContent = 'NetBox: не настроен';
+    }
+}
+
+// Загрузка конфигурации NetBox
+function loadNetBoxConfig() {
+    fetch('/api/netbox/config')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const config = data.config;
+                if (config.url && config.token) {
+                    netboxConfigured = true;
+                    updateNetBoxStatus();
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка загрузки конфигурации NetBox:', error);
+        });
+}
+
+// Показать настройки NetBox
+function showNetBoxConfig() {
+    const modal = document.getElementById('netbox-config-modal');
+    modal.style.display = 'flex';
+    
+    // Загружаем текущие настройки
+    fetch('/api/netbox/config')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const config = data.config;
+                document.getElementById('netbox-url').value = config.url || '';
+                document.getElementById('netbox-token').value = config.token || '';
+                document.getElementById('netbox-verify-ssl').checked = config.verify_ssl !== false;
+            }
+        });
+}
+
+// Скрыть настройки NetBox
+function hideNetBoxConfig() {
+    document.getElementById('netbox-config-modal').style.display = 'none';
+}
+
+// Сохранить настройки NetBox
+function saveNetBoxConfig() {
+    const config = {
+        url: document.getElementById('netbox-url').value.trim(),
+        token: document.getElementById('netbox-token').value.trim(),
+        verify_ssl: document.getElementById('netbox-verify-ssl').checked
+    };
+    
+    if (!config.url || !config.token) {
+        showAlert('Заполните URL и токен NetBox', 'error');
+        return;
+    }
+    
+    showAlert('Сохранение настроек NetBox...', 'info');
+    
+    fetch('/api/netbox/save_config', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(config)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Настройки NetBox сохранены', 'success');
+            hideNetBoxConfig();
+            loadDevices(); // Перезагружаем список устройств
+        } else {
+            showAlert(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка сохранения настроек NetBox:', error);
+        showAlert('Ошибка сохранения настроек', 'error');
+    });
+}
+
+// Тест соединения с NetBox
+function testNetBoxConnection() {
+    const config = {
+        url: document.getElementById('netbox-url').value.trim(),
+        token: document.getElementById('netbox-token').value.trim(),
+        verify_ssl: document.getElementById('netbox-verify-ssl').checked
+    };
+    
+    if (!config.url || !config.token) {
+        showAlert('Заполните URL и токен NetBox', 'error');
+        return;
+    }
+    
+    showAlert('Проверка соединения с NetBox...', 'info');
+    
+    fetch(`/api/netbox/test?url=${encodeURIComponent(config.url)}&token=${encodeURIComponent(config.token)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('Соединение с NetBox успешно установлено!', 'success');
+            } else {
+                showAlert(data.error || 'Не удалось подключиться к NetBox', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка тестирования соединения:', error);
+            showAlert('Ошибка тестирования соединения', 'error');
         });
 }
 

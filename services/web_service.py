@@ -17,11 +17,13 @@ from models.employee import Employee
 from managers.mikrotik_manager import MikroTikManager
 from services.queue_builder import QueueTreeBuilder
 from utils.helpers import russian_to_mikrotik_comment
+from netbox_client import NetBoxClient, NetBoxDevice  # Импорт NetBox
 
 # Глобальные переменные
 mikrotik_manager = None
 tree_builder = None
 current_device_name = None  # ← Добавим для отслеживания текущего устройства
+netbox_client = None  # Клиент NetBox
 
 class StoppableHTTPServer(HTTPServer):
     """HTTP сервер с возможностью корректной остановки"""
@@ -127,7 +129,8 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             if path == '/' or path == '/index.html':
                 self._serve_html()
             elif path == '/api/devices':
-                self._serve_devices()
+                self._serve_devices_from_netbox()  # Изменено: получаем из NetBox
+                """self._serve_devices()"""
             elif path == '/api/connect':
                 self._connect_device(parsed)
             elif path == '/api/disconnect':  # ← НОВЫЙ ENDPOINT!
@@ -140,6 +143,10 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 self._find_queues(parsed)
             elif path == '/api/check_ip':  # ← НОВЫЙ ENDPOINT ДЛЯ ПРОВЕРКИ IP!
                 self._check_ip_belongs(parsed)
+            elif path == '/api/netbox/config':  # Получить настройки NetBox
+                self._get_netbox_config()
+            elif path == '/api/netbox/test':    # Тест соединения с NetBox
+                self._test_netbox_connection(parsed)
             # =====  ЭТА СТРОКА ДЛЯ CSS/JS =====
             elif path.startswith('/static/'):
                 self._serve_static_file(path)
@@ -153,6 +160,119 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 
         except Exception as e:
             print(f"❌ Ошибка обработки GET запроса: {e}")
+            self._send_json({'error': str(e)}, 500)
+
+    def _initialize_netbox_client(self):
+        """Инициализировать клиент NetBox"""
+        global netbox_client
+        try:
+            netbox_config = ConfigManager.load_netbox_config()
+            if netbox_config.get('url') and netbox_config.get('token'):
+                netbox_client = NetBoxClient(
+                    netbox_config['url'],
+                    netbox_config['token'],
+                    netbox_config.get('verify_ssl', True)
+                )
+                print(f"✅ NetBox клиент инициализирован")
+            else:
+                netbox_client = None
+                print("⚠️  NetBox не настроен")
+        except Exception as e:
+            print(f"❌ Ошибка инициализации NetBox: {e}")
+            netbox_client = None
+
+    def _serve_devices_from_netbox(self):
+        """Отдать список устройств из NetBox"""
+        global netbox_client
+        
+        try:
+            # Инициализируем клиент при первом запросе
+            if netbox_client is None:
+                self._initialize_netbox_client()
+            
+            if not netbox_client:
+                self._send_json({
+                    'devices': {},
+                    'netbox_configured': False,
+                    'error': 'NetBox не настроен'
+                })
+                return
+            
+            devices_list = netbox_client.get_devices()
+            
+            # Преобразуем в формат, ожидаемый фронтендом
+            devices_dict = {}
+            for device in devices_list:
+                devices_dict[device.name] = {
+                    'name': device.name,
+                    'ip': device.ip_address,
+                    'port': device.port,
+                    'username': 'admin',
+                    'password': '',  # Пароли не хранятся в NetBox
+                    'description': f"{device.device_type} - {device.site} - {device.role}",
+                    'device_type': device.device_type,
+                    'site': device.site,
+                    'role': device.role,
+                    'comments': device.comments
+                }
+            
+            self._send_json({
+                'devices': devices_dict,
+                'netbox_configured': True,
+                'count': len(devices_dict)
+            })
+            
+        except Exception as e:
+            print(f"❌ Ошибка получения устройств из NetBox: {e}")
+            self._send_json({
+                'devices': {},
+                'netbox_configured': False,
+                'error': str(e)
+            })
+
+    def _get_netbox_config(self):
+        """Получить настройки NetBox"""
+        try:
+            config = ConfigManager.load_netbox_config()
+            self._send_json({
+                'success': True,
+                'config': config
+            })
+        except Exception as e:
+            print(f"❌ Ошибка получения конфигурации NetBox: {e}")
+            self._send_json({'error': str(e)}, 500)
+
+    def _test_netbox_connection(self, parsed):
+        """Проверить соединение с NetBox"""
+        try:
+            query = parse_qs(parsed.query)
+            url = query.get('url', [''])[0]
+            token = query.get('token', [''])[0]
+            verify_ssl = query.get('verify_ssl', ['true'])[0].lower() == 'true'
+            
+            if not url or not token:
+                self._send_json({
+                    'success': False,
+                    'error': 'Укажите URL и токен NetBox'
+                })
+                return
+            
+            # Создаем временного клиента для теста
+            test_client = NetBoxClient(url, token, verify_ssl)
+            
+            if test_client.test_connection():
+                self._send_json({
+                    'success': True,
+                    'message': 'Соединение с NetBox успешно установлено'
+                })
+            else:
+                self._send_json({
+                    'success': False,
+                    'error': 'Не удалось подключиться к NetBox'
+                })
+                
+        except Exception as e:
+            print(f"❌ Ошибка тестирования соединения с NetBox: {e}")
             self._send_json({'error': str(e)}, 500)
 
     def _get_free_ips(self):
@@ -250,7 +370,9 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             parsed = urlparse(self.path)
             path = parsed.path
             
-            if path == '/api/add_device':
+            if path == '/api/netbox/save_config':  # Сохранить настройки NetBox
+                self._save_netbox_config(data)
+            elif path == '/api/add_device':
                 self._add_device(data)
             elif path == '/api/add_employee':
                 self._add_employee(data)
@@ -262,6 +384,40 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
         except Exception as e:
             print(f"❌ Ошибка обработки POST запроса: {e}")
             self._send_json({'error': str(e)}, 500)
+
+    def _save_netbox_config(self, data):
+        """Сохранить настройки NetBox"""
+        global netbox_client
+        
+        try:
+            config = {
+                'url': data.get('url', '').strip(),
+                'token': data.get('token', '').strip(),
+                'verify_ssl': data.get('verify_ssl', True)
+            }
+            
+            if not config['url'] or not config['token']:
+                self._send_json({
+                    'success': False,
+                    'error': 'Заполните URL и токен'
+                })
+                return
+            
+            # Сохраняем конфигурацию
+            ConfigManager.save_netbox_config(config)
+            
+            # Переинициализируем клиент
+            self._initialize_netbox_client()
+            
+            self._send_json({
+                'success': True,
+                'message': 'Настройки NetBox сохранены'
+            })
+            
+        except Exception as e:
+            print(f"❌ Ошибка сохранения конфигурации NetBox: {e}")
+            self._send_json({'error': str(e)}, 500)
+
     
     def _serve_html(self):
         """Отдать HTML интерфейс"""
@@ -901,7 +1057,7 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
         """Кастомное логирование"""
         print(f"🌐 {self.address_string()} - {format % args}")
 
-def start_server(port=8080, host='0.0.0.0'):
+def start_server(port=8090, host='0.0.0.0'):
     """Запуск HTTP сервера"""
     try:
         server_address = (host, port)

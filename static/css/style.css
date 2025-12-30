@@ -2344,3 +2344,113 @@ textarea {
     transform: translateY(0);
     box-shadow: 0 2px 4px rgba(52, 152, 219, 0.4);
 }
+
+/* Стили для NetBox в стиле Grafana */
+
+/* Статус NetBox в шапке */
+#netbox-status {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+    vertical-align: middle;
+    background-color: #e74c3c; /* Красный по умолчанию */
+}
+
+#netbox-status.connected {
+    background-color: #2ecc71; /* Зеленый при подключении */
+}
+/* Счетчик устройств */
+.device-list-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 8px 15px;
+    border-radius: 6px 6px 0 0;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+/* Информация об устройстве */
+.device-site, .device-role {
+    font-size: 11px;
+    color: #7f8c8d;
+    margin-top: 2px;
+}
+
+/* Модальное окно NetBox */
+#netbox-config-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+
+#netbox-config-modal .modal-content {
+    background: linear-gradient(145deg, #2c2c2c, #262626);
+    border-radius: 12px;
+    padding: 25px;
+    color: #d8d9da;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    border: 1px solid #3a3a3a;
+}
+
+#netbox-config-modal h2 {
+    color: #ffffff;
+    margin-bottom: 20px;
+    font-size: 20px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#netbox-config-modal .form-group label {
+    color: #b0b0b0;
+    font-weight: 500;
+    margin-bottom: 8px;
+    display: block;
+}
+
+#netbox-config-modal .form-control {
+    background: #1a1d23;
+    border: 1px solid #3a3a3a;
+    color: #ffffff;
+    padding: 10px 12px;
+    border-radius: 6px;
+    width: 100%;
+    transition: all 0.2s;
+}
+
+#netbox-config-modal .form-control:focus {
+    border-color: #6c9efc;
+    box-shadow: 0 0 0 2px rgba(108, 158, 252, 0.2);
+    outline: none;
+}
+
+/* Checkbox в стиле Grafana */
+#netbox-config-modal .checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+#netbox-config-modal .checkbox-group input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #6c9efc;
+}
+
+/* Состояние подключения устройства */
+.device-item.active {
+    background: linear-gradient(135deg, rgba(108, 158, 252, 0.1) 0%, rgba(108, 158, 252, 0.05) 100%);
+    border-color: #6c9efc;
+}

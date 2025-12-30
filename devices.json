@@ -158,5 +158,13 @@
     "username": "nur001",
     "password": "enc:WjVNZjN4cGs=",
     "description": ""
+  },
+  "Андат R": {
+    "name": "Андат R",
+    "ip": "217.65.89.10",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
   }
 }

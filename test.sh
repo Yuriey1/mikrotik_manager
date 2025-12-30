@@ -1,0 +1,1 @@
+curl -H "Authorization: Token f5eac68fafaa93d5ebfe2e70a08f0a48da5cdd4c" http://netbox.krasintegra.ru/api/dcim/devices/
