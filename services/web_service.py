@@ -70,6 +70,34 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
+
+    def do_DELETE(self):
+        """Обработка DELETE запросов"""
+        try:
+            parsed = urlparse(self.path)
+            path = parsed.path
+        
+            if path == '/api/forget_password':
+                query = parse_qs(parsed.query)
+                device_name = query.get('device', [''])[0]
+            
+                if not device_name:
+                    self._send_json({'error': 'Не указано устройство'}, 400)
+                    return
+            
+                # Удаляем пароль
+                ConfigManager.save_password(device_name, '')
+            
+                self._send_json({
+                    'success': True,
+                    'message': f'Пароль для {device_name} удален'
+                })
+            else:
+                self.send_error(404, "Not Found")
+            
+        except Exception as e:
+            print(f"❌ Ошибка обработки DELETE запроса: {e}")
+            self._send_json({'error': str(e)}, 500)
     
     def _get_html_template(self):
         """Вернуть HTML шаблон из файла"""
@@ -501,6 +529,7 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
 
         query = parse_qs(parsed.query)
         device_name = query.get('device', [''])[0]
+        password = query.get('password', [''])[0]
 
         if not device_name:
             self._send_json({'error': 'Не указано устройство'}, 400)
@@ -527,6 +556,22 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 self._send_json({'error': f'Устройство "{device_name}" не найдено в NetBox'}, 404)
                 return
 
+            # Если пароль не передан, пытаемся получить из сохраненных
+            if not password:
+                saved_password = ConfigManager.get_password(device_name)
+                if saved_password:
+                    password = saved_password
+                    print(f"🔑 Используем сохраненный пароль для {device_name}")
+                else:
+                    # Если нет сохраненного пароля - запрашиваем у клиента
+                    self._send_json({
+                        'success': False,
+                        'requires_password': True,
+                        'device': device_name,
+                        'message': 'Требуется пароль'
+                    }, 401)
+                    return
+
             # Отключаемся от предыдущего устройства, если подключены
             if mikrotik_manager and mikrotik_manager.connected and current_device_name:
                 print(f"🔌 Отключаемся от предыдущего устройства ({current_device_name})...")
@@ -537,8 +582,8 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 'name': target_device.name,
                 'ip': target_device.ip_address,
                 'port': target_device.port,
-                'username': 'admin',  # По умолчанию
-                'password': '',       # Пароль будет запрошен позже
+                'username': 'nur001',
+                'password': password,
                 'description': f"{target_device.device_type} - {target_device.site}"
             }
 
@@ -548,6 +593,11 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
 
             # Пробуем подключиться
             if mikrotik_manager.connect():
+                # Сохраняем пароль если подключение успешно
+                if password:
+                    ConfigManager.save_password(device_name, password)
+                    print(f"💾 Пароль сохранен для {device_name}")
+            
                 current_device_name = device_name
             
                 # Строим дерево очередей

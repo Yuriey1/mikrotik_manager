@@ -42,6 +42,28 @@ function initModals() {
     });
 }
 
+function forgetPassword(deviceName) {
+    if (!confirm(`Удалить сохраненный пароль для устройства "${deviceName}"?`)) {
+        return;
+    }
+    
+    fetch(`/api/forget_password?device=${encodeURIComponent(deviceName)}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+        } else {
+            showAlert(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка удаления пароля:', error);
+        showAlert('Ошибка удаления пароля', 'error');
+    });
+}
+
 function showAddDeviceForm() {
     document.getElementById('device-modal').style.display = 'block';
 }
@@ -188,6 +210,16 @@ function createDeviceCard(name, device) {
                 <button class="connect-btn ${buttonClass}" onclick="connectDevice('${name}')">
                     <i class="fas ${buttonIcon}"></i> ${buttonText}
                 </button>
+
+        ${currentDevice === name ? `
+            <button class="btn-forget" onclick="forgetPassword('${name}')" 
+                    style="margin-top: 5px; background: #4a4a4a; color: #b0b0b0; 
+                           border: none; padding: 5px 10px; border-radius: 4px; 
+                           font-size: 11px; cursor: pointer;">
+                <i class="fas fa-trash-alt"></i> Забыть пароль
+            </button>
+        ` : ''}
+
             </div>
             
             <!-- ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ (ТОЛЬКО ДЛЯ АКТИВНОГО) -->
@@ -360,31 +392,29 @@ function updateDeviceStatus(status, deviceName) {
     }
 }
 
-// Подключение к устройству
 function connectDevice(deviceName) {
     if (currentDevice === deviceName) {
         disconnectDevice();
         return;
     }
 
-    showAlert('Подключаемся...', 'info');
+    showAlert('Подключение...', 'info');
 
+    // Пытаемся подключиться без пароля (сервер вернет сохраненный)
     fetch(`/api/connect?device=${encodeURIComponent(deviceName)}`)
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                if (data.action === 'connected') {
-                    currentDevice = deviceName;
-                    updateDeviceStatus('connected', deviceName);
-                    showAlert(data.message, 'success');
-                    loadQueueTree();
-                    loadAllQueues();
-                } else if (data.action === 'disconnected') {
-                    currentDevice = null;
-                    updateDeviceStatus('disconnected', '');
-                    showAlert(data.message, 'info');
-                }
+                // Успешное подключение
+                currentDevice = deviceName;
+                updateDeviceStatus('connected', deviceName);
+                showAlert(data.message, 'success');
+                loadQueueTree();
+                loadAllQueues();
                 loadDevices(); // Перерисовываем список
+            } else if (data.requires_password) {
+                // Требуется пароль
+                askForPassword(deviceName);
             } else {
                 showAlert(data.error || 'Ошибка подключения', 'error');
             }
@@ -393,6 +423,122 @@ function connectDevice(deviceName) {
             console.error('Ошибка подключения:', error);
             showAlert('Ошибка подключения', 'error');
         });
+}
+
+function askForPassword(deviceName) {
+    // Создаем модальное окно для ввода пароля
+    const modal = document.createElement('div');
+    modal.id = 'password-modal';
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+    `;
+    
+    modal.innerHTML = `
+        <div style="background: linear-gradient(145deg, #2c2c2c, #262626);
+                    padding: 25px;
+                    border-radius: 8px;
+                    width: 400px;
+                    border: 1px solid #3a3a3a;
+                    color: #d8d9da;">
+            <h3 style="margin-bottom: 15px; color: #ffffff;">
+                <i class="fas fa-key"></i> Введите пароль
+            </h3>
+            <p style="margin-bottom: 20px; font-size: 14px;">
+                Для устройства: <strong>${deviceName}</strong>
+            </p>
+            
+            <div style="margin-bottom: 20px;">
+                <input type="password" 
+                       id="password-input" 
+                       placeholder="Пароль устройства" 
+                       style="width: 100%; padding: 10px; border-radius: 4px; 
+                              background: #1a1d23; border: 1px solid #3a3a3a; 
+                              color: #ffffff;">
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="remember-password" checked>
+                    <span>Запомнить пароль</span>
+                </label>
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button onclick="submitPassword('${deviceName}')" 
+                        style="flex: 1; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                               color: white; border: none; padding: 10px; border-radius: 4px;
+                               cursor: pointer;">
+                    <i class="fas fa-check"></i> Подключиться
+                </button>
+                <button onclick="cancelPassword()" 
+                        style="flex: 1; background: #4a4a4a; color: white; 
+                               border: none; padding: 10px; border-radius: 4px;
+                               cursor: pointer;">
+                    <i class="fas fa-times"></i> Отмена
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    document.getElementById('password-input').focus();
+}
+
+function submitPassword(deviceName) {
+    const passwordInput = document.getElementById('password-input');
+    const rememberCheckbox = document.getElementById('remember-password');
+    const password = passwordInput.value.trim();
+    
+    if (!password) {
+        showAlert('Введите пароль', 'error');
+        return;
+    }
+    
+    // Закрываем модальное окно
+    const modal = document.getElementById('password-modal');
+    if (modal) modal.remove();
+    
+    showAlert('Подключение...', 'info');
+    
+    // Отправляем запрос с паролем
+    fetch(`/api/connect?device=${encodeURIComponent(deviceName)}&password=${encodeURIComponent(password)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentDevice = deviceName;
+                updateDeviceStatus('connected', deviceName);
+                showAlert(data.message, 'success');
+                loadQueueTree();
+                loadAllQueues();
+                loadDevices();
+                
+                // Если пользователь хочет запомнить пароль
+                if (rememberCheckbox.checked) {
+                    // Пароль уже сохранен на сервере при успешном подключении
+                    showAlert('Пароль сохранен', 'success');
+                }
+            } else {
+                showAlert(data.error || 'Ошибка подключения', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка подключения:', error);
+            showAlert('Ошибка подключения', 'error');
+        });
+}
+
+function cancelPassword() {
+    const modal = document.getElementById('password-modal');
+    if (modal) modal.remove();
 }
 
 // Функция для отключения
