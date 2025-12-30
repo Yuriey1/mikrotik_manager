@@ -3,6 +3,7 @@ let queueTree = [];
 let queueTreeData = []; // Хранит все данные дерева
 let queueTreeFiltered = []; // Отфильтрованные данные
 let queueTreeExpanded = {}; // Состояние развернутости узлов
+let netboxConfigured = false;
 
 // Загрузка при старте
 document.addEventListener('DOMContentLoaded', function() {
@@ -78,6 +79,8 @@ function getTabName(tabKey) {
 
 // Загрузка устройств из NetBox
 function loadDevices() {
+    console.log('Загрузка устройств из NetBox...');
+    
     fetch('/api/devices')
         .then(response => response.json())
         .then(data => {
@@ -85,19 +88,21 @@ function loadDevices() {
             deviceList.innerHTML = '';
 
             netboxConfigured = data.netbox_configured || false;
-            
-            // Обновляем статус NetBox
             updateNetBoxStatus();
             
             if (data.error) {
                 deviceList.innerHTML = `
-                    <li class="empty-state">
-                        <i class="fas fa-exclamation-triangle" style="color: #e74c3c;"></i>
-                        <p>Ошибка загрузки из NetBox</p>
-                        <p style="font-size: 12px; color: #7f8c8d;">${data.error}</p>
-                        <button class="btn btn-primary mt-10" onclick="showNetBoxConfig()">
-                            <i class="fas fa-cog"></i> Настроить NetBox
-                        </button>
+                    <li class="device-item">
+                        <div class="device-card">
+                            <div class="device-name" style="color: #e74c3c;">
+                                <i class="fas fa-exclamation-triangle"></i> Ошибка загрузки
+                            </div>
+                            <div class="device-actions">
+                                <button class="btn btn-primary" onclick="showNetBoxConfig()">
+                                    <i class="fas fa-cog"></i> Настроить NetBox
+                                </button>
+                            </div>
+                        </div>
                     </li>
                 `;
                 return;
@@ -106,6 +111,9 @@ function loadDevices() {
             const devices = data.devices || {};
             const deviceCount = Object.keys(devices).length;
 
+            // Обновляем счетчик
+            document.getElementById('device-count').textContent = deviceCount;
+
             if (deviceCount > 0) {
                 // Сортируем устройства по алфавиту
                 const sortedDevices = Object.entries(devices).sort((a, b) => 
@@ -113,50 +121,98 @@ function loadDevices() {
                 );
 
                 sortedDevices.forEach(([name, device]) => {
-                    const li = document.createElement('li');
-                    li.className = 'device-item';
-                    if (currentDevice === name) {
-                        li.classList.add('active');
-                    }
-
-                    const buttonText = currentDevice === name ? '🔓 Отключить' : '🔗 Подключить';
-                    const buttonClass = currentDevice === name ? 'btn-danger' : 'connect-btn';
-
-                    li.innerHTML = `
-                        <div class="device-info">
-                            <div class="device-name">${name}</div>
-                            <div class="device-ip">${device.ip}:${device.port}</div>
-                            ${device.site ? `<div class="device-site">${device.site}</div>` : ''}
-                            ${device.role ? `<div class="device-role">${device.role}</div>` : ''}
-                        </div>
-                        <button class="connect-btn ${buttonClass}" onclick="connectDevice('${name}')">
-                            ${buttonText}
-                        </button>
-                    `;
+                    const li = createDeviceCard(name, device);
                     deviceList.appendChild(li);
                 });
-                
-                // Обновляем счетчик устройств в заголовке
-                document.getElementById('device-count').textContent = `Устройств: ${deviceCount}`;
             } else {
                 deviceList.innerHTML = `
-                    <li class="empty-state">
-                        <i class="fas fa-server"></i>
-                        <p>Нет устройств в NetBox</p>
-                        ${netboxConfigured ? 
-                            '<button class="btn btn-primary mt-10" onclick="loadDevices()">' +
-                            '<i class="fas fa-sync-alt"></i> Обновить список</button>' :
-                            '<button class="btn btn-primary mt-10" onclick="showNetBoxConfig()">' +
-                            '<i class="fas fa-cog"></i> Настроить NetBox</button>'
-                        }
+                    <li class="device-item">
+                        <div class="device-card">
+                            <div class="device-name" style="text-align: center; color: #7f8c8d;">
+                                <i class="fas fa-server"></i> Нет устройств в NetBox
+                            </div>
+                            <div class="device-actions">
+                                <button class="btn btn-primary" onclick="${netboxConfigured ? 'loadDevices()' : 'showNetBoxConfig()'}">
+                                    <i class="fas ${netboxConfigured ? 'fa-sync-alt' : 'fa-cog'}"></i> 
+                                    ${netboxConfigured ? 'Обновить' : 'Настроить NetBox'}
+                                </button>
+                            </div>
+                        </div>
                     </li>
                 `;
             }
         })
         .catch(error => {
             console.error('Ошибка загрузки устройств:', error);
-            showAlert('Ошибка загрузки устройств', 'error');
+            const deviceList = document.getElementById('device-list');
+            deviceList.innerHTML = `
+                <li class="device-item">
+                    <div class="device-card">
+                        <div class="device-name" style="color: #e74c3c;">
+                            <i class="fas fa-exclamation-circle"></i> Ошибка сети
+                        </div>
+                        <div class="device-actions">
+                            <button class="btn btn-primary" onclick="loadDevices()">
+                                <i class="fas fa-redo"></i> Повторить
+                            </button>
+                        </div>
+                    </div>
+                </li>
+            `;
         });
+}
+
+// Создание карточки устройства
+function createDeviceCard(name, device) {
+    const li = document.createElement('li');
+    li.className = 'device-item';
+    
+    if (currentDevice === name) {
+        li.classList.add('active');
+    }
+
+    const buttonText = currentDevice === name ? 'Отключить' : 'Подключить';
+    const buttonIcon = currentDevice === name ? 'fa-unlink' : 'fa-plug';
+    const buttonClass = currentDevice === name ? 'btn-danger' : 'connect-btn';
+
+    li.innerHTML = `
+        <div class="device-card">
+            <!-- ИМЯ УСТРОЙСТВА (ВЕРХ) -->
+            <div class="device-name" title="${name}">
+                <i class="fas fa-server" style="color: #6c9efc; margin-right: 8px;"></i>
+                ${name}
+            </div>
+            
+            <!-- КНОПКА ПОДКЛЮЧЕНИЯ (СНИЗУ ИМЕНИ) -->
+            <div class="device-actions">
+                <button class="connect-btn ${buttonClass}" onclick="connectDevice('${name}')">
+                    <i class="fas ${buttonIcon}"></i> ${buttonText}
+                </button>
+            </div>
+            
+            <!-- ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ (ТОЛЬКО ДЛЯ АКТИВНОГО) -->
+            <div class="device-details">
+                <div class="device-detail-row">
+                    <i class="fas fa-network-wired"></i>
+                    <span>${device.ip}:${device.port}</span>
+                </div>
+                ${device.site ? `
+                    <div class="device-detail-row">
+                        <i class="fas fa-map-marker-alt"></i>
+                        <span>${device.site}</span>
+                    </div>
+                ` : ''}
+                ${device.role ? `
+                    <div class="device-detail-row">
+                        <i class="fas fa-user-tag"></i>
+                        <span>${device.role}</span>
+                    </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+    
+    return li;
 }
 
 // Обновление статуса NetBox
@@ -284,7 +340,27 @@ function testNetBoxConnection() {
         });
 }
 
-// Подключение/отключение устройства
+// Обновление статуса устройства
+function updateDeviceStatus(status, deviceName) {
+    const statusDot = document.getElementById('connection-status');
+    const statusText = document.getElementById('connection-text');
+    const deviceNameSpan = document.getElementById('device-name');
+    const disconnectBtn = document.getElementById('disconnect-btn');
+
+    if (status === 'connected') {
+        statusDot.className = 'status-dot connected';
+        statusText.textContent = 'Подключено';
+        deviceNameSpan.textContent = deviceName;
+        disconnectBtn.style.display = 'block';
+    } else {
+        statusDot.className = 'status-dot';
+        statusText.textContent = 'Не подключено';
+        deviceNameSpan.textContent = 'Нет устройства';
+        disconnectBtn.style.display = 'none';
+    }
+}
+
+// Подключение к устройству
 function connectDevice(deviceName) {
     if (currentDevice === deviceName) {
         disconnectDevice();
@@ -299,37 +375,16 @@ function connectDevice(deviceName) {
             if (data.success) {
                 if (data.action === 'connected') {
                     currentDevice = deviceName;
-                    document.getElementById('connection-status').className = 'status-dot connected';
-                    document.getElementById('connection-text').textContent = 'Подключено';
-                    document.getElementById('device-name').textContent = deviceName;
-                    document.getElementById('disconnect-btn').style.display = 'block';
-
+                    updateDeviceStatus('connected', deviceName);
                     showAlert(data.message, 'success');
-
-                    // Загружаем дерево очередей (новая версия)
                     loadQueueTree();
-                    
-                    // ЗАГРУЖАЕМ ВСЕ ОЧЕРЕДИ ДЛЯ SELECT
                     loadAllQueues();
-                    
                 } else if (data.action === 'disconnected') {
                     currentDevice = null;
-                    document.getElementById('connection-status').className = 'status-dot';
-                    document.getElementById('connection-text').textContent = 'Не подключено';
-                    document.getElementById('device-name').textContent = '';
-                    document.getElementById('queue-stats').textContent = '';
-                    document.getElementById('disconnect-btn').style.display = 'none';
-
+                    updateDeviceStatus('disconnected', '');
                     showAlert(data.message, 'info');
-
-                    // Очищаем дерево очередей
-                    document.getElementById('queue-tree-v2').innerHTML = '';
-                    
-                    // Очищаем select с очередями
-                    resetQueueSelect();
                 }
-
-                loadDevices();
+                loadDevices(); // Перерисовываем список
             } else {
                 showAlert(data.error || 'Ошибка подключения', 'error');
             }

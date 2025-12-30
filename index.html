@@ -50,29 +50,46 @@
             <!-- БОКОВАЯ ПАНЕЛЬ -->
             <div class="sidebar">
 
-<!-- В боковой панели обновите раздел устройств -->
-<div class="section">
-    <h2><i class="fas fa-server"></i> Устройства</h2>
-    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-        <button class="btn btn-primary w-full" onclick="loadDevices()">
+    <!-- РАЗДЕЛ: УСТРОЙСТВА -->
+    <div class="device-section">
+        <h2>
+            <i class="fas fa-server"></i> Устройства
+            <button class="btn btn-secondary" onclick="showNetBoxConfig()" 
+                    style="margin-left: auto; padding: 4px 8px; font-size: 12px;" 
+                    title="Настройки NetBox">
+                <i class="fas fa-cog"></i>
+            </button>
+        </h2>
+        
+        <div class="device-list-container">
+            <!-- Заголовок с количеством -->
+            <div class="device-list-header">
+                <span>Список устройств</span>
+                <span class="device-count" id="device-count">0</span>
+            </div>
+            
+            <!-- Прокручиваемая область -->
+            <div class="device-list-scroll">
+                <!-- Список устройств -->
+                <ul class="device-list" id="device-list">
+                    <li class="device-item">
+                        <div class="device-card">
+                            <div class="device-name" style="text-align: center;">
+                                <i class="fas fa-spinner fa-spin"></i> Загрузка...
+                            </div>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Кнопка обновления -->
+        <button class="btn btn-primary w-full" onclick="loadDevices()" 
+                style="margin-top: 10px; padding: 8px;">
             <i class="fas fa-sync-alt"></i> Обновить список
         </button>
-        <button class="btn btn-secondary" onclick="showNetBoxConfig()" title="Настройки NetBox">
-            <i class="fas fa-cog"></i>
-        </button>
     </div>
-    <div class="device-list-container">
-        <div class="device-list-header">
-            <span id="device-count">Устройств: 0</span>
-        </div>
-        <ul class="device-list" id="device-list">
-            <li class="empty-state">
-                <i class="fas fa-spinner fa-spin"></i>
-                <p>Загрузка устройств...</p>
-            </li>
-        </ul>
-    </div>
-</div>
+
                 <div class="section">
                     <h2><i class="fas fa-cog"></i> Настройки</h2>
                     <div class="form-group">
