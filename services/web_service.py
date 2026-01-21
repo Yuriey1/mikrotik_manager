@@ -71,30 +71,46 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
 
+    # В web_service.py - добавляем в метод do_DELETE()
     def do_DELETE(self):
         """Обработка DELETE запросов"""
         try:
             parsed = urlparse(self.path)
             path = parsed.path
-        
-            if path == '/api/forget_password':
+    
+            if path == '/api/forget_credentials':  # ← НОВЫЙ ENDPOINT
                 query = parse_qs(parsed.query)
                 device_name = query.get('device', [''])[0]
-            
+        
                 if not device_name:
                     self._send_json({'error': 'Не указано устройство'}, 400)
                     return
-            
-                # Удаляем пароль
+        
+                # Удаляем учетные данные
+                ConfigManager.save_credentials(device_name, '', '')
+        
+                self._send_json({
+                    'success': True,
+                    'message': f'Учетные данные для {device_name} удалены'
+                })
+            elif path == '/api/forget_password':  # ← СТАРЫЙ ENDPOINT (для обратной совместимости)
+                query = parse_qs(parsed.query)
+                device_name = query.get('device', [''])[0]
+        
+                if not device_name:
+                    self._send_json({'error': 'Не указано устройство'}, 400)
+                    return
+        
+                # Удаляем пароль (старый метод)
                 ConfigManager.save_password(device_name, '')
-            
+        
                 self._send_json({
                     'success': True,
                     'message': f'Пароль для {device_name} удален'
                 })
             else:
                 self.send_error(404, "Not Found")
-            
+        
         except Exception as e:
             print(f"❌ Ошибка обработки DELETE запроса: {e}")
             self._send_json({'error': str(e)}, 500)
@@ -529,6 +545,7 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
 
         query = parse_qs(parsed.query)
         device_name = query.get('device', [''])[0]
+        username = query.get('username', [''])[0]  # ← НОВОЕ: получаем логин
         password = query.get('password', [''])[0]
 
         if not device_name:
@@ -546,7 +563,7 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             # Получаем все устройства из NetBox и ищем нужное
             nb_devices = netbox_client.get_devices()
             target_device = None
-        
+    
             for device in nb_devices:
                 if device.name == device_name:
                     target_device = device
@@ -556,21 +573,24 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 self._send_json({'error': f'Устройство "{device_name}" не найдено в NetBox'}, 404)
                 return
 
-            # Если пароль не передан, пытаемся получить из сохраненных
-            if not password:
-                saved_password = ConfigManager.get_password(device_name)
-                if saved_password:
-                    password = saved_password
-                    print(f"🔑 Используем сохраненный пароль для {device_name}")
-                else:
-                    # Если нет сохраненного пароля - запрашиваем у клиента
-                    self._send_json({
-                        'success': False,
-                        'requires_password': True,
-                        'device': device_name,
-                        'message': 'Требуется пароль'
-                    }, 401)
-                    return
+            # Получаем сохраненные учетные данные
+            saved_creds = ConfigManager.get_credentials(device_name)
+            default_username = ConfigManager.get_default_username()
+        
+            # Определяем финальные учетные данные
+            final_username = username or saved_creds['username'] or default_username
+            final_password = password or saved_creds['password']
+        
+            # Проверяем, что у нас есть пароль
+            if not final_password:
+                self._send_json({
+                    'success': False,
+                    'requires_credentials': True,  # ← ИЗМЕНЕНО: требует и логин, и пароль
+                    'device': device_name,
+                    'saved_username': saved_creds['username'] or default_username,
+                    'message': 'Требуется ввод учетных данных'
+                }, 401)
+                return
 
             # Отключаемся от предыдущего устройства, если подключены
             if mikrotik_manager and mikrotik_manager.connected and current_device_name:
@@ -582,8 +602,8 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 'name': target_device.name,
                 'ip': target_device.ip_address,
                 'port': target_device.port,
-                'username': 'nur001',
-                'password': password,
+                'username': final_username,  # ← ИЗМЕНЕНО: используем вычисленный логин
+                'password': final_password,
                 'description': f"{target_device.device_type} - {target_device.site}"
             }
 
@@ -593,22 +613,23 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
 
             # Пробуем подключиться
             if mikrotik_manager.connect():
-                # Сохраняем пароль если подключение успешно
-                if password:
-                    ConfigManager.save_password(device_name, password)
-                    print(f"💾 Пароль сохранен для {device_name}")
-            
+                # Сохраняем учетные данные если подключение успешно
+                if final_username or final_password:
+                    ConfigManager.save_credentials(device_name, final_username, final_password)
+                    print(f"💾 Учетные данные сохранены для {device_name}")
+        
                 current_device_name = device_name
-            
+        
                 # Строим дерево очередей
                 tree_builder = QueueTreeBuilder(mikrotik_manager)
                 tree_builder.build_tree()
-        
+    
                 self._send_json({
                     'success': True,
                     'device': device_name,
                     'message': f'Подключено к {device.ip}:{device.port}',
-                    'action': 'connected'
+                    'action': 'connected',
+                    'username': final_username  # ← НОВОЕ: возвращаем использованный логин
                 })
             else:
                 current_device_name = None

@@ -1,4 +1,20 @@
 {
+  "Шалакит": {
+    "name": "Шалакит",
+    "ip": "217.21.106.198",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Леонтьевский RT": {
+    "name": " Леонтьевский RT",
+    "ip": "92.124.97.198",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": "Леонтьевсикй Ростелеком"
+  },
   "Караган RT": {
     "name": "Караган RT",
     "ip": "95.156.122.82",
@@ -162,6 +178,14 @@
   "Андат R": {
     "name": "Андат R",
     "ip": "217.65.89.10",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Правая Безымянка": {
+    "name": "Правая Безымянка",
+    "ip": "46.29.199.154",
     "port": 8728,
     "username": "nur001",
     "password": "enc:WjVNZjN4cGs=",
