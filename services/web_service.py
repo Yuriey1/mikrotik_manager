@@ -17,11 +17,13 @@ from models.employee import Employee
 from managers.mikrotik_manager import MikroTikManager
 from services.queue_builder import QueueTreeBuilder
 from utils.helpers import russian_to_mikrotik_comment
+from netbox_client import NetBoxClient, NetBoxDevice  # Импорт NetBox
 
 # Глобальные переменные
 mikrotik_manager = None
 tree_builder = None
 current_device_name = None  # ← Добавим для отслеживания текущего устройства
+netbox_client = None  # Клиент NetBox
 
 class StoppableHTTPServer(HTTPServer):
     """HTTP сервер с возможностью корректной остановки"""
@@ -68,6 +70,50 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
+
+    # В web_service.py - добавляем в метод do_DELETE()
+    def do_DELETE(self):
+        """Обработка DELETE запросов"""
+        try:
+            parsed = urlparse(self.path)
+            path = parsed.path
+    
+            if path == '/api/forget_credentials':  # ← НОВЫЙ ENDPOINT
+                query = parse_qs(parsed.query)
+                device_name = query.get('device', [''])[0]
+        
+                if not device_name:
+                    self._send_json({'error': 'Не указано устройство'}, 400)
+                    return
+        
+                # Удаляем учетные данные
+                ConfigManager.save_credentials(device_name, '', '')
+        
+                self._send_json({
+                    'success': True,
+                    'message': f'Учетные данные для {device_name} удалены'
+                })
+            elif path == '/api/forget_password':  # ← СТАРЫЙ ENDPOINT (для обратной совместимости)
+                query = parse_qs(parsed.query)
+                device_name = query.get('device', [''])[0]
+        
+                if not device_name:
+                    self._send_json({'error': 'Не указано устройство'}, 400)
+                    return
+        
+                # Удаляем пароль (старый метод)
+                ConfigManager.save_password(device_name, '')
+        
+                self._send_json({
+                    'success': True,
+                    'message': f'Пароль для {device_name} удален'
+                })
+            else:
+                self.send_error(404, "Not Found")
+        
+        except Exception as e:
+            print(f"❌ Ошибка обработки DELETE запроса: {e}")
+            self._send_json({'error': str(e)}, 500)
     
     def _get_html_template(self):
         """Вернуть HTML шаблон из файла"""
@@ -127,7 +173,8 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             if path == '/' or path == '/index.html':
                 self._serve_html()
             elif path == '/api/devices':
-                self._serve_devices()
+                self._serve_devices_from_netbox()  # Изменено: получаем из NetBox
+                """self._serve_devices()"""
             elif path == '/api/connect':
                 self._connect_device(parsed)
             elif path == '/api/disconnect':  # ← НОВЫЙ ENDPOINT!
@@ -140,6 +187,10 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 self._find_queues(parsed)
             elif path == '/api/check_ip':  # ← НОВЫЙ ENDPOINT ДЛЯ ПРОВЕРКИ IP!
                 self._check_ip_belongs(parsed)
+            elif path == '/api/netbox/config':  # Получить настройки NetBox
+                self._get_netbox_config()
+            elif path == '/api/netbox/test':    # Тест соединения с NetBox
+                self._test_netbox_connection(parsed)
             # =====  ЭТА СТРОКА ДЛЯ CSS/JS =====
             elif path.startswith('/static/'):
                 self._serve_static_file(path)
@@ -153,6 +204,119 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 
         except Exception as e:
             print(f"❌ Ошибка обработки GET запроса: {e}")
+            self._send_json({'error': str(e)}, 500)
+
+    def _initialize_netbox_client(self):
+        """Инициализировать клиент NetBox"""
+        global netbox_client
+        try:
+            netbox_config = ConfigManager.load_netbox_config()
+            if netbox_config.get('url') and netbox_config.get('token'):
+                netbox_client = NetBoxClient(
+                    netbox_config['url'],
+                    netbox_config['token'],
+                    netbox_config.get('verify_ssl', True)
+                )
+                print(f"✅ NetBox клиент инициализирован")
+            else:
+                netbox_client = None
+                print("⚠️  NetBox не настроен")
+        except Exception as e:
+            print(f"❌ Ошибка инициализации NetBox: {e}")
+            netbox_client = None
+
+    def _serve_devices_from_netbox(self):
+        """Отдать список устройств из NetBox"""
+        global netbox_client
+        
+        try:
+            # Инициализируем клиент при первом запросе
+            if netbox_client is None:
+                self._initialize_netbox_client()
+            
+            if not netbox_client:
+                self._send_json({
+                    'devices': {},
+                    'netbox_configured': False,
+                    'error': 'NetBox не настроен'
+                })
+                return
+            
+            devices_list = netbox_client.get_devices()
+            
+            # Преобразуем в формат, ожидаемый фронтендом
+            devices_dict = {}
+            for device in devices_list:
+                devices_dict[device.name] = {
+                    'name': device.name,
+                    'ip': device.ip_address,
+                    'port': device.port,
+                    'username': 'admin',
+                    'password': '',  # Пароли не хранятся в NetBox
+                    'description': f"{device.device_type} - {device.site} - {device.role}",
+                    'device_type': device.device_type,
+                    'site': device.site,
+                    'role': device.role,
+                    'comments': device.comments
+                }
+            
+            self._send_json({
+                'devices': devices_dict,
+                'netbox_configured': True,
+                'count': len(devices_dict)
+            })
+            
+        except Exception as e:
+            print(f"❌ Ошибка получения устройств из NetBox: {e}")
+            self._send_json({
+                'devices': {},
+                'netbox_configured': False,
+                'error': str(e)
+            })
+
+    def _get_netbox_config(self):
+        """Получить настройки NetBox"""
+        try:
+            config = ConfigManager.load_netbox_config()
+            self._send_json({
+                'success': True,
+                'config': config
+            })
+        except Exception as e:
+            print(f"❌ Ошибка получения конфигурации NetBox: {e}")
+            self._send_json({'error': str(e)}, 500)
+
+    def _test_netbox_connection(self, parsed):
+        """Проверить соединение с NetBox"""
+        try:
+            query = parse_qs(parsed.query)
+            url = query.get('url', [''])[0]
+            token = query.get('token', [''])[0]
+            verify_ssl = query.get('verify_ssl', ['true'])[0].lower() == 'true'
+            
+            if not url or not token:
+                self._send_json({
+                    'success': False,
+                    'error': 'Укажите URL и токен NetBox'
+                })
+                return
+            
+            # Создаем временного клиента для теста
+            test_client = NetBoxClient(url, token, verify_ssl)
+            
+            if test_client.test_connection():
+                self._send_json({
+                    'success': True,
+                    'message': 'Соединение с NetBox успешно установлено'
+                })
+            else:
+                self._send_json({
+                    'success': False,
+                    'error': 'Не удалось подключиться к NetBox'
+                })
+                
+        except Exception as e:
+            print(f"❌ Ошибка тестирования соединения с NetBox: {e}")
             self._send_json({'error': str(e)}, 500)
 
     def _get_free_ips(self):
@@ -250,7 +414,9 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             parsed = urlparse(self.path)
             path = parsed.path
             
-            if path == '/api/add_device':
+            if path == '/api/netbox/save_config':  # Сохранить настройки NetBox
+                self._save_netbox_config(data)
+            elif path == '/api/add_device':
                 self._add_device(data)
             elif path == '/api/add_employee':
                 self._add_employee(data)
@@ -262,6 +428,40 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
         except Exception as e:
             print(f"❌ Ошибка обработки POST запроса: {e}")
             self._send_json({'error': str(e)}, 500)
+
+    def _save_netbox_config(self, data):
+        """Сохранить настройки NetBox"""
+        global netbox_client
+        
+        try:
+            config = {
+                'url': data.get('url', '').strip(),
+                'token': data.get('token', '').strip(),
+                'verify_ssl': data.get('verify_ssl', True)
+            }
+            
+            if not config['url'] or not config['token']:
+                self._send_json({
+                    'success': False,
+                    'error': 'Заполните URL и токен'
+                })
+                return
+            
+            # Сохраняем конфигурацию
+            ConfigManager.save_netbox_config(config)
+            
+            # Переинициализируем клиент
+            self._initialize_netbox_client()
+            
+            self._send_json({
+                'success': True,
+                'message': 'Настройки NetBox сохранены'
+            })
+            
+        except Exception as e:
+            print(f"❌ Ошибка сохранения конфигурации NetBox: {e}")
+            self._send_json({'error': str(e)}, 500)
+
     
     def _serve_html(self):
         """Отдать HTML интерфейс"""
@@ -340,70 +540,113 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             self._send_json({'error': str(e)}, 500)
     
     def _connect_device(self, parsed):
-        """Подключиться к устройству (с отключением от предыдущего)"""
-        global mikrotik_manager, tree_builder, current_device_name
-    
+        """Подключиться к устройству из NetBox"""
+        global mikrotik_manager, tree_builder, current_device_name, netbox_client
+
         query = parse_qs(parsed.query)
         device_name = query.get('device', [''])[0]
-    
+        username = query.get('username', [''])[0]  # ← НОВОЕ: получаем логин
+        password = query.get('password', [''])[0]
+
         if not device_name:
             self._send_json({'error': 'Не указано устройство'}, 400)
             return
-    
-        devices = ConfigManager.load_devices()
-        device_data = devices.get(device_name)
-    
-        if not device_data:
-            self._send_json({'error': 'Устройство не найдено'}, 404)
-            return
-    
-        # Проверяем, не пытаемся ли подключиться к уже подключенному устройству
-        if current_device_name == device_name and mikrotik_manager and mikrotik_manager.connected:
-            print(f"⚠️  Уже подключены к {device_name}, отключаем...")
-            self._disconnect_current_device()
-            self._send_json({
-                'success': True,
-                'device': '',
-                'message': f'Отключено от {device_name}',
-                'action': 'disconnected'
-            })
-            return
-    
-        # Отключаемся от предыдущего устройства, если подключены
-        if mikrotik_manager and mikrotik_manager.connected:
-            print(f"🔌 Отключаемся от предыдущего устройства ({current_device_name})...")
-            self._disconnect_current_device()
-    
-        # Создаем менеджер и подключаемся
-        device = MikroTikDevice.from_dict(device_data)
-        mikrotik_manager = MikroTikManager(device)
-    
-        if mikrotik_manager.connect():
-            # Сохраняем имя текущего устройства
-            current_device_name = device_name
-        
-            # Строим дерево очередей
-            tree_builder = QueueTreeBuilder(mikrotik_manager)
-            tree_builder.build_tree()
-        
-            self._send_json({
-                'success': True,
-                'device': device_name,
-                'message': f'Подключено к {device.ip}',
-                'action': 'connected'
-            })
-        else:
-            current_device_name = None
-            self._send_json({
-                'success': False,
-                'error': 'Не удалось подключиться'
-            })
 
+        try:
+            # Проверяем, что NetBox клиент инициализирован
+            if not netbox_client:
+                self._send_json({'error': 'NetBox не настроен'}, 400)
+                return
+
+            print(f"🔗 Подключение к устройству: {device_name}")
+
+            # Получаем все устройства из NetBox и ищем нужное
+            nb_devices = netbox_client.get_devices()
+            target_device = None
+    
+            for device in nb_devices:
+                if device.name == device_name:
+                    target_device = device
+                    break
+
+            if not target_device:
+                self._send_json({'error': f'Устройство "{device_name}" не найдено в NetBox'}, 404)
+                return
+
+            # Получаем сохраненные учетные данные
+            saved_creds = ConfigManager.get_credentials(device_name)
+            default_username = ConfigManager.get_default_username()
+        
+            # Определяем финальные учетные данные
+            final_username = username or saved_creds['username'] or default_username
+            final_password = password or saved_creds['password']
+        
+            # Проверяем, что у нас есть пароль
+            if not final_password:
+                self._send_json({
+                    'success': False,
+                    'requires_credentials': True,  # ← ИЗМЕНЕНО: требует и логин, и пароль
+                    'device': device_name,
+                    'saved_username': saved_creds['username'] or default_username,
+                    'message': 'Требуется ввод учетных данных'
+                }, 401)
+                return
+
+            # Отключаемся от предыдущего устройства, если подключены
+            if mikrotik_manager and mikrotik_manager.connected and current_device_name:
+                print(f"🔌 Отключаемся от предыдущего устройства ({current_device_name})...")
+                self._disconnect_current_device()
+
+            # Создаем объект устройства для MikroTikManager
+            device_dict = {
+                'name': target_device.name,
+                'ip': target_device.ip_address,
+                'port': target_device.port,
+                'username': final_username,  # ← ИЗМЕНЕНО: используем вычисленный логин
+                'password': final_password,
+                'description': f"{target_device.device_type} - {target_device.site}"
+            }
+
+            # Создаем MikroTik устройство
+            device = MikroTikDevice.from_dict(device_dict)
+            mikrotik_manager = MikroTikManager(device)
+
+            # Пробуем подключиться
+            if mikrotik_manager.connect():
+                # Сохраняем учетные данные если подключение успешно
+                if final_username or final_password:
+                    ConfigManager.save_credentials(device_name, final_username, final_password)
+                    print(f"💾 Учетные данные сохранены для {device_name}")
+        
+                current_device_name = device_name
+        
+                # Строим дерево очередей
+                tree_builder = QueueTreeBuilder(mikrotik_manager)
+                tree_builder.build_tree()
+    
+                self._send_json({
+                    'success': True,
+                    'device': device_name,
+                    'message': f'Подключено к {device.ip}:{device.port}',
+                    'action': 'connected',
+                    'username': final_username  # ← НОВОЕ: возвращаем использованный логин
+                })
+            else:
+                current_device_name = None
+                self._send_json({
+                    'success': False,
+                    'error': 'Не удалось подключиться к устройству'
+                })
+
+        except Exception as e:
+            print(f"❌ Ошибка подключения: {e}")
+            traceback.print_exc()
+            self._send_json({'error': str(e)}, 500)
 
     def _disconnect_current_device(self):
         """Отключиться от текущего устройства"""
         global mikrotik_manager, tree_builder, current_device_name
-    
+
         try:
             if mikrotik_manager:
                 print(f"🔌 Отключение от {current_device_name}...")
@@ -901,7 +1144,7 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
         """Кастомное логирование"""
         print(f"🌐 {self.address_string()} - {format % args}")
 
-def start_server(port=8080, host='0.0.0.0'):
+def start_server(port=8090, host='0.0.0.0'):
     """Запуск HTTP сервера"""
     try:
         server_address = (host, port)

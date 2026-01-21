@@ -3,47 +3,70 @@ let queueTree = [];
 let queueTreeData = []; // Хранит все данные дерева
 let queueTreeFiltered = []; // Отфильтрованные данные
 let queueTreeExpanded = {}; // Состояние развернутости узлов
+let netboxConfigured = false;
 
 // Загрузка при старте
 document.addEventListener('DOMContentLoaded', function() {
     loadDevices();
     loadSettings();
     
-    // Инициализация модального окна
-    const modal = document.getElementById('device-modal');
-    if (modal) {
-        modal.addEventListener('click', function(e) {
-            if (e.target === this) {
-                hideAddDeviceForm();
-            }
-        });
-    }
 
-    // Обработчик закрытия модального окна IP
-    const ipModal = document.getElementById('ip-selector-modal');
-    if (ipModal) {
-        ipModal.addEventListener('click', function(e) {
-            if (e.target === this) {
-                hideIPSelector();
-            }
-        });
+    loadNetBoxConfig();
+    
+    // Инициализация модальных окон
+    initModals();
+
+});
+
+
+// Инициализация модальных окон
+function initModals() {
+    const modals = ['netbox-config-modal'];
+    
+    modals.forEach(modalId => {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.addEventListener('click', function(e) {
+                if (e.target === this) {
+                    this.style.display = 'none';
+                }
+            });
+            
+            // Закрытие по Escape
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && modal.style.display === 'flex') {
+                    modal.style.display = 'none';
+                }
+            });
+        }
+    });
+}
+
+function forgetPassword(deviceName) {
+    if (!confirm(`Удалить сохраненные учетные данные для устройства "${deviceName}"?`)) {
+        return;
     }
     
-    // Добавляем функцию для закрытия при клике на фон (опционально)
-    document.getElementById('ip-selector-modal').addEventListener('click', function(e) {
-        if (e.target === this) {
-            hideIPSelector();
+    fetch(`/api/forget_credentials?device=${encodeURIComponent(deviceName)}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+            // Если это текущее устройство - отключаемся
+            if (currentDevice === deviceName) {
+                disconnectDevice();
+            }
+        } else {
+            showAlert(data.error, 'error');
         }
+    })
+    .catch(error => {
+        console.error('Ошибка удаления учетных данных:', error);
+        showAlert('Ошибка удаления учетных данных', 'error');
     });
-
-    // Закрытие по Escape
-    document.addEventListener('keydown', function(e) {
-        const modal = document.getElementById('ip-selector-modal');
-        if (e.key === 'Escape' && modal.style.display === 'flex') {
-            hideIPSelector();
-        }
-    });
-});
+}
 
 function showAddDeviceForm() {
     document.getElementById('device-modal').style.display = 'block';
@@ -80,92 +103,327 @@ function getTabName(tabKey) {
     return tabs[tabKey] || tabKey;
 }
 
-// Загрузка устройств
+// Загрузка устройств из NetBox
 function loadDevices() {
+    console.log('Загрузка устройств из NetBox...');
+    
     fetch('/api/devices')
         .then(response => response.json())
         .then(data => {
             const deviceList = document.getElementById('device-list');
             deviceList.innerHTML = '';
 
-            if (data.devices && Object.keys(data.devices).length > 0) {
-                for (const [name, device] of Object.entries(data.devices)) {
-                    const li = document.createElement('li');
-                    li.className = 'device-item';
-                    if (currentDevice === name) {
-                        li.classList.add('active');
-                    }
-
-                    const buttonText = currentDevice === name ? '🔓 Отключить' : '🔗 Подключить';
-                    const buttonClass = currentDevice === name ? 'btn-danger' : 'connect-btn';
-
-                    li.innerHTML = `
-                        <div class="device-info">
-                            <div class="device-name">${name}</div>
-                            <div class="device-ip">${device.ip}:${device.port}</div>
+            netboxConfigured = data.netbox_configured || false;
+            updateNetBoxStatus();
+            
+            if (data.error) {
+                deviceList.innerHTML = `
+                    <li class="device-item">
+                        <div class="device-card">
+                            <div class="device-name" style="color: #e74c3c;">
+                                <i class="fas fa-exclamation-triangle"></i> Ошибка загрузки
+                            </div>
+                            <div class="device-actions">
+                                <button class="btn btn-primary" onclick="showNetBoxConfig()">
+                                    <i class="fas fa-cog"></i> Настроить NetBox
+                                </button>
+                            </div>
                         </div>
-                        <button class="connect-btn ${buttonClass}" onclick="connectDevice('${name}')">
-                            ${buttonText}
-                        </button>
-                    `;
+                    </li>
+                `;
+                return;
+            }
+
+            const devices = data.devices || {};
+            const deviceCount = Object.keys(devices).length;
+
+            // Обновляем счетчик
+            document.getElementById('device-count').textContent = deviceCount;
+
+            if (deviceCount > 0) {
+                // Сортируем устройства по алфавиту
+                const sortedDevices = Object.entries(devices).sort((a, b) => 
+                    a[0].toLowerCase().localeCompare(b[0].toLowerCase())
+                );
+
+                sortedDevices.forEach(([name, device]) => {
+                    const li = createDeviceCard(name, device);
                     deviceList.appendChild(li);
-                }
+                });
             } else {
-                deviceList.innerHTML = '<li style="color: #999; padding: 10px;">Нет устройств</li>';
+                deviceList.innerHTML = `
+                    <li class="device-item">
+                        <div class="device-card">
+                            <div class="device-name" style="text-align: center; color: #7f8c8d;">
+                                <i class="fas fa-server"></i> Нет устройств в NetBox
+                            </div>
+                            <div class="device-actions">
+                                <button class="btn btn-primary" onclick="${netboxConfigured ? 'loadDevices()' : 'showNetBoxConfig()'}">
+                                    <i class="fas ${netboxConfigured ? 'fa-sync-alt' : 'fa-cog'}"></i> 
+                                    ${netboxConfigured ? 'Обновить' : 'Настроить NetBox'}
+                                </button>
+                            </div>
+                        </div>
+                    </li>
+                `;
             }
         })
         .catch(error => {
             console.error('Ошибка загрузки устройств:', error);
-            showAlert('Ошибка загрузки устройств', 'error');
+            const deviceList = document.getElementById('device-list');
+            deviceList.innerHTML = `
+                <li class="device-item">
+                    <div class="device-card">
+                        <div class="device-name" style="color: #e74c3c;">
+                            <i class="fas fa-exclamation-circle"></i> Ошибка сети
+                        </div>
+                        <div class="device-actions">
+                            <button class="btn btn-primary" onclick="loadDevices()">
+                                <i class="fas fa-redo"></i> Повторить
+                            </button>
+                        </div>
+                    </div>
+                </li>
+            `;
         });
 }
 
-// Подключение/отключение устройства
-function connectDevice(deviceName) {
+// Создание карточки устройства
+function createDeviceCard(name, device) {
+    const li = document.createElement('li');
+    li.className = 'device-item';
+    
+    if (currentDevice === name) {
+        li.classList.add('active');
+    }
+
+    const buttonText = currentDevice === name ? 'Отключить' : 'Подключить';
+    const buttonIcon = currentDevice === name ? 'fa-unlink' : 'fa-plug';
+    const buttonClass = currentDevice === name ? 'btn-danger' : 'connect-btn';
+
+    li.innerHTML = `
+        <div class="device-card">
+            <!-- ИМЯ УСТРОЙСТВА (ВЕРХ) -->
+            <div class="device-name" title="${name}">
+                <i class="fas fa-server" style="color: #6c9efc; margin-right: 8px;"></i>
+                ${name}
+            </div>
+            
+            <!-- КНОПКА ПОДКЛЮЧЕНИЯ (СНИЗУ ИМЕНИ) -->
+            <div class="device-actions">
+                <button class="connect-btn ${buttonClass}" onclick="connectDevice('${name}')">
+                    <i class="fas ${buttonIcon}"></i> ${buttonText}
+                </button>
+
+            ${currentDevice === name ? `
+                    <button class="btn-forget" onclick="forgetPassword('${name}')" 
+                        style="margin-top: 5px; background: #4a4a4a; color: #b0b0b0; 
+                               border: none; padding: 5px 10px; border-radius: 4px; 
+                               font-size: 11px; cursor: pointer;">
+                        <i class="fas fa-trash-alt"></i> Забыть данные
+                    </button>        ` : ''}
+            </div>
+            
+            <!-- ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ (ТОЛЬКО ДЛЯ АКТИВНОГО) -->
+            <div class="device-details">
+                <div class="device-detail-row">
+                    <i class="fas fa-network-wired"></i>
+                    <span>${device.ip}:${device.port}</span>
+                </div>
+                ${device.site ? `
+                    <div class="device-detail-row">
+                        <i class="fas fa-map-marker-alt"></i>
+                        <span>${device.site}</span>
+                    </div>
+                ` : ''}
+                ${device.role ? `
+                    <div class="device-detail-row">
+                        <i class="fas fa-user-tag"></i>
+                        <span>${device.role}</span>
+                    </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+    
+    return li;
+}
+
+// Обновление статуса NetBox
+function updateNetBoxStatus() {
+    const statusDot = document.getElementById('netbox-status');
+    const statusText = document.getElementById('netbox-status-text');
+    
+    if (netboxConfigured) {
+        statusDot.className = 'status-dot connected';
+        statusDot.title = 'NetBox подключен';
+        statusText.textContent = 'NetBox: подключен';
+    } else {
+        statusDot.className = 'status-dot';
+        statusDot.title = 'NetBox не настроен';
+        statusText.textContent = 'NetBox: не настроен';
+    }
+}
+
+// Загрузка конфигурации NetBox
+function loadNetBoxConfig() {
+    fetch('/api/netbox/config')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const config = data.config;
+                if (config.url && config.token) {
+                    netboxConfigured = true;
+                    updateNetBoxStatus();
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка загрузки конфигурации NetBox:', error);
+        });
+}
+
+// Показать настройки NetBox
+function showNetBoxConfig() {
+    const modal = document.getElementById('netbox-config-modal');
+    modal.style.display = 'flex';
+    
+    // Загружаем текущие настройки
+    fetch('/api/netbox/config')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const config = data.config;
+                document.getElementById('netbox-url').value = config.url || '';
+                document.getElementById('netbox-token').value = config.token || '';
+                document.getElementById('netbox-verify-ssl').checked = config.verify_ssl !== false;
+            }
+        });
+}
+
+// Скрыть настройки NetBox
+function hideNetBoxConfig() {
+    document.getElementById('netbox-config-modal').style.display = 'none';
+}
+
+// Сохранить настройки NetBox
+function saveNetBoxConfig() {
+    const config = {
+        url: document.getElementById('netbox-url').value.trim(),
+        token: document.getElementById('netbox-token').value.trim(),
+        verify_ssl: document.getElementById('netbox-verify-ssl').checked
+    };
+    
+    if (!config.url || !config.token) {
+        showAlert('Заполните URL и токен NetBox', 'error');
+        return;
+    }
+    
+    showAlert('Сохранение настроек NetBox...', 'info');
+    
+    fetch('/api/netbox/save_config', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(config)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Настройки NetBox сохранены', 'success');
+            hideNetBoxConfig();
+            loadDevices(); // Перезагружаем список устройств
+        } else {
+            showAlert(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка сохранения настроек NetBox:', error);
+        showAlert('Ошибка сохранения настроек', 'error');
+    });
+}
+
+// Тест соединения с NetBox
+function testNetBoxConnection() {
+    const config = {
+        url: document.getElementById('netbox-url').value.trim(),
+        token: document.getElementById('netbox-token').value.trim(),
+        verify_ssl: document.getElementById('netbox-verify-ssl').checked
+    };
+    
+    if (!config.url || !config.token) {
+        showAlert('Заполните URL и токен NetBox', 'error');
+        return;
+    }
+    
+    showAlert('Проверка соединения с NetBox...', 'info');
+    
+    fetch(`/api/netbox/test?url=${encodeURIComponent(config.url)}&token=${encodeURIComponent(config.token)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('Соединение с NetBox успешно установлено!', 'success');
+            } else {
+                showAlert(data.error || 'Не удалось подключиться к NetBox', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка тестирования соединения:', error);
+            showAlert('Ошибка тестирования соединения', 'error');
+        });
+}
+
+// Обновление статуса устройства
+function updateDeviceStatus(status, deviceName) {
+    const statusDot = document.getElementById('connection-status');
+    const statusText = document.getElementById('connection-text');
+    const deviceNameSpan = document.getElementById('device-name');
+    const disconnectBtn = document.getElementById('disconnect-btn');
+
+    if (status === 'connected') {
+        statusDot.className = 'status-dot connected';
+        statusText.textContent = 'Подключено';
+        deviceNameSpan.textContent = deviceName;
+        disconnectBtn.style.display = 'block';
+    } else {
+        statusDot.className = 'status-dot';
+        statusText.textContent = 'Не подключено';
+        deviceNameSpan.textContent = 'Нет устройства';
+        disconnectBtn.style.display = 'none';
+    }
+}
+
+// обновляем функцию connectDevice()
+
+function connectDevice(deviceName, username = '', password = '') {
     if (currentDevice === deviceName) {
         disconnectDevice();
         return;
     }
 
-    showAlert('Подключаемся...', 'info');
+    showAlert('Подключение...', 'info');
 
-    fetch(`/api/connect?device=${encodeURIComponent(deviceName)}`)
+    // Создаем URL с параметрами
+    const params = new URLSearchParams();
+    params.append('device', deviceName);
+    if (username) params.append('username', username);
+    if (password) params.append('password', password);
+
+    fetch(`/api/connect?${params.toString()}`)
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                if (data.action === 'connected') {
-                    currentDevice = deviceName;
-                    document.getElementById('connection-status').className = 'status-dot connected';
-                    document.getElementById('connection-text').textContent = 'Подключено';
-                    document.getElementById('device-name').textContent = deviceName;
-                    document.getElementById('disconnect-btn').style.display = 'block';
-
-                    showAlert(data.message, 'success');
-
-                    // Загружаем дерево очередей (новая версия)
-                    loadQueueTree();
-                    
-                    // ЗАГРУЖАЕМ ВСЕ ОЧЕРЕДИ ДЛЯ SELECT
-                    loadAllQueues();
-                    
-                } else if (data.action === 'disconnected') {
-                    currentDevice = null;
-                    document.getElementById('connection-status').className = 'status-dot';
-                    document.getElementById('connection-text').textContent = 'Не подключено';
-                    document.getElementById('device-name').textContent = '';
-                    document.getElementById('queue-stats').textContent = '';
-                    document.getElementById('disconnect-btn').style.display = 'none';
-
-                    showAlert(data.message, 'info');
-
-                    // Очищаем дерево очередей
-                    document.getElementById('queue-tree-v2').innerHTML = '';
-                    
-                    // Очищаем select с очередями
-                    resetQueueSelect();
-                }
-
-                loadDevices();
+                // Успешное подключение
+                currentDevice = deviceName;
+                updateDeviceStatus('connected', deviceName);
+                showAlert(data.message, 'success');
+                loadQueueTree();
+                loadAllQueues();
+                loadDevices(); // Перерисовываем список
+            } else if (data.requires_credentials) {
+                // Требуются учетные данные (логин и пароль)
+                askForCredentials(deviceName, data.saved_username);
             } else {
                 showAlert(data.error || 'Ошибка подключения', 'error');
             }
@@ -174,6 +432,151 @@ function connectDevice(deviceName) {
             console.error('Ошибка подключения:', error);
             showAlert('Ошибка подключения', 'error');
         });
+}
+
+// В app.js - создаем новую функцию askForCredentials()
+
+function askForCredentials(deviceName, savedUsername = '') {
+    // Если сохраненного логина нет, используем дефолтный (nur001)
+    const defaultUsername = savedUsername || 'nur001';
+    
+    // Создаем модальное окно для ввода ЛОГИНА И ПАРОЛЯ
+    const modal = document.createElement('div');
+    modal.id = 'credentials-modal';
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+    `;
+    
+    modal.innerHTML = `
+        <div style="background: linear-gradient(145deg, #2c2c2c, #262626);
+                    padding: 25px;
+                    border-radius: 8px;
+                    width: 400px;
+                    border: 1px solid #3a3a3a;
+                    color: #d8d9da;">
+            <h3 style="margin-bottom: 15px; color: #ffffff;">
+                <i class="fas fa-key"></i> Введите учетные данные
+            </h3>
+            <p style="margin-bottom: 20px; font-size: 14px;">
+                Для устройства: <strong>${deviceName}</strong>
+            </p>
+            
+            <!-- ПОЛЕ ДЛЯ ЛОГИНА -->
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; font-size: 14px;">
+                    <i class="fas fa-user"></i> Имя пользователя:
+                </label>
+                <input type="text" 
+                       id="username-input" 
+                       value="${defaultUsername}" 
+                       placeholder="Имя пользователя" 
+                       style="width: 100%; padding: 10px; border-radius: 4px; 
+                              background: #1a1d23; border: 1px solid #3a3a3a; 
+                              color: #ffffff;">
+            </div>
+            
+            <!-- ПОЛЕ ДЛЯ ПАРОЛЯ -->
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 5px; font-size: 14px;">
+                    <i class="fas fa-lock"></i> Пароль:
+                </label>
+                <input type="password" 
+                       id="password-input" 
+                       placeholder="Пароль устройства" 
+                       style="width: 100%; padding: 10px; border-radius: 4px; 
+                              background: #1a1d23; border: 1px solid #3a3a3a; 
+                              color: #ffffff;">
+            </div>
+            
+            <!-- ЧЕКБОКС ДЛЯ ЗАПОМИНАНИЯ -->
+            <div style="margin-bottom: 15px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="remember-credentials" checked>
+                    <span>Запомнить учетные данные</span>
+                </label>
+            </div>
+            
+            <!-- КНОПКИ -->
+            <div style="display: flex; gap: 10px;">
+                <button onclick="submitCredentials('${deviceName}')" 
+                        style="flex: 1; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                               color: white; border: none; padding: 10px; border-radius: 4px;
+                               cursor: pointer;">
+                    <i class="fas fa-check"></i> Подключиться
+                </button>
+                <button onclick="cancelCredentials()" 
+                        style="flex: 1; background: #4a4a4a; color: white; 
+                               border: none; padding: 10px; border-radius: 4px;
+                               cursor: pointer;">
+                    <i class="fas fa-times"></i> Отмена
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    document.getElementById('username-input').focus();
+    
+    // Авто-фокус на пароле после ввода логина
+    document.getElementById('username-input').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            document.getElementById('password-input').focus();
+        }
+    });
+    
+    // Отправка формы по Enter в поле пароля
+    document.getElementById('password-input').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            submitCredentials(deviceName);
+        }
+    });
+}
+
+// создаем новую функцию submitCredentials()
+
+function submitCredentials(deviceName) {
+    const usernameInput = document.getElementById('username-input');
+    const passwordInput = document.getElementById('password-input');
+    const rememberCheckbox = document.getElementById('remember-credentials');
+    
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value.trim();
+    
+    if (!username || !password) {
+        showAlert('Введите логин и пароль', 'error');
+        return;
+    }
+    
+    // Закрываем модальное окно
+    const modal = document.getElementById('credentials-modal');
+    if (modal) modal.remove();
+    
+    showAlert('Подключение...', 'info');
+    
+    // Отправляем запрос с логином и паролем
+    connectDevice(deviceName, username, password);
+    
+    // Сообщение о запоминании данных
+    if (rememberCheckbox.checked) {
+        // Данные сохранятся автоматически на сервере при успешном подключении
+        showAlert('Учетные данные будут сохранены', 'info');
+    }
+}
+
+// В app.js - создаем новую функцию cancelCredentials()
+
+function cancelCredentials() {
+    const modal = document.getElementById('credentials-modal');
+    if (modal) modal.remove();
 }
 
 // Функция для отключения
