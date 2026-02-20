@@ -8,6 +8,32 @@
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+    <!-- ОВЕРЛЕЙ ЗАГРУЗКИ -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner">
+            <div class="spinner-circle"></div>
+            <div class="loading-text" id="loading-text">Загрузка...</div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО ОШИБОК -->
+    <div id="error-modal" class="error-modal" style="display: none;">
+        <div class="error-modal-content">
+            <div class="error-modal-header">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>Ошибка</span>
+            </div>
+            <div class="error-modal-body" id="error-modal-text">
+                Текст ошибки
+            </div>
+            <div class="error-modal-footer">
+                <button class="btn btn-danger" onclick="hideErrorModal()">
+                    <i class="fas fa-times"></i> Закрыть
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div class="container">
         <!-- ШАПКА -->
         <header>
@@ -54,13 +80,27 @@
     <div class="device-section">
         <h2>
             <i class="fas fa-server"></i> Устройства
-            <button class="btn btn-secondary" onclick="showNetBoxConfig()" 
-                    style="margin-left: auto; padding: 4px 8px; font-size: 12px;" 
+            <button class="btn btn-secondary" onclick="showNetBoxConfig()"
+                    style="margin-left: auto; padding: 4px 8px; font-size: 12px;"
                     title="Настройки NetBox">
                 <i class="fas fa-cog"></i>
             </button>
         </h2>
-        
+
+        <!-- ПОЛЕ ПОИСКА УСТРОЙСТВ -->
+        <div class="device-search-container">
+            <i class="fas fa-search device-search-icon"></i>
+            <input type="text"
+                   id="device-search"
+                   class="device-search-input"
+                   placeholder="Быстрый поиск устройства..."
+                   oninput="searchDevices(this.value)"
+                   autocomplete="off">
+            <button class="device-search-clear" onclick="clearDeviceSearch()" id="search-clear-btn" style="display: none;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
         <div class="device-list-container">
             <!-- Заголовок с количеством -->
             <div class="device-list-header">

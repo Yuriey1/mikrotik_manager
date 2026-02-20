@@ -4,6 +4,7 @@ let queueTreeData = []; // Хранит все данные дерева
 let queueTreeFiltered = []; // Отфильтрованные данные
 let queueTreeExpanded = {}; // Состояние развернутости узлов
 let netboxConfigured = false;
+let allDevices = {}; // Хранит все устройства для поиска
 
 // Загрузка при старте
 document.addEventListener('DOMContentLoaded', function() {
@@ -107,9 +108,12 @@ function getTabName(tabKey) {
 function loadDevices() {
     console.log('Загрузка устройств из NetBox...');
     
+    showLoading('Загрузка устройств...');
+    
     fetch('/api/devices')
         .then(response => response.json())
         .then(data => {
+            hideLoading();
             const deviceList = document.getElementById('device-list');
             deviceList.innerHTML = '';
 
@@ -136,6 +140,9 @@ function loadDevices() {
 
             const devices = data.devices || {};
             const deviceCount = Object.keys(devices).length;
+
+            // Сохраняем устройства для поиска
+            allDevices = devices;
 
             // Обновляем счетчик
             document.getElementById('device-count').textContent = deviceCount;
@@ -169,6 +176,7 @@ function loadDevices() {
             }
         })
         .catch(error => {
+            hideLoading();
             console.error('Ошибка загрузки устройств:', error);
             const deviceList = document.getElementById('device-list');
             deviceList.innerHTML = `
@@ -192,6 +200,7 @@ function loadDevices() {
 function createDeviceCard(name, device) {
     const li = document.createElement('li');
     li.className = 'device-item';
+    li.setAttribute('data-device-name', name); // Добавляем атрибут для поиска
     
     if (currentDevice === name) {
         li.classList.add('active');
@@ -402,7 +411,7 @@ function connectDevice(deviceName, username = '', password = '') {
         return;
     }
 
-    showAlert('Подключение...', 'info');
+    showLoading('Подключение к ' + deviceName + '...');
 
     // Создаем URL с параметрами
     const params = new URLSearchParams();
@@ -413,6 +422,7 @@ function connectDevice(deviceName, username = '', password = '') {
     fetch(`/api/connect?${params.toString()}`)
         .then(response => response.json())
         .then(data => {
+            hideLoading();
             if (data.success) {
                 // Успешное подключение
                 currentDevice = deviceName;
@@ -429,6 +439,7 @@ function connectDevice(deviceName, username = '', password = '') {
             }
         })
         .catch(error => {
+            hideLoading();
             console.error('Ошибка подключения:', error);
             showAlert('Ошибка подключения', 'error');
         });
@@ -586,11 +597,12 @@ function disconnectDevice() {
         return;
     }
 
-    showAlert('Отключаемся...', 'info');
+    showLoading('Отключение...');
 
     fetch('/api/disconnect')
         .then(response => response.json())
         .then(data => {
+            hideLoading();
             if (data.success) {
                 currentDevice = null;
                 document.getElementById('connection-status').className = 'status-dot';
@@ -611,6 +623,7 @@ function disconnectDevice() {
             }
         })
         .catch(error => {
+            hideLoading();
             console.error('Ошибка отключения:', error);
             showAlert('Ошибка отключения', 'error');
         });
@@ -826,8 +839,10 @@ function addEmployee() {
     const resultsDiv = document.getElementById('employee-results');
     resultsDiv.innerHTML = '<div class="toast toast-info">Проверяем IP и MAC адрес...</div>';
 
+    // Показываем спиннер
+    showLoading('Добавление сотрудника...');
+
     // ШАГ 1: Проверка принадлежности IP к сетям микротика
-    showAlert('Проверка принадлежности IP к сетям микротика...', 'info');
     
     // Сначала делаем проверку IP
     fetch(`/api/check_ip?ip=${encodeURIComponent(ip)}`)
@@ -835,6 +850,7 @@ function addEmployee() {
         .then(ipCheckData => {
             if (!ipCheckData.success) {
                 // IP не принадлежит сетям микротика
+                hideLoading();
                 showAlert(ipCheckData.error || 'IP не принадлежит сетям микротика', 'error');
                 resultsDiv.innerHTML = `
                     <div class="toast toast-error">
@@ -843,9 +859,6 @@ function addEmployee() {
                 `;
                 return;
             }
-            
-            // IP прошел проверку, продолжаем
-            showAlert('IP проверен успешно, ищем MAC адрес...', 'success');
             
             // ШАГ 2: Получаем текущий MAC из DHCP
             fetch(`/api/find_dhcp_lease?ip=${encodeURIComponent(ip)}`)
@@ -857,37 +870,18 @@ function addEmployee() {
                         // Нашли текущий MAC в DHCP - используем его
                         finalMac = dhcpData.lease['mac-address'];
                         document.getElementById('mac-address').value = finalMac;
-                        showAlert('Использован MAC адрес из DHCP', 'info');
                     } else if (manualMac) {
                         // Пользователь вручную заполнил MAC
                         finalMac = manualMac;
-                        showAlert('Использован указанный вручную MAC адрес', 'info');
                     } else {
                         // Ни DHCP, ни вручную MAC не указаны
+                        hideLoading();
                         resultsDiv.innerHTML = `
                             <div class="toast toast-warning">
                                 👉 MAC адрес не найден в DHCP. Укажите MAC адрес вручную.
                             </div>
                         `;
                         return;
-                    }
-
-                    // ШАГ 3: Подтверждение для работы без очередей (если не выбраны)
-                    if (selectedQueues.length === 0) {
-                        const proceed = confirm(
-                            'Вы не выбрали очереди. Сотрудник будет добавлен без ограничений очередей.\n\n' +
-                            'Вы можете использовать настройки по умолчанию или добавить в очередь позже.\n\n' +
-                            'Продолжить?'
-                        );
-                        
-                        if (!proceed) {
-                            resultsDiv.innerHTML = `
-                                <div class="toast toast-info">
-                                    📋 Отменено пользователем
-                                </div>
-                            `;
-                            return;
-                        }
                     }
 
                     // Готовые данные для отправки
@@ -910,6 +904,7 @@ function addEmployee() {
                     })
                     .then(response => response.json())
                     .then(result => {
+                        hideLoading();
                         if (result.success) {
                             let successMessage = `Сотрудник ${fullName} успешно добавлен`;
                             
@@ -953,18 +948,21 @@ function addEmployee() {
                         }
                     })
                     .catch(error => {
+                        hideLoading();
                         console.error('Ошибка отправки данных:', error);
                         showAlert('Ошибка отправки данных', 'error');
                         resultsDiv.innerHTML = '';
                     });
                 })
                 .catch(error => {
+                    hideLoading();
                     console.error('Ошибка проверки DHCP:', error);
                     showAlert('Ошибка проверки DHCP', 'error');
                     resultsDiv.innerHTML = '';
                 });
         })
         .catch(error => {
+            hideLoading();
             console.error('Ошибка проверки IP:', error);
             showAlert('Ошибка проверки IP', 'error');
             resultsDiv.innerHTML = '';
@@ -2635,3 +2633,164 @@ function cancelIPSelection() {
     
     showAlert('Изменения отменены', 'info');
 }
+
+// ===== ФУНКЦИИ ПОИСКА УСТРОЙСТВ =====
+
+// Поиск устройств в реальном времени - только прокрутка к найденному
+function searchDevices(query) {
+    const clearBtn = document.getElementById('search-clear-btn');
+    const deviceList = document.getElementById('device-list');
+    const deviceItems = deviceList.querySelectorAll('.device-item');
+    
+    // Показываем/скрываем кнопку очистки
+    if (query.length > 0) {
+        clearBtn.style.display = 'flex';
+    } else {
+        clearBtn.style.display = 'none';
+    }
+    
+    // Убираем подсветку со всех
+    deviceItems.forEach(item => item.classList.remove('found'));
+    
+    // Если поисковый запрос пуст - прокручиваем в верх
+    if (!query || query.trim() === '') {
+        const scrollContainer = document.querySelector('.device-list-scroll');
+        if (scrollContainer) {
+            scrollContainer.scrollTop = 0;
+        }
+        return;
+    }
+    
+    const searchTerm = query.toLowerCase().trim();
+    
+    // Ищем первое совпадение по data-device-name атрибуту
+    for (const item of deviceItems) {
+        // Получаем имя устройства из data-атрибута
+        const deviceName = (item.getAttribute('data-device-name') || '').toLowerCase();
+        
+        // Поиск подстроки в любом месте имени
+        if (deviceName.includes(searchTerm)) {
+            // Подсвечиваем найденное
+            item.classList.add('found');
+            
+            // Прокручиваем ТОЛЬКО контейнер списка, не страницу
+            const scrollContainer = document.querySelector('.device-list-scroll');
+            if (scrollContainer) {
+                // Позиция элемента относительно контейнера прокрутки
+                const containerRect = scrollContainer.getBoundingClientRect();
+                const itemRect = item.getBoundingClientRect();
+                
+                // Вычисляем новую позицию прокрутки
+                const scrollTop = scrollContainer.scrollTop;
+                const relativeTop = itemRect.top - containerRect.top;
+                const newScrollTop = scrollTop + relativeTop - 10;
+                
+                scrollContainer.scrollTop = newScrollTop;
+            }
+            break; // Прерываем после первого найденного
+        }
+    }
+}
+
+// Очистка поиска устройств
+function clearDeviceSearch() {
+    const searchInput = document.getElementById('device-search');
+    const clearBtn = document.getElementById('search-clear-btn');
+    const deviceList = document.getElementById('device-list');
+    
+    // Очищаем поле поиска
+    searchInput.value = '';
+    clearBtn.style.display = 'none';
+    
+    // Убираем подсветку со всех устройств
+    const deviceItems = deviceList.querySelectorAll('.device-item');
+    deviceItems.forEach(item => item.classList.remove('found'));
+    
+    // Прокручиваем список в самый верх
+    const scrollContainer = document.querySelector('.device-list-scroll');
+    if (scrollContainer) {
+        scrollContainer.scrollTop = 0;
+    }
+    
+    // Фокус на поле поиска
+    searchInput.focus();
+}
+
+// Обработчик горячих клавиш для поиска
+document.addEventListener('keydown', function(e) {
+    // Ctrl+F или / - фокус на поиск
+    if ((e.ctrlKey && e.key === 'f') || (e.key === '/' && document.activeElement.tagName !== 'INPUT')) {
+        const searchInput = document.getElementById('device-search');
+        if (searchInput) {
+            e.preventDefault();
+            searchInput.focus();
+            searchInput.select();
+        }
+    }
+    
+    // Escape - очистить поиск и убрать фокус
+    if (e.key === 'Escape') {
+        const searchInput = document.getElementById('device-search');
+        if (searchInput && document.activeElement === searchInput) {
+            clearDeviceSearch();
+            searchInput.blur();
+        }
+    }
+});
+
+// ===== ФУНКЦИИ СПИННЕРА ЗАГРУЗКИ =====
+
+// Показать спиннер
+function showLoading(text = 'Загрузка...') {
+    const overlay = document.getElementById('loading-overlay');
+    const loadingText = document.getElementById('loading-text');
+    if (overlay) {
+        loadingText.textContent = text;
+        overlay.style.display = 'flex';
+    }
+}
+
+// Скрыть спиннер
+function hideLoading() {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+}
+
+// ===== МОДАЛЬНОЕ ОКНО ОШИБОК =====
+
+// Показать модальное окно ошибки
+function showErrorModal(errorText) {
+    hideLoading(); // Сначала скрываем спиннер
+    
+    const modal = document.getElementById('error-modal');
+    const textEl = document.getElementById('error-modal-text');
+    if (modal && textEl) {
+        textEl.textContent = errorText;
+        modal.style.display = 'flex';
+    }
+}
+
+// Скрыть модальное окно ошибки
+function hideErrorModal() {
+    const modal = document.getElementById('error-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Закрытие по клику вне окна
+document.addEventListener('click', function(e) {
+    const modal = document.getElementById('error-modal');
+    if (e.target === modal) {
+        hideErrorModal();
+    }
+});
+
+// Закрытие по Escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        hideErrorModal();
+    }
+});
