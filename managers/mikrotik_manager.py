@@ -60,7 +60,7 @@ class MikroTikManager:
         except Exception as e:
             print(f"⚠️  Ошибка при отключении: {e}")
 
-    # ========== НОВЫЕ МЕТОДЫ ДЛЯ ПРОВЕРКИ IP ==========
+    # ========== ПРОВЕРКА IP ==========
     def is_ip_in_mikrotik_networks(self, ip: str) -> Tuple[bool, Optional[str]]:
         """
         Проверить, принадлежит ли IP сетям микротика
@@ -110,35 +110,6 @@ class MikroTikManager:
             print(f"❌ Ошибка проверки IP: {e}")
             traceback.print_exc()
             return False, None
-
-    def get_mac_from_dhcp(self, ip: str) -> Optional[str]:
-        """Получить MAC адрес из DHCP по IP"""
-        try:
-            print(f"🔍 Поиск MAC для IP {ip} в DHCP...")
-
-            lease = self.find_dhcp_lease(ip)
-            if lease and "mac-address" in lease:
-                mac = lease["mac-address"]
-                print(f"✅ MAC найден в DHCP: {mac}")
-                return mac
-            else:
-                print(f"⚠️ MAC для IP {ip} не найден в DHCP")
-                return None
-
-        except Exception as e:
-            print(f"❌ Ошибка поиска MAC в DHCP: {e}")
-            return None
-
-    def get_all_queues(self) -> List[Dict]:
-        """Получить все очереди микротика"""
-        try:
-            print("🔍 Получение списка очередей...")
-            queues = list(self.api("/queue/simple/print"))
-            print(f"✅ Получено {len(queues)} очередей")
-            return queues
-        except Exception as e:
-            print(f"❌ Ошибка получения очередей: {e}")
-            return []
 
     # ========== DHCP LEASES ==========
     def find_dhcp_lease(self, ip: str, mac: Optional[str] = None) -> Optional[dict]:
@@ -217,61 +188,8 @@ class MikroTikManager:
             traceback.print_exc()
             return None
 
-    def update_dhcp_server_field(self, ip: str) -> bool:
-        """Обновить поле server у существующего DHCP lease"""
-        try:
-            print(f"\n🔧 DHCP: Обновление поля server для {ip}")
-            
-            dhcp_cmd = self.api.path('/ip/dhcp-server/lease')
-            
-            # Находим существующий lease
-            leases = list(dhcp_cmd)
-            lease_id = None
-            current_server = None
-            
-            for lease in leases:
-                if lease.get('address') == ip:
-                    lease_id = lease.get('.id')
-                    current_server = lease.get('server', 'all')
-                    print(f"🔍 Найден lease ID: {lease_id}, текущий server: '{current_server}'")
-                    break
-            
-            if not lease_id:
-                print(f"⚠️ Lease для {ip} не найден")
-                return False
-            
-            # Определяем правильный DHCP сервер
-            dhcp_server = self._find_dhcp_server_for_ip(ip)
-            if not dhcp_server:
-                print(f"⚠️ Не найден подходящий DHCP сервер, оставляем как есть")
-                return True
-            
-            print(f"✅ Правильный DHCP сервер: {dhcp_server}")
-            
-            # Если server уже правильный, ничего не делаем
-            if current_server == dhcp_server:
-                print(f"✅ Поле server уже правильное")
-                return True
-            
-            # Обновляем поле server
-            try:
-                tuple(dhcp_cmd('set', **{
-                    '.id': lease_id,
-                    'server': dhcp_server
-                }))
-                print(f"✅ Поле server обновлено с '{current_server}' на '{dhcp_server}'")
-                return True
-            except Exception as e:
-                print(f"❌ Ошибка обновления поля server: {e}")
-                return False
-                
-        except Exception as e:
-            print(f"❌ Ошибка обновления DHCP server: {e}")
-            traceback.print_exc()
-            return False
-
     def create_static_lease(self, ip: str, mac: str, comment: str = "") -> bool:
-        """Создать/обновить статический DHCP lease (УМНАЯ ЛОГИКА)"""
+        """Создать/обновить статический DHCP lease"""
         try:
             print(f"\n🔧 DHCP: Работа с {ip} -> {mac}")
         
@@ -303,7 +221,6 @@ class MikroTikManager:
         
             # 3. Проверяем статус найденного lease
             if lease:
-                # В MikroTik динамические leases имеют флаг 'D' в поле flags
                 flags = lease.get('flags', '')
                 print(f"📊 DHCP: Поле 'flags': '{flags}'")
                 
@@ -314,7 +231,6 @@ class MikroTikManager:
                 dynamic_field = lease.get('dynamic', '')
                 print(f"📊 DHCP: Поле 'dynamic': '{dynamic_field}'")
                 
-                # Если поле dynamic есть, тоже учитываем его
                 if isinstance(dynamic_field, bool):
                     is_dynamic = is_dynamic or dynamic_field
                 elif isinstance(dynamic_field, str):
@@ -322,93 +238,68 @@ class MikroTikManager:
                 
                 is_disabled = lease.get('disabled') == 'true'
                 current_mac = lease.get('mac-address', '')
-                current_comment = lease.get('comment', '')
                 current_server = lease.get('server', 'all')
             
                 print(f"📊 DHCP: Статус lease:")
-                print(f"  - Динамический (по флагу D): {'D' in flags}")
-                print(f"  - Динамический (определено): {is_dynamic}")
+                print(f"  - Динамический: {is_dynamic}")
                 print(f"  - Отключен: {is_disabled}")
                 print(f"  - MAC: {current_mac}")
                 print(f"  - Server: {current_server}")
-                print(f"  - Комментарий: {current_comment}")
             
-                # 2a. Проверяем MAC адрес
+                # Проверяем MAC адрес
                 if current_mac and current_mac.lower() != mac.lower():
-                    print(f"⚠️ DHCP: MAC адрес отличается! Существующий: {current_mac}, Новый: {mac}")
-                    print(f"🔄 DHCP: Обновляем MAC адрес")
+                    print(f"⚠️ DHCP: MAC отличается! Обновляем...")
                     try:
-                        tuple(dhcp_cmd('set', **{
-                            '.id': lease_id,
-                            'mac-address': mac
-                        }))
-                        print(f"✅ DHCP: MAC адрес обновлен")
+                        tuple(dhcp_cmd('set', **{'.id': lease_id, 'mac-address': mac}))
+                        print(f"✅ DHCP: MAC обновлен")
                     except Exception as e:
                         print(f"❌ DHCP: Ошибка обновления MAC: {e}")
             
-                # 2b. Обновляем поле server если нужно
+                # Обновляем поле server если нужно
                 if current_server != dhcp_server:
-                    print(f"🔄 DHCP: Обновляем поле server с '{current_server}' на '{dhcp_server}'")
+                    print(f"🔄 DHCP: Обновляем поле server")
                     try:
-                        tuple(dhcp_cmd('set', **{
-                            '.id': lease_id,
-                            'server': dhcp_server
-                        }))
+                        tuple(dhcp_cmd('set', **{'.id': lease_id, 'server': dhcp_server}))
                         print(f"✅ DHCP: Поле server обновлено")
                     except Exception as e:
                         print(f"⚠️ DHCP: Ошибка обновления server: {e}")
             
-                # 2c. Если lease динамический - делаем статическим
+                # Если lease динамический - делаем статическим
                 if is_dynamic:
-                    print(f"🔄 DHCP: Делаем динамический lease статическим")
-                    print(f"  Метод 1: Пробуем make-static...")
+                    print(f"🔄 DHCP: Делаем lease статическим...")
                     
                     try:
-                        # Метод 1: make-static - самый правильный способ
                         result = tuple(dhcp_cmd('make-static', **{'.id': lease_id}))
-                        print(f"✅ DHCP: Lease помечен как статический через make-static")
-                        print(f"  Результат make-static: {result}")
+                        print(f"✅ DHCP: Lease помечен как статический")
                         
-                        # После make-static ID может измениться, перезагружаем
+                        # После make-static ID может измениться
                         leases = list(dhcp_cmd)
-                        new_lease_id = None
                         for l in leases:
                             if l.get('address') == ip:
                                 new_lease_id = l.get('.id')
-                                new_flags = l.get('flags', '')
-                                print(f"🔄 DHCP: Обновленный lease ID: {new_lease_id}, флаги: {new_flags}")
-                                # Обновляем lease_id для дальнейшего использования
                                 if new_lease_id:
                                     lease_id = new_lease_id
                                 break
                                 
                     except Exception as e:
                         print(f"⚠️ DHCP: Ошибка make-static: {e}")
-                        print(f"  Метод 2: Пробуем set dynamic=no...")
+                        print(f"  Пробуем set dynamic=no...")
                         
                         try:
-                            # Метод 2: set dynamic=no
-                            tuple(dhcp_cmd('set', **{
-                                '.id': lease_id,
-                                'dynamic': 'no'
-                            }))
-                            print(f"✅ DHCP: Lease помечен как статический через set dynamic=no")
+                            tuple(dhcp_cmd('set', **{'.id': lease_id, 'dynamic': 'no'}))
+                            print(f"✅ DHCP: Lease помечен как статический")
                             
                         except Exception as e2:
                             print(f"⚠️ DHCP: Ошибка set dynamic=no: {e2}")
-                            print(f"  Метод 3: Удаляем и создаем заново...")
+                            print(f"  Удаляем и создаем заново...")
                             
                             try:
-                                # Метод 3: Удаляем и создаем статический заново
-                                # Сначала удаляем динамический
                                 tuple(dhcp_cmd('remove', **{'.id': lease_id}))
                                 print(f"✅ DHCP: Динамический lease удален")
                                 
-                                # Ждем немного
                                 import time
                                 time.sleep(0.5)
                                 
-                                # Создаем новый статический
                                 mikrotik_comment = russian_to_mikrotik_comment(comment) if comment else ""
                                 
                                 lease_data = {
@@ -418,14 +309,12 @@ class MikroTikManager:
                                     'comment': mikrotik_comment
                                 }
                                 
-                                # Добавляем server только если это не 'all'
                                 if dhcp_server != 'all':
                                     lease_data['server'] = dhcp_server
                                 
                                 tuple(dhcp_cmd('add', **lease_data))
                                 print(f"✅ DHCP: Новый статический lease создан")
                                 
-                                # Получаем новый ID
                                 leases = list(dhcp_cmd)
                                 for l in leases:
                                     if l.get('address') == ip:
@@ -436,24 +325,19 @@ class MikroTikManager:
                                 print(f"❌ DHCP: Ошибка удаления/создания: {e3}")
                                 return False
             
-                # 2d. Если отключен - включаем
+                # Если отключен - включаем
                 if is_disabled:
-                    print(f"🔄 DHCP: Включаем отключенный lease")
+                    print(f"🔄 DHCP: Включаем lease")
                     try:
-                        tuple(dhcp_cmd('set', **{
-                            '.id': lease_id,
-                            'disabled': 'no'
-                        }))
+                        tuple(dhcp_cmd('set', **{'.id': lease_id, 'disabled': 'no'}))
                         print(f"✅ DHCP: Lease включен")
                     except Exception as e:
-                        print(f"⚠️ DHCP: Ошибка включения lease: {e}")
+                        print(f"⚠️ DHCP: Ошибка включения: {e}")
         
             # 4. Если lease не найден - создаем новый
             else:
                 print(f"➕ DHCP: Создаем новый lease для {ip} -> {mac}")
-                print(f"   DHCP сервер: {dhcp_server}")
                 try:
-                    # Создаем с указанием сервера
                     mikrotik_comment = russian_to_mikrotik_comment(comment) if comment else ""
                     
                     lease_data = {
@@ -463,79 +347,57 @@ class MikroTikManager:
                         'comment': mikrotik_comment
                     }
                     
-                    # Добавляем server только если это не 'all'
                     if dhcp_server != 'all':
                         lease_data['server'] = dhcp_server
                     
                     tuple(dhcp_cmd('add', **lease_data))
                     print(f"✅ DHCP: Новый статический lease создан")
                     
-                    # Находим ID созданного lease
                     leases = list(dhcp_cmd)
                     for l in leases:
                         if l.get('address') == ip:
                             lease_id = l.get('.id')
-                            print(f"✅ DHCP: Lease ID: {lease_id}")
                             break
         
                 except Exception as e:
-                    print(f"❌ DHCP: Ошибка создания нового lease: {e}")
+                    print(f"❌ DHCP: Ошибка создания lease: {e}")
                     return False
         
-            # 5. Добавляем/обновляем комментарий (если lease_id найден и comment не пустой)
+            # 5. Добавляем/обновляем комментарий
             if lease_id and comment:
-                print(f"📝 DHCP: Добавляем/обновляем комментарий: {comment}")
+                print(f"📝 DHCP: Добавляем комментарий: {comment}")
                 mikrotik_comment = russian_to_mikrotik_comment(comment)
             
                 try:
-                    # Пробуем команду comment
-                    tuple(dhcp_cmd('comment', **{
-                        'numbers': lease_id,
-                        'comment': mikrotik_comment
-                    }))
-                    print(f"✅ DHCP: Комментарий добавлен/обновлен через comment")
-                
+                    tuple(dhcp_cmd('comment', **{'numbers': lease_id, 'comment': mikrotik_comment}))
+                    print(f"✅ DHCP: Комментарий добавлен")
                 except Exception as e:
-                    print(f"⚠️ DHCP: Ошибка команды comment, пробуем set: {e}")
+                    print(f"⚠️ DHCP: Ошибка comment, пробуем set: {e}")
                     try:
-                        tuple(dhcp_cmd('set', **{
-                            '.id': lease_id,
-                            'comment': mikrotik_comment
-                        }))
+                        tuple(dhcp_cmd('set', **{'.id': lease_id, 'comment': mikrotik_comment}))
                         print(f"✅ DHCP: Комментарий добавлен через set")
                     except Exception as e2:
-                        print(f"❌ DHCP: Ошибка добавления комментария: {e2}")
-                        # Не считаем это критической ошибкой
+                        print(f"⚠️ DHCP: Ошибка добавления комментария: {e2}")
         
-            # 6. Финальная проверка - убеждаемся, что lease статический
-            print(f"🔍 DHCP: Финальная проверка статуса lease...")
+            # 6. Финальная проверка
+            print(f"🔍 DHCP: Финальная проверка...")
             if lease_id:
                 leases = list(dhcp_cmd)
                 for l in leases:
                     if l.get('address') == ip:
                         final_flags = l.get('flags', '')
-                        final_dynamic = l.get('dynamic', '')
-                        final_server = l.get('server', 'all')
-                        final_comment = l.get('comment', '')
                         
-                        print(f"📊 DHCP: Финальный статус:")
-                        print(f"  - Флаги: '{final_flags}' (D = динамический)")
-                        print(f"  - Dynamic: '{final_dynamic}'")
-                        print(f"  - Server: '{final_server}'")
-                        print(f"  - Комментарий: '{final_comment}'")
-                        
-                        # Проверяем, что флаг D исчез
                         if 'D' in final_flags:
-                            print(f"⚠️ DHCP: ВНИМАНИЕ! Lease все еще имеет флаг D (динамический)")
+                            print(f"⚠️ DHCP: Lease все еще динамический!")
                             return False
                         else:
-                            print(f"✅ DHCP: Lease успешно сделан статическим (нет флага D)")
+                            print(f"✅ DHCP: Lease успешно статический")
                             return True
                         
                 print(f"❌ DHCP: Не удалось найти lease после обновления")
                 return False
             else:
-                print(f"❌ DHCP: Не удалось получить/создать lease для {ip}")
+                print(f"❌ DHCP: Не удалось получить/создать lease")
                 return False
             
         except Exception as e:
@@ -543,97 +405,7 @@ class MikroTikManager:
             traceback.print_exc()
             return False
 
-    def _force_make_static_lease(self, ip: str, mac: str, comment: str = "") -> bool:
-        """Принудительно сделать lease статическим (альтернативный метод)"""
-        try:
-            print(
-                f"\n🔧 DHCP Форсированный: Принудительно делаем lease статическим для {ip}"
-            )
-
-            dhcp_cmd = self.api.path("/ip/dhcp-server/lease")
-
-            # Сначала находим все leases для этого IP
-            leases = list(dhcp_cmd)
-            lease_ids = []
-
-            for lease in leases:
-                if lease.get("address") == ip:
-                    lease_id = lease.get(".id")
-                    if lease_id:
-                        lease_ids.append(lease_id)
-                        print(f"🔍 DHCP Форсированный: Найден lease ID: {lease_id}")
-
-            if not lease_ids:
-                print(f"➕ DHCP Форсированный: Создаем новый статический lease")
-                mikrotik_comment = (
-                    russian_to_mikrotik_comment(comment) if comment else ""
-                )
-                tuple(
-                    dhcp_cmd(
-                        "add",
-                        **{
-                            "address": ip,
-                            "mac-address": mac,
-                            "disabled": "no",
-                            "comment": mikrotik_comment,
-                        },
-                    )
-                )
-                return True
-
-            # Удаляем все существующие leases для этого IP
-            for lease_id in lease_ids:
-                print(f"🗑️ DHCP Форсированный: Удаляем lease ID: {lease_id}")
-                try:
-                    tuple(dhcp_cmd("remove", **{".id": lease_id}))
-                except Exception as e:
-                    print(f"⚠️ DHCP Форсированный: Ошибка удаления {lease_id}: {e}")
-
-            # Ждем
-            import time
-
-            time.sleep(1)
-
-            # Создаем новый статический lease
-            print(f"➕ DHCP Форсированный: Создаем новый статический lease")
-            mikrotik_comment = russian_to_mikrotik_comment(comment) if comment else ""
-            tuple(
-                dhcp_cmd(
-                    "add",
-                    **{
-                        "address": ip,
-                        "mac-address": mac,
-                        "disabled": "no",
-                        "comment": mikrotik_comment,
-                    },
-                )
-            )
-
-            # Проверяем результат
-            time.sleep(0.5)
-            leases = list(dhcp_cmd)
-            for lease in leases:
-                if lease.get("address") == ip:
-                    flags = lease.get("flags", "")
-                    if "D" not in flags:
-                        print(
-                            f"✅ DHCP Форсированный: Успешно создан статический lease"
-                        )
-                        return True
-                    else:
-                        print(
-                            f"❌ DHCP Форсированный: Lease все еще динамический (флаг D)"
-                        )
-                        return False
-
-            print(f"❌ DHCP Форсированный: Не удалось создать lease")
-            return False
-
-        except Exception as e:
-            print(f"❌ DHCP Форсированный: Критическая ошибка: {e}")
-            traceback.print_exc()
-            return False
-
+    # ========== ARP ==========
     def add_static_arp(
         self, ip: str, mac: str, comment: str = "", interface: Optional[str] = None
     ) -> bool:
@@ -641,7 +413,6 @@ class MikroTikManager:
         try:
             print(f"\n🔧 ARP: Начинаем работу с {ip} -> {mac}")
 
-            # 1. Проверяем принадлежность IP к сетям микротика
             if interface is None:
                 belongs, found_interface = self.is_ip_in_mikrotik_networks(ip)
                 if not belongs:
@@ -650,18 +421,17 @@ class MikroTikManager:
                     )
                 interface = found_interface
 
-            # Получаем объект пути
             arp_cmd = self.api.path("/ip/arp")
 
-            # 2. Проверяем существующую запись
-            print(f"🔍 ARP: Проверяем существующие ARP записи")
+            # Проверяем существующую запись
+            print(f"🔍 ARP: Проверяем существующие записи")
             arp_entries = list(arp_cmd)
             for entry in arp_entries:
                 if entry.get("address") == ip:
                     print(f"⚠️ ARP: Запись для {ip} уже существует")
                     return True
 
-            # 3. Добавляем новую запись
+            # Добавляем новую запись
             print(f"➕ ARP: Добавляем новую запись")
             print(f"   📍 Интерфейс: {interface}")
             mikrotik_comment = russian_to_mikrotik_comment(comment) if comment else ""
@@ -688,41 +458,13 @@ class MikroTikManager:
 
         except ValueError as e:
             print(f"❌ ARP: {e}")
-            raise  # Пробрасываем наружу для обработки в UI
+            raise
         except Exception as e:
             print(f"❌ ARP: Критическая ошибка: {e}")
             traceback.print_exc()
             return False
 
-    def _find_interface_for_ip(self, ip: str) -> str:
-        """Найти интерфейс для IP (старая версия - оставлена для совместимости)"""
-        try:
-            print(f"🔍 Interface: Ищем интерфейс для IP {ip}")
-
-            # Используем новую функцию проверки
-            belongs, interface = self.is_ip_in_mikrotik_networks(ip)
-
-            if belongs and interface:
-                print(f"✅ Interface: Найден интерфейс '{interface}' для IP {ip}")
-                return interface
-            else:
-                raise ValueError(f"IP {ip} не принадлежит сетям микротика!")
-
-        except ValueError as e:
-            print(f"❌ Interface: {e}")
-            raise  # Пробрасываем ошибку
-        except Exception as e:
-            print(f"⚠️ Interface: Ошибка поиска интерфейса: {e}")
-            raise ValueError(f"Ошибка поиска интерфейса для IP {ip}: {e}")
-
-    def _ip_in_network(self, ip: str, network_addr: str, prefix: int) -> bool:
-        """Проверить принадлежность IP к сети"""
-        try:
-            network = ipaddress.ip_network(f"{network_addr}/{prefix}", strict=False)
-            return ipaddress.ip_address(ip) in network
-        except ValueError:
-            return False
-
+    # ========== FIREWALL ==========
     def add_to_address_list(
         self, list_name: str, address: str, comment: str = ""
     ) -> bool:
@@ -730,11 +472,10 @@ class MikroTikManager:
         try:
             print(f"\n🔧 Firewall: Добавление {address} в список '{list_name}'")
 
-            # Получаем объект пути
             fw_cmd = self.api.path("/ip/firewall/address-list")
 
-            # 1. Проверяем существующую запись
-            print(f"🔍 Firewall: Проверяем существующие записи в списке '{list_name}'")
+            # Проверяем существующую запись
+            print(f"🔍 Firewall: Проверяем существующие записи")
             addresses = list(fw_cmd)
 
             for addr in addresses:
@@ -742,7 +483,7 @@ class MikroTikManager:
                     print(f"⚠️ Firewall: Адрес {address} уже в списке {list_name}")
                     return True
 
-            # 2. Добавляем новую запись
+            # Добавляем новую запись
             print(f"➕ Firewall: Добавляем {address} в список {list_name}")
             mikrotik_comment = russian_to_mikrotik_comment(comment) if comment else ""
 
@@ -770,15 +511,16 @@ class MikroTikManager:
             traceback.print_exc()
             return False
 
+    # ========== QUEUES ==========
     def get_queues(self) -> List[Dict]:
-        """Получить все активные очереди - УПРОЩЕННАЯ ВЕРСИЯ"""
+        """Получить все активные очереди"""
         try:
-            print("📡 DEBUG: Получение очередей с MikroTik...")
+            print("📡 Получение очередей с MikroTik...")
             queues = list(self.api("/queue/simple/print"))
-            print(f"📊 DEBUG: Получено {len(queues)} очередей")
+            print(f"📊 Получено {len(queues)} очередей")
 
             if not queues:
-                print("⚠️ DEBUG: Очереди не найдены!")
+                print("⚠️ Очереди не найдены!")
                 return []
 
             # Фильтруем отключенные очереди
@@ -788,38 +530,33 @@ class MikroTikManager:
                 flags = queue.get("flags", "")
                 disabled_value = queue.get("disabled", "")
 
-                # Проверяем disabled
                 disabled = False
                 if isinstance(disabled_value, bool):
                     disabled = disabled_value
                 elif isinstance(disabled_value, str):
                     disabled = disabled_value.lower() == "true"
 
-                # Проверяем флаги
                 is_disabled_by_flags = "X" in flags
 
                 if not disabled and not is_disabled_by_flags:
                     active_queues.append(queue)
 
-            print(f"✅ DEBUG: Активных: {len(active_queues)}")
-
-            # ВОЗВРАЩАЕМ БЕЗ СОРТИРОВКИ - пусть queue_builder сортирует
+            print(f"✅ Активных: {len(active_queues)}")
             return active_queues
 
         except Exception as e:
-            print(f"❌ DEBUG: Ошибка получения очередей: {e}")
+            print(f"❌ Ошибка получения очередей: {e}")
             traceback.print_exc()
             return []
 
     def add_ip_to_queue(self, queue_id: str, ip: str) -> bool:
-        """Добавить IP в очередь (ВАШ СТИЛЬ)"""
+        """Добавить IP в очередь"""
         try:
             print(f"\n🔧 Queue: Добавление IP {ip} в очередь ID: {queue_id}")
 
-            # Получаем объект пути
             queue_cmd = self.api.path("/queue/simple")
 
-            # 1. Получаем текущую очередь
+            # Получаем текущую очередь
             print(f"🔍 Queue: Получаем данные очереди")
             queues = list(queue_cmd)
             current_target = ""
@@ -827,16 +564,14 @@ class MikroTikManager:
             for queue in queues:
                 if queue.get(".id") == queue_id:
                     current_target = queue.get("target", "")
-                    print(
-                        f"✅ Queue: Найдена очередь, текущий target: {current_target}"
-                    )
+                    print(f"✅ Queue: Найдена очередь, target: {current_target}")
                     break
 
             if not current_target:
                 print(f"⚠️ Queue: Очередь не найдена или пустая")
                 current_target = ""
 
-            # 2. Формируем новый target
+            # Формируем новый target
             if "/" in ip:
                 ip_with_mask = ip
             else:
@@ -849,7 +584,7 @@ class MikroTikManager:
 
             print(f"🔄 Queue: Новый target: {new_target}")
 
-            # 3. Обновляем очередь
+            # Обновляем очередь
             try:
                 tuple(queue_cmd("set", **{".id": queue_id, "target": new_target}))
                 print(f"✅ Queue: Очередь успешно обновлена")
@@ -857,11 +592,8 @@ class MikroTikManager:
 
             except Exception as e:
                 print(f"❌ Queue: Ошибка обновления: {e}")
-                # Пробуем альтернативный способ
                 try:
-                    self.api(
-                        "/queue/simple/set", **{".id": queue_id, "target": new_target}
-                    )
+                    self.api("/queue/simple/set", **{".id": queue_id, "target": new_target})
                     print(f"✅ Queue: Очередь обновлена (альтернативным методом)")
                     return True
                 except Exception as e2:
@@ -873,21 +605,39 @@ class MikroTikManager:
             traceback.print_exc()
             return False
 
+    # ========== DHCP POOLS ==========
+    def get_dhcp_pools(self) -> List[Dict]:
+        """Получить DHCP пулы"""
+        try:
+            pools_cmd = self.api.path('/ip/pool')
+            pools = list(pools_cmd)
+            return pools
+        except Exception as e:
+            print(f"❌ Ошибка получения DHCP пулов: {e}")
+            return []
+
+    def get_dhcp_leases(self) -> List[Dict]:
+        """Получить все DHCP leases"""
+        try:
+            leases_cmd = self.api.path('/ip/dhcp-server/lease')
+            leases = list(leases_cmd)
+            return leases
+        except Exception as e:
+            print(f"❌ Ошибка получения DHCP leases: {e}")
+            return []
+
     def get_free_dhcp_ips(self, max_per_pool: int = 20) -> Dict[str, List[str]]:
         """Получить свободные IP адреса из DHCP пулов"""
         try:
             print(f"🔍 Поиск свободных IP адресов в DHCP пулах...")
             
-            # Получаем все пулы
             pools = self.get_dhcp_pools()
             print(f"📊 Найдено пулов DHCP: {len(pools)}")
             
-            # Получаем все leases
             leases = self.get_dhcp_leases()
             used_ips = {lease.get('address') for lease in leases if lease.get('address')}
             print(f"📊 Используется IP адресов: {len(used_ips)}")
             
-            # Анализируем каждый пул
             free_ips_by_pool = {}
             
             for pool in pools:
@@ -897,94 +647,36 @@ class MikroTikManager:
                 if not ranges:
                     continue
                 
-                print(f"🔍 Анализ пула '{pool_name}': {ranges}")
+                # Парсим диапазоны
+                free_ips = []
+                for range_str in ranges.split(','):
+                    range_str = range_str.strip()
+                    if '-' in range_str:
+                        try:
+                            start_ip, end_ip = range_str.split('-')
+                            start = ipaddress.ip_address(start_ip.strip())
+                            end = ipaddress.ip_address(end_ip.strip())
+                            
+                            # Перебираем IP в диапазоне
+                            current = start
+                            count = 0
+                            while current <= end and count < max_per_pool:
+                                ip_str = str(current)
+                                if ip_str not in used_ips:
+                                    free_ips.append(ip_str)
+                                    count += 1
+                                current += 1
+                        except Exception as e:
+                            print(f"⚠️ Ошибка парсинга диапазона {range_str}: {e}")
+                            continue
                 
-                # Парсим диапазоны IP
-                pool_ips = set()
-                for ip_range in ranges.split(','):
-                    if ip_range.strip():
-                        ips = self._parse_ip_range(ip_range.strip())
-                        pool_ips.update(ips)
-                
-                if not pool_ips:
-                    continue
-                
-                # Находим свободные IP
-                free_ips = sorted(
-                    pool_ips - used_ips,
-                    key=lambda x: [int(part) for part in x.split('.')]
-                )
-                
-                # Ограничиваем количество для отображения
-                display_ips = free_ips[:max_per_pool]
-                
-                free_ips_by_pool[pool_name] = {
-                    'total_ips': len(pool_ips),
-                    'used_ips': len(pool_ips.intersection(used_ips)),
-                    'free_ips': len(free_ips),
-                    'free_list': display_ips,
-                    'has_more': len(free_ips) > max_per_pool,
-                    'ranges': ranges
-                }
-                
-                print(f"   📊 Свободно: {len(free_ips)}/{len(pool_ips)}")
+                if free_ips:
+                    free_ips_by_pool[pool_name] = free_ips
             
+            print(f"✅ Найдено свободных IP: {sum(len(ips) for ips in free_ips_by_pool.values())}")
             return free_ips_by_pool
             
         except Exception as e:
             print(f"❌ Ошибка поиска свободных IP: {e}")
             traceback.print_exc()
             return {}
-    
-    def _parse_ip_range(self, ip_range: str) -> List[str]:
-        """Преобразовать диапазон IP в список адресов"""
-        ip_range = ip_range.strip()
-        
-        if '-' in ip_range:
-            # Формат: 192.168.1.100-192.168.1.200
-            start_ip, end_ip = ip_range.split('-')
-            try:
-                start = ipaddress.IPv4Address(start_ip.strip())
-                end = ipaddress.IPv4Address(end_ip.strip())
-                return [str(ipaddress.IPv4Address(ip)) for ip in range(int(start), int(end) + 1)]
-            except (ipaddress.AddressValueError, ValueError) as e:
-                print(f"⚠️ Ошибка парсинга диапазона {ip_range}: {e}")
-                return []
-        elif '/' in ip_range:
-            # Формат: 192.168.1.0/24
-            try:
-                network = ipaddress.IPv4Network(ip_range, strict=False)
-                return [str(ip) for ip in network.hosts()]
-            except ipaddress.AddressValueError as e:
-                print(f"⚠️ Ошибка парсинга сети {ip_range}: {e}")
-                return []
-        else:
-            # Одиночный IP
-            try:
-                ipaddress.IPv4Address(ip_range)
-                return [ip_range]
-            except ipaddress.AddressValueError as e:
-                print(f"⚠️ Ошибка парсинга IP {ip_range}: {e}")
-                return []
-    
-    def get_dhcp_pools(self) -> List[Dict]:
-        """Получить все DHCP пулы"""
-        try:
-            print("🔍 Получение DHCP пулов...")
-            pools = list(self.api('/ip/pool/print'))
-            print(f"✅ Получено {len(pools)} пулов")
-            return pools
-        except Exception as e:
-            print(f"❌ Ошибка получения DHCP пулов: {e}")
-            return []
-    
-    def get_dhcp_leases(self) -> List[Dict]:
-        """Получить все DHCP leases"""
-        try:
-            print("🔍 Получение DHCP leases...")
-            leases = list(self.api('/ip/dhcp-server/lease/print'))
-            print(f"✅ Получено {len(leases)} leases")
-            return leases
-        except Exception as e:
-            print(f"❌ Ошибка получения DHCP leases: {e}")
-            return []
