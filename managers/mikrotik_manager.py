@@ -724,13 +724,16 @@ class MikroTikManager:
         try:
             print(f"🔍 Поиск свободных IP адресов в DHCP пулах...")
             
+            # Получаем все пулы
             pools = self.get_dhcp_pools()
             print(f"📊 Найдено пулов DHCP: {len(pools)}")
             
+            # Получаем все leases
             leases = self.get_dhcp_leases()
             used_ips = {lease.get('address') for lease in leases if lease.get('address')}
             print(f"📊 Используется IP адресов: {len(used_ips)}")
             
+            # Анализируем каждый пул
             free_ips_by_pool = {}
             
             for pool in pools:
@@ -740,39 +743,75 @@ class MikroTikManager:
                 if not ranges:
                     continue
                 
-                # Парсим диапазоны
-                free_ips = []
-                for range_str in ranges.split(','):
-                    range_str = range_str.strip()
-                    if '-' in range_str:
-                        try:
-                            start_ip, end_ip = range_str.split('-')
-                            start = ipaddress.ip_address(start_ip.strip())
-                            end = ipaddress.ip_address(end_ip.strip())
-                            
-                            # Перебираем IP в диапазоне
-                            current = start
-                            count = 0
-                            while current <= end and count < max_per_pool:
-                                ip_str = str(current)
-                                if ip_str not in used_ips:
-                                    free_ips.append(ip_str)
-                                    count += 1
-                                current += 1
-                        except Exception as e:
-                            print(f"⚠️ Ошибка парсинга диапазона {range_str}: {e}")
-                            continue
+                print(f"🔍 Анализ пула '{pool_name}': {ranges}")
                 
-                if free_ips:
-                    free_ips_by_pool[pool_name] = free_ips
+                # Парсим диапазоны IP
+                pool_ips = set()
+                for ip_range in ranges.split(','):
+                    if ip_range.strip():
+                        ips = self._parse_ip_range(ip_range.strip())
+                        pool_ips.update(ips)
+                
+                if not pool_ips:
+                    continue
+                
+                # Находим свободные IP
+                free_ips = sorted(
+                    pool_ips - used_ips,
+                    key=lambda x: [int(part) for part in x.split('.')]
+                )
+                
+                # Ограничиваем количество для отображения
+                display_ips = free_ips[:max_per_pool]
+                
+                free_ips_by_pool[pool_name] = {
+                    'total_ips': len(pool_ips),
+                    'used_ips': len(pool_ips.intersection(used_ips)),
+                    'free_ips': len(free_ips),
+                    'free_list': display_ips,
+                    'has_more': len(free_ips) > max_per_pool,
+                    'ranges': ranges
+                }
+                
+                print(f"   📊 Свободно: {len(free_ips)}/{len(pool_ips)}")
             
-            print(f"✅ Найдено свободных IP: {sum(len(ips) for ips in free_ips_by_pool.values())}")
             return free_ips_by_pool
             
         except Exception as e:
             print(f"❌ Ошибка поиска свободных IP: {e}")
             traceback.print_exc()
             return {}
+    
+    def _parse_ip_range(self, ip_range: str) -> List[str]:
+        """Преобразовать диапазон IP в список адресов"""
+        ip_range = ip_range.strip()
+        
+        if '-' in ip_range:
+            # Формат: 192.168.1.100-192.168.1.200
+            start_ip, end_ip = ip_range.split('-')
+            try:
+                start = ipaddress.IPv4Address(start_ip.strip())
+                end = ipaddress.IPv4Address(end_ip.strip())
+                return [str(ipaddress.IPv4Address(ip)) for ip in range(int(start), int(end) + 1)]
+            except (ipaddress.AddressValueError, ValueError) as e:
+                print(f"⚠️ Ошибка парсинга диапазона {ip_range}: {e}")
+                return []
+        elif '/' in ip_range:
+            # Формат: 192.168.1.0/24
+            try:
+                network = ipaddress.IPv4Network(ip_range, strict=False)
+                return [str(ip) for ip in network.hosts()]
+            except ipaddress.AddressValueError as e:
+                print(f"⚠️ Ошибка парсинга сети {ip_range}: {e}")
+                return []
+        else:
+            # Одиночный IP
+            try:
+                ipaddress.IPv4Address(ip_range)
+                return [ip_range]
+            except ipaddress.AddressValueError as e:
+                print(f"⚠️ Ошибка парсинга IP {ip_range}: {e}")
+                return []
 
     # ========== MAC REPLACEMENT FUNCTIONALITY ==========
     
