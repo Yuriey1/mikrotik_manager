@@ -5,6 +5,9 @@ let queueTreeFiltered = []; // Отфильтрованные данные
 let queueTreeExpanded = {}; // Состояние развернутости узлов
 let netboxConfigured = false;
 let allDevices = {}; // Хранит все устройства для поиска
+let allSubscribers = []; // Хранит всех абонентов DHCP для замены MAC
+let selectedSubscriber = null; // Выбранный абонент для действий
+let internetAccessList = []; // Список IP с доступом в интернет
 
 // Загрузка при старте
 document.addEventListener('DOMContentLoaded', function() {
@@ -99,6 +102,7 @@ function getTabName(tabKey) {
     const tabs = {
         'employee': 'Добавить сотрудника',
         'queues': 'Дерево очередей',
+        'mac-replace': 'Замена MAC',
         'tools': 'Инструменты'
     };
     return tabs[tabKey] || tabKey;
@@ -422,26 +426,57 @@ function connectDevice(deviceName, username = '', password = '') {
     fetch(`/api/connect?${params.toString()}`)
         .then(response => response.json())
         .then(data => {
-            hideLoading();
             if (data.success) {
-                // Успешное подключение
+                // Успешное подключение - показываем прогресс загрузки
+                updateLoadingText('Успешное подключение!');
                 currentDevice = deviceName;
                 updateDeviceStatus('connected', deviceName);
-                showAlert(data.message, 'success');
-                loadQueueTree();
-                loadAllQueues();
-                loadDevices(); // Перерисовываем список
+                
+                // Загружаем данные по очереди с обновлением статуса
+                setTimeout(() => {
+                    updateLoadingText('Загрузка дерева очередей...');
+                    loadQueueTree();
+                }, 300);
+                
+                setTimeout(() => {
+                    updateLoadingText('Загрузка списка очередей...');
+                    loadAllQueues();
+                }, 600);
+                
+                setTimeout(() => {
+                    updateLoadingText('Загрузка DHCP пулов и абонентов...');
+                    loadDhcpPools(false); // Не скрывать спиннер автоматически
+                }, 900);
+                
+                setTimeout(() => {
+                    hideLoading();
+                    showAlert(data.message, 'success');
+                    // Очищаем поисковую строку устройств
+                    const searchInput = document.getElementById('device-search');
+                    if (searchInput) {
+                        searchInput.value = '';
+                    }
+                    const clearBtn = document.getElementById('search-clear-btn');
+                    if (clearBtn) {
+                        clearBtn.style.display = 'none';
+                    }
+                    // Перерисовываем список (показываем кнопку "Отключить")
+                    loadDevices();
+                }, 1500);
+                
             } else if (data.requires_credentials) {
+                hideLoading();
                 // Требуются учетные данные (логин и пароль)
                 askForCredentials(deviceName, data.saved_username);
             } else {
-                showAlert(data.error || 'Ошибка подключения', 'error');
+                hideLoading();
+                showErrorModal(data.error || 'Ошибка подключения');
             }
         })
         .catch(error => {
             hideLoading();
             console.error('Ошибка подключения:', error);
-            showAlert('Ошибка подключения', 'error');
+            showErrorModal('Ошибка подключения');
         });
 }
 
@@ -618,6 +653,9 @@ function disconnectDevice() {
 
                 // Очищаем select с очередями
                 resetQueueSelect();
+
+                // Очищаем список абонентов
+                clearSubscribersList();
 
                 loadDevices();
             }
@@ -2750,6 +2788,14 @@ function showLoading(text = 'Загрузка...') {
     }
 }
 
+// Обновить текст спиннера (для многошаговых операций)
+function updateLoadingText(text) {
+    const loadingText = document.getElementById('loading-text');
+    if (loadingText) {
+        loadingText.textContent = text;
+    }
+}
+
 // Скрыть спиннер
 function hideLoading() {
     const overlay = document.getElementById('loading-overlay');
@@ -2794,3 +2840,740 @@ document.addEventListener('keydown', function(e) {
         hideErrorModal();
     }
 });
+
+// ===== ФУНКЦИИ ЗАМЕНЫ MAC =====
+
+// Загрузка DHCP пулов
+function loadDhcpPools(hideSpinnerAfterLoad = true) {
+    if (!currentDevice) {
+        return;
+    }
+    
+    fetch('/api/dhcp_pools')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const select = document.getElementById('mac-pool-filter');
+                select.innerHTML = '<option value="">Все пулы</option>';
+                
+                data.pools.forEach(pool => {
+                    const option = document.createElement('option');
+                    option.value = pool.name;
+                    option.textContent = `${pool.name} (${pool.ranges})`;
+                    select.appendChild(option);
+                });
+                
+                // Обновляем текст спиннера
+                updateLoadingText('Загрузка списка доступа в интернет...');
+                
+                // Сначала загружаем список internet_access
+                loadInternetAccessList(hideSpinnerAfterLoad);
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка загрузки пулов:', error);
+            if (hideSpinnerAfterLoad) hideLoading();
+        });
+}
+
+// Загрузка списка IP с доступом в интернет
+function loadInternetAccessList(hideSpinnerAfterLoad) {
+    fetch('/api/internet_access')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                internetAccessList = data.ips || [];
+                console.log(`📋 Загружено ${internetAccessList.length} IP с доступом в интернет`);
+            } else {
+                internetAccessList = [];
+            }
+            
+            // Теперь загружаем абонентов
+            updateLoadingText('Загрузка абонентов...');
+            loadSubscribers(hideSpinnerAfterLoad);
+        })
+        .catch(error => {
+            console.error('Ошибка загрузки internet_access:', error);
+            internetAccessList = [];
+            loadSubscribers(hideSpinnerAfterLoad);
+        });
+}
+
+// Загрузка абонентов (автоматически при подключении)
+function loadSubscribers(hideSpinner = false) {
+    if (!currentDevice) {
+        return;
+    }
+    
+    const poolSelect = document.getElementById('mac-pool-filter');
+    const poolName = poolSelect ? poolSelect.value : '';
+    
+    let url = '/api/dhcp_subscribers';
+    if (poolName) {
+        url += `?pool=${encodeURIComponent(poolName)}`;
+    }
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (hideSpinner) hideLoading();
+            if (data.success) {
+                allSubscribers = data.subscribers;
+                renderSubscribersTable(data.subscribers);
+            } else {
+                console.error('Ошибка загрузки абонентов:', data.error);
+                renderSubscribersTable([]);
+            }
+        })
+        .catch(error => {
+            if (hideSpinner) hideLoading();
+            console.error('Ошибка загрузки абонентов:', error);
+            renderSubscribersTable([]);
+        });
+}
+
+// Обновить список абонентов
+function refreshSubscribers() {
+    if (!currentDevice) {
+        showAlert('Сначала подключитесь к устройству', 'error');
+        return;
+    }
+    
+    showLoading('Загрузка DHCP пулов...');
+    clearSubscriberSelection();
+    
+    // Загружаем пулы и абонентов со скрытием спиннера после завершения
+    loadDhcpPools(true);
+}
+
+// Отрисовка таблицы абонентов
+function renderSubscribersTable(subscribers) {
+    const tbody = document.getElementById('subscribers-tbody');
+    const countEl = document.getElementById('subscribers-count');
+    const shownEl = document.getElementById('subscribers-shown');
+    
+    // Считаем сколько абонентов с доступом в интернет
+    let inetCount = 0;
+    subscribers.forEach(sub => {
+        if (internetAccessList.includes(sub.ip)) {
+            inetCount++;
+        }
+    });
+    
+    // Обновляем статистику
+    if (countEl) countEl.textContent = allSubscribers.length;
+    if (shownEl) shownEl.textContent = subscribers.length;
+    
+    if (!subscribers || subscribers.length === 0) {
+        tbody.innerHTML = `
+            <tr class="empty-row">
+                <td colspan="4">
+                    <div class="empty-state">
+                        <i class="fas fa-users"></i>
+                        <p>${currentDevice ? 'Нет абонентов в DHCP' : 'Подключитесь к устройству для загрузки абонентов'}</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = subscribers.map(sub => {
+        const hasInet = internetAccessList.includes(sub.ip);
+        const rowClass = hasInet ? 'has-internet' : '';
+        
+        return `
+            <tr data-ip="${sub.ip}" data-mac="${sub.mac || ''}" data-comment="${escapeHtml(sub.comment || '')}" class="${rowClass}" onclick="selectSubscriber(this)">
+                <td class="col-inet" onclick="event.stopPropagation()">
+                    <label class="inet-checkbox" title="${hasInet ? 'Доступ есть. Нажмите чтобы выключить' : 'Доступа нет. Нажмите чтобы включить'}">
+                        <input type="checkbox" ${hasInet ? 'checked' : ''} onchange="toggleInternetAccess('${sub.ip}', this.checked, '${escapeHtml(sub.comment || '')}')">
+                        <span class="checkmark"></span>
+                    </label>
+                </td>
+                <td class="ip-cell">${sub.ip}</td>
+                <td class="mac-cell">${sub.mac || '<span style="color: var(--text-muted);">—</span>'}</td>
+                <td class="comment-cell" title="${escapeHtml(sub.comment || '')}">${sub.comment || '<span style="color: var(--text-muted);">—</span>'}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Включить/выключить доступ в интернет
+function toggleInternetAccess(ip, enable, comment) {
+    console.log(`Toggle internet: ${ip} -> ${enable}`);
+    
+    fetch('/api/internet_access/toggle', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            ip: ip,
+            enable: enable,
+            comment: comment
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Обновляем локальный список
+            if (enable) {
+                if (!internetAccessList.includes(ip)) {
+                    internetAccessList.push(ip);
+                }
+            } else {
+                const idx = internetAccessList.indexOf(ip);
+                if (idx > -1) {
+                    internetAccessList.splice(idx, 1);
+                }
+            }
+            
+            // Обновляем стиль строки
+            const row = document.querySelector(`tr[data-ip="${ip}"]`);
+            if (row) {
+                if (enable) {
+                    row.classList.add('has-internet');
+                } else {
+                    row.classList.remove('has-internet');
+                }
+            }
+            
+            showAlert(data.message || `Доступ ${enable ? 'включён' : 'выключен'} для ${ip}`, 'success');
+        } else {
+            // Возвращаем чекбокс в прежнее состояние
+            const checkbox = document.querySelector(`tr[data-ip="${ip}"] .inet-checkbox input`);
+            if (checkbox) {
+                checkbox.checked = !enable;
+            }
+            showAlert(data.error || 'Ошибка изменения доступа', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка toggle internet:', error);
+        // Возвращаем чекбокс
+        const checkbox = document.querySelector(`tr[data-ip="${ip}"] .inet-checkbox input`);
+        if (checkbox) {
+            checkbox.checked = !enable;
+        }
+        showAlert('Ошибка соединения', 'error');
+    });
+}
+
+// Экранирование HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Выбор абонента
+function selectSubscriber(row) {
+    console.log('Выбор абонента:', row);
+    
+    // Снимаем выделение со всех
+    const rows = document.querySelectorAll('#subscribers-tbody tr');
+    rows.forEach(r => r.classList.remove('selected'));
+    
+    // Выделяем выбранную строку
+    row.classList.add('selected');
+    
+    // Сохраняем данные выбранного абонента
+    selectedSubscriber = {
+        ip: row.getAttribute('data-ip'),
+        mac: row.getAttribute('data-mac'),
+        comment: row.getAttribute('data-comment')
+    };
+    
+    console.log('Данные абонента:', selectedSubscriber);
+    
+    // Показываем панель действий
+    showActionPanel(selectedSubscriber);
+}
+
+// Показать панель действий
+function showActionPanel(subscriber) {
+    const panel = document.getElementById('subscriber-action-panel');
+    
+    if (!panel) {
+        console.error('Панель действий не найдена!');
+        return;
+    }
+    
+    document.getElementById('selected-ip').textContent = subscriber.ip;
+    document.getElementById('selected-mac').textContent = subscriber.mac || 'нет MAC';
+    document.getElementById('selected-comment').textContent = subscriber.comment || '';
+    
+    panel.style.display = 'block';
+    
+    // Прокручиваем к панели действий
+    setTimeout(() => {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 100);
+    
+    // Скрываем диалог замены MAC если открыт
+    hideMacReplaceDialog();
+    
+    console.log('Панель действий показана для:', subscriber.ip);
+}
+
+// Очистить выбор абонента
+function clearSubscriberSelection() {
+    selectedSubscriber = null;
+    
+    // Снимаем выделение
+    const rows = document.querySelectorAll('#subscribers-tbody tr');
+    rows.forEach(r => r.classList.remove('selected'));
+    
+    // Скрываем панель
+    const panel = document.getElementById('subscriber-action-panel');
+    panel.style.display = 'none';
+    
+    // Скрываем диалог
+    hideMacReplaceDialog();
+}
+
+// Очистить весь список абонентов (при отключении)
+function clearSubscribersList() {
+    allSubscribers = [];
+    selectedSubscriber = null;
+    internetAccessList = []; // Очищаем список доступа
+    
+    // Очищаем таблицу
+    const tbody = document.getElementById('subscribers-tbody');
+    if (tbody) {
+        tbody.innerHTML = `
+            <tr class="empty-row">
+                <td colspan="3">
+                    <div class="empty-state">
+                        <i class="fas fa-plug"></i>
+                        <p>Подключитесь к устройству для загрузки абонентов</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
+    
+    // Сбрасываем статистику
+    document.getElementById('subscribers-count').textContent = '0';
+    document.getElementById('subscribers-shown').textContent = '0';
+    
+    // Очищаем фильтр пулов
+    const poolFilter = document.getElementById('mac-pool-filter');
+    if (poolFilter) {
+        poolFilter.innerHTML = '<option value="">Все пулы</option>';
+    }
+    
+    // Скрываем панель действий
+    const panel = document.getElementById('subscriber-action-panel');
+    if (panel) {
+        panel.style.display = 'none';
+    }
+    
+    // Скрываем диалог
+    hideMacReplaceDialog();
+}
+
+// Фильтрация абонентов по тексту
+function filterSubscribers(query) {
+    if (!allSubscribers || allSubscribers.length === 0) return;
+    
+    const searchTerm = query.toLowerCase().trim();
+    
+    if (!searchTerm) {
+        renderSubscribersTable(allSubscribers);
+        return;
+    }
+    
+    const filtered = allSubscribers.filter(sub => {
+        const ip = (sub.ip || '').toLowerCase();
+        const mac = (sub.mac || '').toLowerCase();
+        const comment = (sub.comment || '').toLowerCase();
+        
+        return ip.includes(searchTerm) || mac.includes(searchTerm) || comment.includes(searchTerm);
+    });
+    
+    renderSubscribersTable(filtered);
+}
+
+// Фильтрация по пулу
+function filterSubscribersByPool(poolName) {
+    // Перезагружаем абонентов с фильтром по пулу
+    loadSubscribers();
+    clearSubscriberSelection();
+}
+
+// Показать диалог замены MAC
+function showMacReplaceDialog() {
+    console.log('showMacReplaceDialog вызвана');
+    console.log('selectedSubscriber:', selectedSubscriber);
+    
+    if (!selectedSubscriber) {
+        showAlert('Сначала выберите абонента', 'error');
+        return;
+    }
+    
+    const dialog = document.getElementById('mac-replace-dialog');
+    const oldIpEl = document.getElementById('dialog-old-ip');
+    const oldMacEl = document.getElementById('dialog-old-mac');
+    const targetInput = document.getElementById('mac-target-input');
+    const targetSelect = document.getElementById('mac-target-select');
+    const newMacInput = document.getElementById('new-mac-input');
+    const newClientIdInput = document.getElementById('new-clientid-input');
+    
+    console.log('dialog:', dialog);
+    console.log('oldIpEl:', oldIpEl);
+    console.log('oldMacEl:', oldMacEl);
+    
+    if (!dialog) {
+        console.error('Диалог не найден!');
+        showAlert('Ошибка: диалог не найден', 'error');
+        return;
+    }
+    
+    // Заполняем текущие данные
+    if (oldIpEl) oldIpEl.textContent = selectedSubscriber.ip;
+    if (oldMacEl) oldMacEl.textContent = selectedSubscriber.mac || 'нет MAC';
+    
+    // Очищаем поля ввода
+    if (targetInput) targetInput.value = '';
+    if (newMacInput) newMacInput.value = '';
+    if (newClientIdInput) newClientIdInput.value = '';
+    
+    // Сбрасываем режим на "по IP"
+    switchReplaceMode('by-ip');
+    const radioBtn = document.querySelector('input[name="replace-mode"][value="by-ip"]');
+    if (radioBtn) radioBtn.checked = true;
+    
+    // Заполняем выпадающий список абонентами (для быстрого выбора)
+    if (targetSelect) {
+        targetSelect.innerHTML = '<option value="">Из списка</option>';
+        
+        if (allSubscribers && allSubscribers.length > 0) {
+            allSubscribers.forEach(sub => {
+                if (sub.ip !== selectedSubscriber.ip) {
+                    const option = document.createElement('option');
+                    option.value = sub.ip;
+                    option.textContent = `${sub.ip} (${sub.comment || 'без имени'})`;
+                    targetSelect.appendChild(option);
+                }
+            });
+        }
+        
+        // При выборе из списка - заполняем поле ввода
+        targetSelect.onchange = function() {
+            if (this.value && targetInput) {
+                targetInput.value = this.value;
+            }
+        };
+    }
+    
+    dialog.style.display = 'block';
+    console.log('Диалог показан');
+}
+
+// Переключение режима замены
+function switchReplaceMode(mode) {
+    const modeByIp = document.getElementById('mode-by-ip');
+    const modeByMac = document.getElementById('mode-by-mac');
+    
+    if (mode === 'by-ip') {
+        modeByIp.style.display = 'block';
+        modeByMac.style.display = 'none';
+    } else {
+        modeByIp.style.display = 'none';
+        modeByMac.style.display = 'block';
+    }
+    
+    // Очищаем результаты при переключении
+    document.getElementById('mac-replace-results').innerHTML = '';
+}
+
+// Автозаполнение ClientID из MAC
+function updateClientIdFromMac(macValue) {
+    const clientidInput = document.getElementById('new-clientid-input');
+    
+    if (macValue && macValue.trim()) {
+        // Формируем ClientID: 1: + MAC в нижнем регистре
+        const cleanMac = macValue.trim().toLowerCase();
+        clientidInput.value = '1:' + cleanMac;
+    } else {
+        clientidInput.value = '';
+    }
+}
+
+// Ручное автозаполнение ClientID
+function autoFillClientId() {
+    const macInput = document.getElementById('new-mac-input');
+    const macValue = macInput.value.trim();
+    
+    if (!macValue) {
+        showAlert('Сначала введите MAC адрес', 'warning');
+        return;
+    }
+    
+    updateClientIdFromMac(macValue);
+}
+
+// Скрыть диалог замены MAC
+function hideMacReplaceDialog() {
+    const dialog = document.getElementById('mac-replace-dialog');
+    const resultsDiv = document.getElementById('mac-replace-results');
+    
+    dialog.style.display = 'none';
+    resultsDiv.innerHTML = '';
+}
+
+// Выполнить замену MAC
+function executeMacReplace() {
+    if (!selectedSubscriber) {
+        showAlert('Сначала выберите абонента', 'error');
+        return;
+    }
+    
+    // Определяем выбранный режим
+    const selectedMode = document.querySelector('input[name="replace-mode"]:checked').value;
+    const resultsDiv = document.getElementById('mac-replace-results');
+    
+    if (selectedMode === 'by-ip') {
+        // Режим 1: По IP устройства
+        executeMacReplaceByIp(resultsDiv);
+    } else {
+        // Режим 2: Ввести MAC вручную
+        executeMacReplaceByMac(resultsDiv);
+    }
+}
+
+// Режим 1: Замена MAC по IP устройства
+function executeMacReplaceByIp(resultsDiv) {
+    const targetInput = document.getElementById('mac-target-input');
+    const newIp = targetInput.value.trim();
+    
+    if (!newIp) {
+        showAlert('Введите IP адрес нового устройства', 'error');
+        return;
+    }
+    
+    const oldIp = selectedSubscriber.ip;
+    
+    if (oldIp === newIp) {
+        showAlert('IP адреса должны быть разными', 'error');
+        return;
+    }
+    
+    // Валидация IP
+    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (!ipRegex.test(newIp)) {
+        showAlert('Неверный формат IP адреса', 'error');
+        return;
+    }
+    
+    // Подтверждение
+    const confirmText = `Замена MAC адреса (по IP)\n\n` +
+        `Старый IP: ${oldIp}\n` +
+        `Новый IP: ${newIp}\n\n` +
+        `Настройки с IP ${oldIp} будут перенесены.\n` +
+        `MAC и ClientID будут взяты с нового устройства.\n\n` +
+        `Продолжить?`;
+    
+    if (!confirm(confirmText)) {
+        return;
+    }
+    
+    showLoading('Инициализация замены MAC...');
+    resultsDiv.innerHTML = '<div class="toast toast-info">Выполняется операция...</div>';
+    
+    // Симулируем прогресс операции
+    setTimeout(() => updateLoadingText('Получение данных старого устройства...'), 300);
+    setTimeout(() => updateLoadingText('Получение MAC нового устройства...'), 800);
+    setTimeout(() => updateLoadingText('Обновление DHCP записи...'), 1300);
+    setTimeout(() => updateLoadingText('Обновление ARP таблицы...'), 1800);
+    
+    fetch('/api/replace_mac', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            mode: 'by-ip',
+            old_ip: oldIp,
+            new_ip: newIp
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        handleMacReplaceResponse(data, resultsDiv);
+    })
+    .catch(error => {
+        handleMacReplaceError(error, resultsDiv);
+    });
+}
+
+// Режим 2: Замена MAC вручную
+function executeMacReplaceByMac(resultsDiv) {
+    const newMacInput = document.getElementById('new-mac-input');
+    const newClientIdInput = document.getElementById('new-clientid-input');
+    
+    const newMac = newMacInput.value.trim();
+    const newClientId = newClientIdInput.value.trim();
+    
+    // Валидация MAC
+    if (!newMac) {
+        showAlert('Введите новый MAC адрес', 'error');
+        return;
+    }
+    
+    const macRegex = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;
+    if (!macRegex.test(newMac)) {
+        showAlert('Неверный формат MAC адреса\nИспользуйте формат: AA:BB:CC:DD:EE:FF', 'error');
+        return;
+    }
+    
+    // Валидация ClientID (опционально, но рекомендуется)
+    if (!newClientId) {
+        if (!confirm('ClientID не указан. Продолжить без него?\n\nРекомендуется указать ClientID в формате: 1:aa:bb:cc:dd:ee:ff')) {
+            return;
+        }
+    }
+    
+    const oldIp = selectedSubscriber.ip;
+    const oldMac = selectedSubscriber.mac || 'нет';
+    
+    // Подтверждение
+    const confirmText = `Замена MAC адреса (вручную)\n\n` +
+        `IP: ${oldIp}\n` +
+        `Старый MAC: ${oldMac}\n` +
+        `Новый MAC: ${newMac}\n` +
+        `ClientID: ${newClientId || 'не указан'}\n\n` +
+        `Продолжить?`;
+    
+    if (!confirm(confirmText)) {
+        return;
+    }
+    
+    showLoading('Инициализация замены MAC...');
+    resultsDiv.innerHTML = '<div class="toast toast-info">Выполняется операция...</div>';
+    
+    // Симулируем прогресс операции
+    setTimeout(() => updateLoadingText('Обновление DHCP lease...'), 300);
+    setTimeout(() => updateLoadingText('Установка нового MAC...'), 600);
+    setTimeout(() => updateLoadingText('Установка ClientID...'), 900);
+    setTimeout(() => updateLoadingText('Обновление ARP таблицы...'), 1200);
+    
+    fetch('/api/replace_mac', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            mode: 'by-mac',
+            ip: oldIp,
+            new_mac: newMac,
+            client_id: newClientId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        handleMacReplaceResponse(data, resultsDiv);
+    })
+    .catch(error => {
+        handleMacReplaceError(error, resultsDiv);
+    });
+}
+
+// Обработка успешного ответа
+function handleMacReplaceResponse(data, resultsDiv) {
+    hideLoading();
+    
+    if (data.success) {
+        resultsDiv.innerHTML = `
+            <div class="toast toast-success">
+                ✅ ${data.message}
+                ${data.steps ? '<div style="margin-top: 10px; font-size: 12px; text-align: left;">' + 
+                  data.steps.map(s => `<div>${s}</div>`).join('') + '</div>' : ''}
+            </div>
+        `;
+        showAlert('MAC адрес успешно заменен', 'success');
+        
+        // Обновляем список
+        setTimeout(() => {
+            updateLoadingText('Обновление списка абонентов...');
+            showLoading('Обновление списка абонентов...');
+            clearSubscriberSelection();
+            loadDhcpPools(true);
+        }, 2000);
+    } else {
+        resultsDiv.innerHTML = `
+            <div class="toast toast-error">
+                ❌ ${data.error || 'Ошибка замены MAC'}
+                ${data.steps ? '<div style="margin-top: 10px; font-size: 12px; text-align: left;">' + 
+                  data.steps.map(s => `<div>${s}</div>`).join('') + '</div>' : ''}
+            </div>
+        `;
+        showErrorModal(data.error || 'Ошибка замены MAC адреса');
+    }
+}
+
+// Обработка ошибки
+function handleMacReplaceError(error, resultsDiv) {
+    hideLoading();
+    console.error('Ошибка замены MAC:', error);
+    resultsDiv.innerHTML = `
+        <div class="toast toast-error">
+            ❌ Ошибка соединения с сервером
+        </div>
+    `;
+    showErrorModal('Ошибка соединения с сервером');
+}
+
+// Переключение выпадающего меню "Ещё"
+function toggleActionDropdown() {
+    const menu = document.getElementById('action-dropdown-menu');
+    menu.classList.toggle('show');
+}
+
+// Закрытие dropdown при клике вне его
+document.addEventListener('click', function(e) {
+    const dropdown = document.querySelector('.action-dropdown');
+    const menu = document.getElementById('action-dropdown-menu');
+    
+    if (dropdown && menu && !dropdown.contains(e.target)) {
+        menu.classList.remove('show');
+    }
+});
+
+// Копировать данные абонента
+function copySubscriberData() {
+    if (!selectedSubscriber) return;
+    
+    const text = `IP: ${selectedSubscriber.ip}\nMAC: ${selectedSubscriber.mac || 'нет'}\nКомментарий: ${selectedSubscriber.comment || 'нет'}`;
+    
+    navigator.clipboard.writeText(text).then(() => {
+        showAlert('Данные скопированы в буфер обмена', 'success');
+    }).catch(() => {
+        showAlert('Не удалось скопировать', 'error');
+    });
+}
+
+// Удалить lease (заглушка)
+function deleteSubscriberLease(e) {
+    e.preventDefault();
+    showAlert('Функция в разработке', 'info');
+}
+
+// Заблокировать абонента (заглушка)
+function blockSubscriber(e) {
+    e.preventDefault();
+    showAlert('Функция в разработке', 'info');
+}
+
+// Показать статистику (заглушка)
+function showSubscriberStats(e) {
+    e.preventDefault();
+    showAlert('Функция в разработке', 'info');
+}
+
+// Редактировать комментарий (заглушка)
+function editSubscriberComment() {
+    showAlert('Функция в разработке', 'info');
+}
