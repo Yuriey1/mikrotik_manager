@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MikroTik Device Manager</title>
+    <link rel="icon" href="/favicon.ico">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
@@ -158,6 +159,9 @@
                     <div class="tab" onclick="switchTab('queues')">
                         <i class="fas fa-sitemap"></i> Дерево очередей
                     </div>
+                    <div class="tab" onclick="switchTab('mac-replace')">
+                        <i class="fas fa-exchange-alt"></i> Замена MAC
+                    </div>
                     <div class="tab" onclick="switchTab('tools')">
                         <i class="fas fa-tools"></i> Инструменты
                     </div>
@@ -230,9 +234,14 @@
     </div>
 </div>
         
-        <button class="btn btn-success w-full" onclick="addEmployee()">
-            <i class="fas fa-check"></i> Добавить сотрудника
-        </button>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn btn-success flex-1" onclick="addEmployee()">
+                <i class="fas fa-check"></i> Добавить сотрудника
+            </button>
+            <button class="btn btn-secondary flex-1" onclick="resetEmployeeForm()">
+                <i class="fas fa-times"></i> Очистить форму
+            </button>
+        </div>
         
         <div id="employee-results" class="results"></div>
     </div>
@@ -300,6 +309,204 @@
                         </div>
                         
                         <div id="tools-results" class="results"></div>
+                    </div>
+                </div>
+
+                <!-- ВКЛАДКА: ЗАМЕНА MAC -->
+                <div id="mac-replace-tab" class="tab-content">
+                    <div class="section mac-replace-section">
+                        <h2><i class="fas fa-exchange-alt"></i> Замена MAC адреса</h2>
+                        
+                        <!-- Панель инструментов -->
+                        <div class="subscribers-toolbar">
+                            <div class="subscribers-search">
+                                <i class="fas fa-search"></i>
+                                <input type="text" 
+                                       id="subscriber-search" 
+                                       placeholder="Поиск абонента (IP или ФИО)..." 
+                                       oninput="filterSubscribers(this.value)">
+                            </div>
+                            <div class="subscribers-filters">
+                                <select id="mac-pool-filter" onchange="filterSubscribersByPool(this.value)">
+                                    <option value="">Все пулы</option>
+                                </select>
+                                <button class="btn btn-secondary" onclick="refreshSubscribers()" title="Обновить список">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Статистика -->
+                        <div class="subscribers-stats" id="subscribers-stats">
+                            <span class="stat-item">
+                                <i class="fas fa-users"></i> 
+                                Абонентов: <strong id="subscribers-count">0</strong>
+                            </span>
+                            <span class="stat-item">
+                                <i class="fas fa-filter"></i> 
+                                Показано: <strong id="subscribers-shown">0</strong>
+                            </span>
+                        </div>
+                        
+                        <!-- Таблица абонентов -->
+                        <div class="subscribers-table-container">
+                            <table class="subscribers-table" id="subscribers-table">
+                                <thead>
+                                    <tr>
+                                        <th class="col-inet" title="Доступ в интернет">🌐</th>
+                                        <th class="col-ip">IP адрес</th>
+                                        <th class="col-mac">MAC адрес</th>
+                                        <th class="col-comment">Комментарий / ФИО</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="subscribers-tbody">
+                                    <tr class="empty-row">
+                                        <td colspan="4">
+                                            <div class="empty-state">
+                                                <i class="fas fa-plug"></i>
+                                                <p>Подключитесь к устройству для загрузки абонентов</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Панель действий (появляется при выборе) -->
+                        <div class="action-panel" id="subscriber-action-panel" style="display: none;">
+                            <div class="action-panel-header">
+                                <div class="selected-info">
+                                    <span class="selected-label">📌 Выбрано:</span>
+                                    <span class="selected-ip" id="selected-ip">-</span>
+                                    <span class="selected-mac" id="selected-mac">-</span>
+                                    <span class="selected-comment" id="selected-comment">-</span>
+                                </div>
+                                <button class="btn btn-secondary btn-sm" onclick="clearSubscriberSelection()">
+                                    <i class="fas fa-times"></i> Отменить
+                                </button>
+                            </div>
+                            
+                            <div class="action-panel-body">
+                                <div class="action-buttons">
+                                    <button class="action-btn action-btn-primary" onclick="showMacReplaceDialog()">
+                                        <i class="fas fa-exchange-alt"></i>
+                                        <span>Замена MAC</span>
+                                    </button>
+                                    <button class="action-btn action-btn-secondary" onclick="editSubscriberComment()" disabled title="Скоро">
+                                        <i class="fas fa-edit"></i>
+                                        <span>Редактировать</span>
+                                    </button>
+                                    <button class="action-btn action-btn-secondary" onclick="copySubscriberData()">
+                                        <i class="fas fa-copy"></i>
+                                        <span>Копировать</span>
+                                    </button>
+                                    <div class="action-dropdown">
+                                        <button class="action-btn action-btn-secondary dropdown-toggle" onclick="toggleActionDropdown()">
+                                            <i class="fas fa-ellipsis-h"></i>
+                                            <span>Ещё</span>
+                                        </button>
+                                        <div class="dropdown-menu" id="action-dropdown-menu">
+                                            <a href="#" onclick="deleteSubscriberLease(event)" title="Удалить lease из DHCP">
+                                                <i class="fas fa-trash-alt"></i> Удалить lease
+                                            </a>
+                                            <a href="#" onclick="blockSubscriber(event)" title="Заблокировать абонента" disabled>
+                                                <i class="fas fa-ban"></i> Заблокировать
+                                            </a>
+                                            <a href="#" onclick="showSubscriberStats(event)" title="Показать статистику" disabled>
+                                                <i class="fas fa-chart-bar"></i> Статистика
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Диалог замены MAC -->
+                            <div class="mac-replace-dialog" id="mac-replace-dialog" style="display: none;">
+                                <div class="dialog-header">
+                                    <i class="fas fa-exchange-alt"></i>
+                                    <span>Замена MAC адреса</span>
+                                </div>
+                                <div class="dialog-body">
+                                    <!-- Текущие данные -->
+                                    <div class="dialog-current-info" style="background: rgba(87, 148, 242, 0.1); padding: 10px; border-radius: 6px; margin-bottom: 16px;">
+                                        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                                            <div>
+                                                <span style="color: #7f8c8d; font-size: 12px;">Текущий IP:</span>
+                                                <strong id="dialog-old-ip" style="margin-left: 6px;">-</strong>
+                                            </div>
+                                            <div>
+                                                <span style="color: #7f8c8d; font-size: 12px;">Текущий MAC:</span>
+                                                <strong id="dialog-old-mac" style="margin-left: 6px;">-</strong>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Переключатель режимов -->
+                                    <div class="mode-switcher" style="margin-bottom: 16px;">
+                                        <label class="mode-option" id="mode-ip-label">
+                                            <input type="radio" name="replace-mode" value="by-ip" checked onchange="switchReplaceMode('by-ip')">
+                                            <span class="mode-label">
+                                                <i class="fas fa-network-wired"></i> По IP устройства
+                                            </span>
+                                        </label>
+                                        <label class="mode-option" id="mode-mac-label">
+                                            <input type="radio" name="replace-mode" value="by-mac" onchange="switchReplaceMode('by-mac')">
+                                            <span class="mode-label">
+                                                <i class="fas fa-keyboard"></i> Ввести MAC вручную
+                                            </span>
+                                        </label>
+                                    </div>
+                                    
+                                    <!-- Режим 1: По IP устройства -->
+                                    <div id="mode-by-ip" class="mode-content">
+                                        <div class="dialog-field">
+                                            <label>Новый IP адрес (устройство с новым MAC):</label>
+                                            <div class="dialog-input-wrapper" style="display: flex; gap: 8px;">
+                                                <input type="text" id="mac-target-input" placeholder="192.168.1.100" style="flex: 1;">
+                                                <select id="mac-target-select" style="width: auto; min-width: 120px;">
+                                                    <option value="">Из списка</option>
+                                                </select>
+                                            </div>
+                                            <div class="help-text" style="margin-top: 6px;">
+                                                <i class="fas fa-info-circle"></i> MAC и ClientID будут взяты с нового устройства
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Режим 2: Ввести MAC вручную -->
+                                    <div id="mode-by-mac" class="mode-content" style="display: none;">
+                                        <div class="dialog-field">
+                                            <label>Новый MAC адрес:</label>
+                                            <input type="text" id="new-mac-input" placeholder="AA:BB:CC:DD:EE:FF" 
+                                                   oninput="updateClientIdFromMac(this.value)"
+                                                   style="text-transform: uppercase;">
+                                        </div>
+                                        <div class="dialog-field" style="margin-top: 12px;">
+                                            <label>Client ID:</label>
+                                            <div style="display: flex; gap: 8px; align-items: center;">
+                                                <input type="text" id="new-clientid-input" placeholder="1:aa:bb:cc:dd:ee:ff" style="flex: 1;">
+                                                <button type="button" class="btn btn-secondary btn-sm" onclick="autoFillClientId()" title="Автозаполнение">
+                                                    <i class="fas fa-magic"></i>
+                                                </button>
+                                            </div>
+                                            <div class="help-text" style="margin-top: 6px;">
+                                                <i class="fas fa-info-circle"></i> Формат: <code>1:</code> + MAC в нижнем регистре (автозаполнение)
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="dialog-result" id="mac-replace-results"></div>
+                                </div>
+                                <div class="dialog-footer">
+                                    <button class="btn btn-secondary" onclick="hideMacReplaceDialog()">
+                                        <i class="fas fa-times"></i> Отмена
+                                    </button>
+                                    <button class="btn btn-warning" onclick="executeMacReplace()">
+                                        <i class="fas fa-exchange-alt"></i> Выполнить замену
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

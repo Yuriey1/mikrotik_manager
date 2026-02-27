@@ -511,6 +511,99 @@ class MikroTikManager:
             traceback.print_exc()
             return False
 
+    def get_internet_access_list(self) -> List[str]:
+        """Получить список IP с доступом в интернет (из address-list internet_access)"""
+        try:
+            fw_cmd = self.api.path("/ip/firewall/address-list")
+            addresses = list(fw_cmd)
+            
+            internet_ips = []
+            for addr in addresses:
+                if addr.get("list") == "internet_access" and not addr.get("disabled", False):
+                    ip = addr.get("address", "")
+                    if ip:
+                        internet_ips.append(ip)
+            
+            print(f"📋 Найдено {len(internet_ips)} IP с доступом в интернет")
+            return internet_ips
+            
+        except Exception as e:
+            print(f"❌ Ошибка получения internet_access: {e}")
+            traceback.print_exc()
+            return []
+
+    def check_internet_access(self, ip: str) -> bool:
+        """Проверить, есть ли IP в списке internet_access"""
+        try:
+            fw_cmd = self.api.path("/ip/firewall/address-list")
+            addresses = list(fw_cmd)
+            
+            for addr in addresses:
+                if addr.get("list") == "internet_access" and addr.get("address") == ip:
+                    return not addr.get("disabled", False)
+            
+            return False
+            
+        except Exception as e:
+            print(f"❌ Ошибка проверки доступа: {e}")
+            return False
+
+    def add_internet_access(self, ip: str, comment: str = "") -> bool:
+        """Добавить IP в список internet_access"""
+        return self.add_to_address_list(ip, "internet_access", comment)
+
+    def remove_internet_access(self, ip: str) -> bool:
+        """Удалить IP из списка internet_access"""
+        try:
+            print(f"🔧 Удаление {ip} из internet_access...")
+            
+            fw_cmd = self.api.path("/ip/firewall/address-list")
+            addresses = list(fw_cmd)
+            
+            for addr in addresses:
+                if addr.get("list") == "internet_access" and addr.get("address") == ip:
+                    addr_id = addr.get(".id")
+                    if addr_id:
+                        tuple(fw_cmd("remove", **{".id": addr_id}))
+                        print(f"✅ IP {ip} удалён из internet_access")
+                        return True
+            
+            print(f"⚠️ IP {ip} не найден в internet_access")
+            return True  # Не ошибка, если уже нет в списке
+            
+        except Exception as e:
+            print(f"❌ Ошибка удаления из internet_access: {e}")
+            traceback.print_exc()
+            return False
+
+    def toggle_internet_access(self, ip: str, enable: bool, comment: str = "") -> Dict:
+        """Включить/выключить доступ в интернет для IP"""
+        result = {
+            'success': False,
+            'ip': ip,
+            'enabled': enable,
+            'error': None
+        }
+        
+        try:
+            if enable:
+                if self.add_internet_access(ip, comment):
+                    result['success'] = True
+                    result['message'] = f"Доступ в интернет включён для {ip}"
+                else:
+                    result['error'] = "Не удалось добавить в список"
+            else:
+                if self.remove_internet_access(ip):
+                    result['success'] = True
+                    result['message'] = f"Доступ в интернет выключен для {ip}"
+                else:
+                    result['error'] = "Не удалось удалить из списка"
+                    
+        except Exception as e:
+            result['error'] = str(e)
+            
+        return result
+
     # ========== QUEUES ==========
     def get_queues(self) -> List[Dict]:
         """Получить все активные очереди"""
@@ -680,3 +773,400 @@ class MikroTikManager:
             print(f"❌ Ошибка поиска свободных IP: {e}")
             traceback.print_exc()
             return {}
+
+    # ========== MAC REPLACEMENT FUNCTIONALITY ==========
+    
+    def get_arp_table(self) -> List[Dict]:
+        """Получить ARP таблицу"""
+        try:
+            arp_cmd = self.api.path('/ip/arp')
+            arp_list = list(arp_cmd)
+            return arp_list
+        except Exception as e:
+            print(f"❌ Ошибка получения ARP таблицы: {e}")
+            return []
+
+    def delete_dhcp_lease(self, ip: str) -> bool:
+        """Удалить DHCP lease по IP адресу"""
+        try:
+            # Находим lease по IP
+            lease = self.find_dhcp_lease(ip=ip)
+            if not lease:
+                print(f"⚠️ DHCP lease для IP {ip} не найден")
+                return False
+            
+            lease_id = lease.get('.id')
+            if not lease_id:
+                print(f"❌ Не удалось получить ID lease для IP {ip}")
+                return False
+            
+            # Удаляем lease
+            dhcp_cmd = self.api.path('/ip/dhcp-server/lease')
+            tuple(dhcp_cmd('remove', **{'.id': lease_id}))
+            print(f"✅ DHCP lease для IP {ip} удален")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Ошибка удаления DHCP lease: {e}")
+            traceback.print_exc()
+            return False
+
+    def update_dhcp_lease(self, old_ip: str, new_mac: str, comment: str = "") -> bool:
+        """Обновить DHCP lease - найти по старому IP, установить новый MAC"""
+        try:
+            # Находим lease по старому IP
+            lease = self.find_dhcp_lease(ip=old_ip)
+            if not lease:
+                print(f"⚠️ DHCP lease для IP {old_ip} не найден")
+                return False
+            
+            lease_id = lease.get('.id')
+            if not lease_id:
+                print(f"❌ Не удалось получить ID lease для IP {old_ip}")
+                return False
+            
+            # Обновляем MAC и комментарий
+            dhcp_cmd = self.api.path('/ip/dhcp-server/lease')
+            update_data = {'.id': lease_id, 'mac-address': new_mac.lower()}
+            if comment:
+                update_data['comment'] = comment
+            
+            tuple(dhcp_cmd('set', **update_data))
+            print(f"✅ DHCP lease обновлен: IP={old_ip}, MAC={new_mac}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Ошибка обновления DHCP lease: {e}")
+            traceback.print_exc()
+            return False
+
+    def update_arp_entry(self, ip: str, new_mac: str) -> bool:
+        """Обновить MAC адрес в ARP таблице"""
+        try:
+            # Находим ARP запись по IP
+            arp_cmd = self.api.path('/ip/arp')
+            arp_entries = list(arp_cmd)
+            
+            arp_id = None
+            for entry in arp_entries:
+                if entry.get('address') == ip:
+                    arp_id = entry.get('.id')
+                    break
+            
+            if not arp_id:
+                print(f"⚠️ ARP запись для IP {ip} не найдена")
+                return False
+            
+            # Обновляем MAC
+            tuple(arp_cmd('set', **{'.id': arp_id, 'mac-address': new_mac.lower()}))
+            print(f"✅ ARP запись обновлена: IP={ip}, MAC={new_mac}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Ошибка обновления ARP записи: {e}")
+            traceback.print_exc()
+            return False
+
+    def add_arp_entry(self, ip: str, mac: str, interface: str = None, comment: str = "") -> bool:
+        """Добавить статическую ARP запись"""
+        try:
+            arp_cmd = self.api.path('/ip/arp')
+            
+            arp_data = {
+                'address': ip,
+                'mac-address': mac.lower(),
+                'comment': comment
+            }
+            
+            if interface:
+                arp_data['interface'] = interface
+            
+            tuple(arp_cmd('add', **arp_data))
+            print(f"✅ ARP запись добавлена: IP={ip}, MAC={mac}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Ошибка добавления ARP записи: {e}")
+            traceback.print_exc()
+            return False
+
+    def get_dhcp_subscribers(self, pool_name: str = None) -> List[Dict]:
+        """
+        Получить список абонентов из DHCP leases
+        Абоненты - это leases с непустыми комментариями (ФИО, должность)
+        
+        Args:
+            pool_name: Имя DHCP пула для фильтрации (если None - все абоненты)
+        """
+        try:
+            leases = self.get_dhcp_leases()
+            
+            # Получаем информацию о пулах если нужна фильтрация
+            pool_ranges = {}
+            if pool_name:
+                pools = self.get_dhcp_pools()
+                for pool in pools:
+                    if pool.get('name') == pool_name:
+                        ranges = pool.get('ranges', '')
+                        if ranges:
+                            # Парсим диапазоны пула
+                            for range_str in ranges.split(','):
+                                range_str = range_str.strip()
+                                if '-' in range_str:
+                                    try:
+                                        start_ip, end_ip = range_str.split('-')
+                                        pool_ranges[(start_ip.strip(), end_ip.strip())] = True
+                                    except:
+                                        pass
+                        break
+            
+            subscribers = []
+            
+            for lease in leases:
+                comment = lease.get('comment', '')
+                # Абонент - это lease с комментарием (там ФИО/должность)
+                if comment and comment.strip():
+                    ip = lease.get('address', '')
+                    
+                    # Если указан пул, проверяем принадлежность IP к диапазону пула
+                    if pool_name and pool_ranges:
+                        ip_in_pool = False
+                        try:
+                            ip_obj = ipaddress.ip_address(ip.split('/')[0])
+                            for (start, end) in pool_ranges.keys():
+                                start_obj = ipaddress.ip_address(start)
+                                end_obj = ipaddress.ip_address(end)
+                                if start_obj <= ip_obj <= end_obj:
+                                    ip_in_pool = True
+                                    break
+                        except:
+                            pass
+                        
+                        if not ip_in_pool:
+                            continue
+                    
+                    subscriber = {
+                        'ip': ip,
+                        'mac': lease.get('mac-address', ''),
+                        'comment': comment,
+                        'host_name': lease.get('host-name', ''),
+                        'dynamic': lease.get('dynamic') == 'true',
+                        'disabled': lease.get('disabled') == 'true',
+                        'server': lease.get('server', ''),
+                        'id': lease.get('.id', '')
+                    }
+                    subscribers.append(subscriber)
+            
+            # Безопасная сортировка по IP
+            def safe_ip_sort(item):
+                try:
+                    ip_str = item.get('ip', '')
+                    if ip_str:
+                        # Убираем маску если есть
+                        ip_str = ip_str.split('/')[0]
+                        return (0, ipaddress.ip_address(ip_str))
+                    return (1, ipaddress.ip_address('0.0.0.0'))
+                except:
+                    return (2, ipaddress.ip_address('0.0.0.0'))
+            
+            subscribers.sort(key=safe_ip_sort)
+            
+            if pool_name:
+                print(f"✅ Найдено абонентов в пуле '{pool_name}': {len(subscribers)}")
+            else:
+                print(f"✅ Найдено абонентов: {len(subscribers)}")
+            return subscribers
+            
+        except Exception as e:
+            print(f"❌ Ошибка получения абонентов: {e}")
+            traceback.print_exc()
+            return []
+
+    def replace_mac_address(self, old_ip: str, new_ip: str) -> Dict:
+        """
+        Замена MAC адреса у абонента
+        
+        Сценарий: У абонента заменилось устройство. Старый IP сохраняем,
+        а MAC и ClientID берём от нового устройства.
+        
+        Алгоритм:
+        1. Получаем комментарий со старого IP
+        2. Получаем MAC и ClientID с нового IP
+        3. Удаляем lease старого IP
+        4. На lease нового IP меняем IP на старый и добавляем комментарий
+        5. Обновляем ARP таблицу
+        
+        Args:
+            old_ip: IP адрес абонента (настройки которого сохраняем)
+            new_ip: IP нового устройства (откуда берём MAC и ClientID)
+        
+        Возвращает результат операции
+        """
+        result = {
+            'success': False,
+            'steps': [],
+            'error': None
+        }
+        
+        try:
+            # Шаг 1: Получаем данные со старого IP (сохраняем комментарий)
+            result['steps'].append(f"📡 Получение данных со старого IP {old_ip}...")
+            old_lease = self.find_dhcp_lease(ip=old_ip)
+            if not old_lease:
+                result['error'] = f"DHCP lease для IP {old_ip} не найден"
+                return result
+            
+            old_comment = old_lease.get('comment', '')
+            old_mac = old_lease.get('mac-address', '')
+            result['steps'].append(f"   Комментарий: {old_comment or '(пусто)'}")
+            result['steps'].append(f"   Старый MAC: {old_mac}")
+            
+            # Шаг 2: Получаем данные с нового IP (MAC и ClientID нового устройства)
+            result['steps'].append(f"📡 Получение данных с нового IP {new_ip}...")
+            new_lease = self.find_dhcp_lease(ip=new_ip)
+            if not new_lease:
+                result['error'] = f"DHCP lease для IP {new_ip} не найден. Новое устройство не подключено?"
+                return result
+            
+            new_mac = new_lease.get('mac-address', '')
+            new_client_id = new_lease.get('client-id', '')
+            new_lease_id = new_lease.get('.id', '')
+            
+            if not new_mac:
+                result['error'] = f"MAC адрес для IP {new_ip} не найден"
+                return result
+            
+            result['steps'].append(f"   Новый MAC: {new_mac}")
+            if new_client_id:
+                result['steps'].append(f"   ClientID: {new_client_id}")
+            
+            # Шаг 3: Удаляем старый DHCP lease
+            result['steps'].append(f"🗑️ Удаление старого DHCP lease ({old_ip})...")
+            if not self.delete_dhcp_lease(old_ip):
+                result['error'] = f"Не удалось удалить DHCP lease для IP {old_ip}"
+                return result
+            result['steps'].append(f"   ✅ Удалён")
+            
+            # Шаг 4: Обновляем lease нового IP - меняем IP на старый, добавляем комментарий
+            result['steps'].append(f"📝 Обновление DHCP lease ({new_ip} → {old_ip})...")
+            
+            # Получаем свежий ID lease (после удаления старого)
+            new_lease_fresh = self.find_dhcp_lease(ip=new_ip)
+            if not new_lease_fresh:
+                result['error'] = f"DHCP lease для IP {new_ip} исчез после удаления старого"
+                return result
+            
+            lease_id = new_lease_fresh.get('.id')
+            
+            dhcp_cmd = self.api.path('/ip/dhcp-server/lease')
+            update_data = {
+                '.id': lease_id,
+                'address': old_ip,
+                'comment': old_comment
+            }
+            # MAC и ClientID остаются от нового устройства (не меняем)
+            
+            tuple(dhcp_cmd('set', **update_data))
+            result['steps'].append(f"   ✅ IP изменён на {old_ip}")
+            result['steps'].append(f"   ✅ Комментарий перенесён")
+            result['steps'].append(f"   ✅ MAC: {new_mac} (от нового устройства)")
+            if new_client_id:
+                result['steps'].append(f"   ✅ ClientID сохранён")
+            
+            # Шаг 5: Обновляем ARP таблицу
+            result['steps'].append(f"📝 Обновление ARP таблицы...")
+            if self.update_arp_entry(old_ip, new_mac):
+                result['steps'].append(f"   ✅ ARP обновлён: {old_ip} → {new_mac}")
+            else:
+                result['steps'].append(f"   ⚠️ ARP запись не обновлена (возможно отсутствует)")
+            
+            result['success'] = True
+            result['message'] = f"MAC адрес успешно заменён. IP {old_ip} теперь привязан к MAC {new_mac}"
+            
+            print(f"✅ Замена MAC завершена: {old_ip} → MAC {new_mac}")
+            return result
+            
+        except Exception as e:
+            result['error'] = f"Ошибка при замене MAC: {str(e)}"
+            result['steps'].append(f"❌ Ошибка: {str(e)}")
+            print(f"❌ Ошибка замены MAC: {e}")
+            traceback.print_exc()
+            return result
+
+    def replace_mac_manual(self, ip: str, new_mac: str, client_id: str = None) -> Dict:
+        """
+        Ручная замена MAC адреса на указанном IP
+        
+        Алгоритм:
+        1. Находим lease по IP
+        2. Обновляем MAC адрес
+        3. Обновляем ClientID (если указан)
+        4. Обновляем ARP таблицу
+        
+        Args:
+            ip: IP адрес абонента
+            new_mac: Новый MAC адрес
+            client_id: Новый ClientID (опционально, формат: 1:aa:bb:cc:dd:ee:ff)
+        
+        Возвращает результат операции
+        """
+        result = {
+            'success': False,
+            'steps': [],
+            'error': None
+        }
+        
+        try:
+            # Шаг 1: Получаем текущий lease
+            result['steps'].append(f"📡 Поиск DHCP lease для IP {ip}...")
+            lease = self.find_dhcp_lease(ip=ip)
+            if not lease:
+                result['error'] = f"DHCP lease для IP {ip} не найден"
+                return result
+            
+            lease_id = lease.get('.id')
+            old_mac = lease.get('mac-address', '')
+            old_comment = lease.get('comment', '')
+            
+            result['steps'].append(f"   Найден lease ID: {lease_id}")
+            result['steps'].append(f"   Текущий MAC: {old_mac}")
+            result['steps'].append(f"   Комментарий: {old_comment or '(пусто)'}")
+            
+            # Шаг 2: Обновляем MAC и ClientID в lease
+            result['steps'].append(f"📝 Обновление MAC адреса...")
+            
+            dhcp_cmd = self.api.path('/ip/dhcp-server/lease')
+            update_data = {
+                '.id': lease_id,
+                'mac-address': new_mac.upper()  # RouterOS ожидает MAC в верхнем регистре
+            }
+            
+            if client_id:
+                update_data['client-id'] = client_id.lower()  # ClientID в нижнем регистре
+                result['steps'].append(f"   Новый MAC: {new_mac}")
+                result['steps'].append(f"   Новый ClientID: {client_id}")
+            else:
+                result['steps'].append(f"   Новый MAC: {new_mac}")
+            
+            tuple(dhcp_cmd('set', **update_data))
+            result['steps'].append(f"   ✅ DHCP lease обновлён")
+            
+            # Шаг 3: Обновляем ARP таблицу
+            result['steps'].append(f"📝 Обновление ARP таблицы...")
+            if self.update_arp_entry(ip, new_mac):
+                result['steps'].append(f"   ✅ ARP обновлён: {ip} → {new_mac}")
+            else:
+                result['steps'].append(f"   ⚠️ ARP запись не обновлена (возможно отсутствует)")
+            
+            result['success'] = True
+            result['message'] = f"MAC адрес успешно изменён. IP {ip} теперь привязан к MAC {new_mac}"
+            
+            print(f"✅ Ручная замена MAC завершена: {ip} → {new_mac}")
+            return result
+            
+        except Exception as e:
+            result['error'] = f"Ошибка при замене MAC: {str(e)}"
+            result['steps'].append(f"❌ Ошибка: {str(e)}")
+            print(f"❌ Ошибка ручной замены MAC: {e}")
+            traceback.print_exc()
+            return result

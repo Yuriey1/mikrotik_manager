@@ -1523,3 +1523,417 @@ textarea {
 .help-text i {
     color: var(--info);
 }
+
+/* ===== ТАБЛИЦА АБОНЕНТОВ (MAC Replacement) ===== */
+.mac-replace-section {
+    min-height: 400px;
+}
+
+/* Панель инструментов */
+.subscribers-toolbar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.subscribers-search {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+}
+
+.subscribers-search i {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+}
+
+.subscribers-search input {
+    padding-left: 36px;
+    padding-right: 12px;
+}
+
+.subscribers-filters {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.subscribers-filters select {
+    padding: 8px 12px;
+    min-width: 150px;
+}
+
+/* Статистика */
+.subscribers-stats {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 16px;
+    padding: 10px 16px;
+    background: var(--bg-secondary);
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+}
+
+.subscribers-stats .stat-item {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.subscribers-stats .stat-item strong {
+    color: var(--accent-primary);
+    margin-left: 4px;
+}
+
+/* Контейнер таблицы с прокруткой */
+.subscribers-table-container {
+    max-height: 450px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background: var(--bg-secondary);
+}
+
+.subscribers-table-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.subscribers-table-container::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+}
+
+.subscribers-table-container::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.subscribers-table-container::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-primary);
+}
+
+/* Таблица абонентов */
+.subscribers-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+/* Заголовок таблицы - STICKY с высоким z-index */
+.subscribers-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.subscribers-table th {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-weight: 600;
+    text-align: left;
+    padding: 12px 14px;
+    border-bottom: 2px solid var(--accent-primary);
+    white-space: nowrap;
+    position: relative;
+    /* Важно: фон должен быть непрозрачным */
+    background-color: var(--bg-card);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Колонки таблицы */
+.subscribers-table .col-internet {
+    width: 40px;
+    text-align: center;
+}
+
+.subscribers-table .col-ip {
+    width: 130px;
+}
+
+.subscribers-table .col-mac {
+    width: 130px;
+}
+
+.subscribers-table .col-comment {
+    min-width: 200px;
+}
+
+/* Строки таблицы */
+.subscribers-table tbody tr {
+    cursor: pointer;
+    transition: var(--transition);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.subscribers-table tbody tr:hover {
+    background: var(--bg-hover);
+}
+
+.subscribers-table tbody tr.selected {
+    background: rgba(87, 148, 242, 0.15);
+    border-left: 3px solid var(--accent-primary);
+}
+
+/* Строки с доступом в интернет */
+.subscribers-table tbody tr.has-internet {
+    background: rgba(115, 191, 105, 0.08);
+}
+
+.subscribers-table tbody tr.has-internet:hover {
+    background: rgba(115, 191, 105, 0.15);
+}
+
+.subscribers-table tbody tr.has-internet.selected {
+    background: rgba(87, 148, 242, 0.2);
+}
+
+/* Ячейки таблицы */
+.subscribers-table td {
+    padding: 10px 14px;
+    color: var(--text-primary);
+    vertical-align: middle;
+}
+
+/* Чекбокс доступа в интернет */
+.subscribers-table .internet-checkbox {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.subscribers-table .internet-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--success);
+}
+
+/* IP адрес */
+.subscribers-table .ip-cell {
+    font-family: 'SF Mono', 'Cascadia Mono', 'Roboto Mono', monospace;
+    font-weight: 500;
+    color: var(--accent-primary);
+}
+
+/* MAC адрес */
+.subscribers-table .mac-cell {
+    font-family: 'SF Mono', 'Cascadia Mono', 'Roboto Mono', monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* Комментарий */
+.subscribers-table .comment-cell {
+    color: var(--text-primary);
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Пустая строка */
+.subscribers-table .empty-row td {
+    padding: 40px;
+    text-align: center;
+}
+
+/* Панель действий */
+.action-panel {
+    margin-top: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    animation: slideIn 0.3s ease;
+}
+
+.action-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(87, 148, 242, 0.1);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.selected-info {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    font-size: 13px;
+}
+
+.selected-label {
+    color: var(--text-muted);
+}
+
+.selected-ip {
+    font-family: monospace;
+    font-weight: 600;
+    color: var(--accent-primary);
+}
+
+.selected-mac {
+    font-family: monospace;
+    color: var(--text-secondary);
+}
+
+.selected-comment {
+    color: var(--text-primary);
+}
+
+.action-panel-body {
+    padding: 16px;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.action-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    border: 1px solid transparent;
+}
+
+.action-btn-primary {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.action-btn-primary:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+}
+
+.action-btn-secondary {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
+.action-btn-secondary:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
+}
+
+.action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Dropdown меню */
+.action-dropdown {
+    position: relative;
+}
+
+.dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    min-width: 180px;
+    display: none;
+    z-index: 1000;
+}
+
+.dropdown-menu.show {
+    display: block;
+}
+
+.dropdown-menu a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 13px;
+    transition: var(--transition);
+}
+
+.dropdown-menu a:hover {
+    background: var(--bg-hover);
+    color: var(--accent-primary);
+}
+
+.dropdown-menu a:disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* Диалог замены MAC */
+.mac-replace-dialog {
+    margin-top: 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+}
+
+.dialog-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    background: rgba(255, 152, 48, 0.1);
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+    color: var(--warning);
+}
+
+.dialog-body {
+    padding: 16px;
+}
+
+.dialog-info {
+    margin-bottom: 16px;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.dialog-field {
+    margin-bottom: 12px;
+}
+
+.dialog-field label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.dialog-field input,
+.dialog-field select {
+    padding: 10px 12px;
+}
+
+.dialog-result {
+    margin-top: 16px;
+}
+
+.dialog-footer {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding: 14px 16px;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border-color);
+}

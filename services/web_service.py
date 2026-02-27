@@ -13,7 +13,6 @@ from typing import Optional
 
 from config.config_manager import ConfigManager
 from models.device import MikroTikDevice
-from models.employee import Employee
 from managers.mikrotik_manager import MikroTikManager
 from services.queue_builder import QueueTreeBuilder
 from utils.helpers import russian_to_mikrotik_comment
@@ -199,6 +198,25 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 self._find_dhcp_lease(parsed)
             elif path == '/api/free_ips':  # ← НОВЫЙ ENDPOINT ДЛЯ СВОБОДНЫХ IP!
                 self._get_free_ips()
+            # ===== НОВЫЕ ENDPOINTS ДЛЯ ЗАМЕНЫ MAC =====
+            elif path == '/api/dhcp_pools':
+                self._get_dhcp_pools()
+            elif path == '/api/dhcp_subscribers':
+                self._get_dhcp_subscribers(parsed)
+            # ===== INTERNET ACCESS =====
+            elif path == '/api/internet_access':
+                self._get_internet_access_list()
+            # ===== ОБРАБОТКА FAVICON =====
+            elif path == '/favicon.ico':
+                try:
+                    with open('favicon.ico', 'rb') as f:
+                        self.send_response(200)
+                        self.send_header('Content-type', 'image/x-icon')
+                        self.end_headers()
+                        self.wfile.write(f.read())
+                except FileNotFoundError:
+                    self.send_error(404, "File not found")
+            # ==============================
             else:
                 self.send_error(404, "Not Found")
                 
@@ -422,6 +440,10 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 self._add_employee(data)
             elif path == '/api/save_config':
                 self._save_config(data)
+            elif path == '/api/replace_mac':  # Замена MAC адреса
+                self._replace_mac(data)
+            elif path == '/api/internet_access/toggle':  # Управление доступом в интернет
+                self._toggle_internet_access(data)
             else:
                 self.send_error(404, "Not Found")
                 
@@ -1139,6 +1161,216 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             print(f"❌ КРИТИЧЕСКАЯ Ошибка добавления сотрудника: {e}")
             traceback.print_exc()
             self._send_json({'error': f'Внутренняя ошибка сервера: {str(e)}'}, 500)
+
+    # ===== НОВЫЕ МЕТОДЫ ДЛЯ ЗАМЕНЫ MAC =====
+    
+    def _get_dhcp_pools(self):
+        """Получить список DHCP пулов"""
+        global mikrotik_manager
+        
+        if not mikrotik_manager or not mikrotik_manager.connected:
+            self._send_json({'error': 'Не подключено к устройству'}, 400)
+            return
+        
+        try:
+            pools = mikrotik_manager.get_dhcp_pools()
+            pools_list = []
+            
+            for pool in pools:
+                pools_list.append({
+                    'name': pool.get('name', ''),
+                    'ranges': pool.get('ranges', ''),
+                    'id': pool.get('.id', '')
+                })
+            
+            self._send_json({
+                'success': True,
+                'pools': pools_list,
+                'count': len(pools_list)
+            })
+            
+        except Exception as e:
+            print(f"❌ Ошибка получения DHCP пулов: {e}")
+            self._send_json({'error': str(e)}, 500)
+
+    def _get_dhcp_subscribers(self, parsed):
+        """Получить список абонентов из DHCP"""
+        global mikrotik_manager
+        
+        if not mikrotik_manager or not mikrotik_manager.connected:
+            self._send_json({'error': 'Не подключено к устройству'}, 400)
+            return
+        
+        try:
+            query = parse_qs(parsed.query)
+            pool_name = query.get('pool', [''])[0]
+            
+            subscribers = mikrotik_manager.get_dhcp_subscribers(pool_name if pool_name else None)
+            
+            self._send_json({
+                'success': True,
+                'subscribers': subscribers,
+                'count': len(subscribers)
+            })
+            
+        except Exception as e:
+            print(f"❌ Ошибка получения абонентов: {e}")
+            traceback.print_exc()
+            self._send_json({'error': str(e)}, 500)
+
+    def _replace_mac(self, data):
+        """Заменить MAC адрес абонента
+        
+        Поддерживает два режима:
+        1. by-ip: Замена по IP устройства (старый IP → настройки, новый IP → MAC/ClientID)
+        2. by-mac: Ручной ввод MAC (IP, новый MAC, ClientID)
+        """
+        global mikrotik_manager
+        
+        if not mikrotik_manager or not mikrotik_manager.connected:
+            self._send_json({'error': 'Не подключено к устройству'}, 400)
+            return
+        
+        mode = data.get('mode', 'by-ip')  # По умолчанию режим по IP
+        
+        try:
+            if mode == 'by-ip':
+                # Режим 1: Замена по IP устройства
+                old_ip = data.get('old_ip', '').strip()
+                new_ip = data.get('new_ip', '').strip()
+                
+                if not old_ip or not new_ip:
+                    self._send_json({'error': 'Укажите старый и новый IP адреса'}, 400)
+                    return
+                
+                # Валидация IP
+                try:
+                    ipaddress.ip_address(old_ip)
+                    ipaddress.ip_address(new_ip)
+                except ValueError as e:
+                    self._send_json({'error': f'Неверный формат IP: {e}'}, 400)
+                    return
+                
+                print(f"🔄 Замена MAC (by-ip): старый IP={old_ip}, новый IP={new_ip}")
+                result = mikrotik_manager.replace_mac_address(old_ip, new_ip)
+                
+            elif mode == 'by-mac':
+                # Режим 2: Ручной ввод MAC
+                ip = data.get('ip', '').strip()
+                new_mac = data.get('new_mac', '').strip()
+                client_id = data.get('client_id', '').strip() or None
+                
+                if not ip or not new_mac:
+                    self._send_json({'error': 'Укажите IP и новый MAC адрес'}, 400)
+                    return
+                
+                # Валидация IP
+                try:
+                    ipaddress.ip_address(ip)
+                except ValueError as e:
+                    self._send_json({'error': f'Неверный формат IP: {e}'}, 400)
+                    return
+                
+                # Валидация MAC
+                import re
+                mac_pattern = re.compile(r'^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$')
+                if not mac_pattern.match(new_mac):
+                    self._send_json({'error': 'Неверный формат MAC. Используйте AA:BB:CC:DD:EE:FF'}, 400)
+                    return
+                
+                print(f"🔄 Замена MAC (by-mac): IP={ip}, новый MAC={new_mac}, ClientID={client_id}")
+                result = mikrotik_manager.replace_mac_manual(ip, new_mac, client_id)
+                
+            else:
+                self._send_json({'error': f'Неизвестный режим: {mode}'}, 400)
+                return
+            
+            if result['success']:
+                self._send_json({
+                    'success': True,
+                    'message': result.get('message', 'MAC успешно заменен'),
+                    'steps': result.get('steps', [])
+                })
+            else:
+                self._send_json({
+                    'success': False,
+                    'error': result.get('error', 'Неизвестная ошибка'),
+                    'steps': result.get('steps', [])
+                })
+                
+        except Exception as e:
+            print(f"❌ Ошибка замены MAC: {e}")
+            traceback.print_exc()
+            self._send_json({'error': str(e)}, 500)
+    
+    # ===== INTERNET ACCESS =====
+    
+    def _get_internet_access_list(self):
+        """Получить список IP с доступом в интернет"""
+        global mikrotik_manager
+        
+        if not mikrotik_manager or not mikrotik_manager.connected:
+            self._send_json({'error': 'Не подключено к устройству'}, 400)
+            return
+        
+        try:
+            internet_ips = mikrotik_manager.get_internet_access_list()
+            
+            self._send_json({
+                'success': True,
+                'ips': internet_ips,
+                'count': len(internet_ips)
+            })
+            
+        except Exception as e:
+            print(f"❌ Ошибка получения internet_access: {e}")
+            traceback.print_exc()
+            self._send_json({'error': str(e)}, 500)
+    
+    def _toggle_internet_access(self, data):
+        """Включить/выключить доступ в интернет для IP"""
+        global mikrotik_manager
+        
+        if not mikrotik_manager or not mikrotik_manager.connected:
+            self._send_json({'error': 'Не подключено к устройству'}, 400)
+            return
+        
+        ip = data.get('ip', '').strip()
+        enable = data.get('enable', False)
+        comment = data.get('comment', '').strip()
+        
+        if not ip:
+            self._send_json({'error': 'Не указан IP адрес'}, 400)
+            return
+        
+        try:
+            # Валидация IP
+            ipaddress.ip_address(ip)
+            
+            print(f"🌐 Toggle internet access: IP={ip}, enable={enable}")
+            result = mikrotik_manager.toggle_internet_access(ip, enable, comment)
+            
+            if result['success']:
+                self._send_json({
+                    'success': True,
+                    'message': result.get('message', 'Статус изменён'),
+                    'ip': ip,
+                    'enabled': enable
+                })
+            else:
+                self._send_json({
+                    'success': False,
+                    'error': result.get('error', 'Неизвестная ошибка')
+                })
+                
+        except ValueError as e:
+            self._send_json({'error': f'Неверный формат IP: {e}'}, 400)
+        except Exception as e:
+            print(f"❌ Ошибка toggle internet access: {e}")
+            traceback.print_exc()
+            self._send_json({'error': str(e)}, 500)
+    
+    # ========================================
     
     def log_message(self, format, *args):
         """Кастомное логирование"""
