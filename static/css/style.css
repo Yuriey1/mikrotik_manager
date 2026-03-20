@@ -2197,3 +2197,168 @@ textarea {
     background: var(--bg-card);
     border-top: 1px solid var(--border-color);
 }
+
+
+/* === Множественный выбор абонентов === */
+.subscribers-table tbody tr.multi-selected {
+    background: rgba(220, 53, 69, 0.15) !important;
+    border-left: 3px solid #dc3545;
+}
+
+.subscribers-table tbody tr.multi-selected:hover {
+    background: rgba(220, 53, 69, 0.25) !important;
+}
+
+/* Колонка действий */
+.subscribers-table .col-actions {
+    text-align: right;
+    white-space: nowrap;
+    width: 100px;
+}
+
+.subscribers-table .col-actions .btn-sm {
+    padding: 4px 8px;
+    margin-left: 4px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.subscribers-table tr:hover .col-actions .btn-sm {
+    opacity: 1;
+}
+
+.subscribers-table .col-actions .btn-edit {
+    background: transparent;
+    color: var(--accent-primary);
+    border: 1px solid var(--accent-primary);
+}
+
+.subscribers-table .col-actions .btn-edit:hover {
+    background: var(--accent-primary);
+    color: white;
+}
+
+/* Подсказка выбора */
+.selection-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-right: 12px;
+}
+
+.subscribers-actions {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+}
+
+/* Кнопка массового удаления */
+#bulk-delete-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+#bulk-delete-btn:hover {
+    background: #c82333;
+}
+
+/* Диалог удаления */
+#remove-dialog .modal-content {
+    max-width: 500px;
+}
+
+#remove-dialog .modal-header h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 18px;
+}
+
+#remove-dialog .modal-body p {
+    margin: 4px 0;
+}
+
+#remove-dialog-info {
+    background: var(--bg-hover);
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+}
+
+
+/* === Выпадающее меню редактирования === */
+.edit-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.edit-dropdown-menu {
+    display: none;
+    position: fixed;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    min-width: 160px;
+    z-index: 10000;
+}
+
+.edit-dropdown-menu.show {
+    display: block;
+}
+
+.edit-dropdown-menu a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+
+.edit-dropdown-menu a:first-child {
+    border-radius: 6px 6px 0 0;
+}
+
+.edit-dropdown-menu a:last-child {
+    border-radius: 0 0 6px 6px;
+}
+
+.edit-dropdown-menu a:hover {
+    background: var(--bg-hover);
+}
+
+.edit-dropdown-menu a.disabled {
+    color: var(--text-muted);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.edit-dropdown-menu a.disabled:hover {
+    background: transparent;
+}
+
+.edit-dropdown-menu a i {
+    width: 16px;
+    text-align: center;
+}
+
+
+/* Кнопка удаления в action-panel */
+.action-btn-danger {
+    background: #dc3545 !important;
+    color: white !important;
+    border: 1px solid #dc3545 !important;
+}
+
+.action-btn-danger:hover {
+    background: #c82333 !important;
+    border-color: #c82333 !important;
+}

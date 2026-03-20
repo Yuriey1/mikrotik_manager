@@ -8,6 +8,7 @@ let allDevices = {}; // Хранит все устройства для поис
 let allSubscribers = []; // Хранит всех абонентов DHCP для замены MAC
 let selectedSubscriber = null; // Выбранный абонент для действий
 let internetAccessList = []; // Список IP с доступом в интернет
+let selectedSubscribers = new Set(); // Множественный выбор (Ctrl+клик)
 
 // Загрузка при старте
 document.addEventListener('DOMContentLoaded', function() {
@@ -102,7 +103,7 @@ function getTabName(tabKey) {
     const tabs = {
         'employee': 'Добавить сотрудника',
         'queues': 'Дерево очередей',
-        'mac-replace': 'Замена MAC',
+        'mac-replace': 'Настройка абонентов',
         'tools': 'Инструменты'
     };
     return tabs[tabKey] || tabKey;
@@ -2967,7 +2968,7 @@ function renderSubscribersTable(subscribers) {
     if (!subscribers || subscribers.length === 0) {
         tbody.innerHTML = `
             <tr class="empty-row">
-                <td colspan="4">
+                <td colspan="5">
                     <div class="empty-state">
                         <i class="fas fa-users"></i>
                         <p>${currentDevice ? 'Нет абонентов в DHCP' : 'Подключитесь к устройству для загрузки абонентов'}</p>
@@ -2983,16 +2984,36 @@ function renderSubscribersTable(subscribers) {
         const rowClass = hasInet ? 'has-internet' : '';
         
         return `
-            <tr data-ip="${sub.ip}" data-mac="${sub.mac || ''}" data-comment="${escapeHtml(sub.comment || '')}" class="${rowClass}" onclick="selectSubscriber(this)">
+            <tr data-ip="${sub.ip}" data-mac="${sub.mac || ''}" data-comment="${escapeHtml(sub.comment || '')}" 
+                class="${rowClass}" onclick="handleRowClick(event, this)">
                 <td class="col-inet" onclick="event.stopPropagation()">
                     <label class="inet-checkbox" title="${hasInet ? 'Доступ есть. Нажмите чтобы выключить' : 'Доступа нет. Нажмите чтобы включить'}">
-                        <input type="checkbox" ${hasInet ? 'checked' : ''} onchange="toggleInternetAccess('${sub.ip}', this.checked, '${escapeHtml(sub.comment || '')}')">
+                        <input type="checkbox" ${hasInet ? 'checked' : ''} 
+                               onchange="toggleInternetAccess('${sub.ip}', this.checked, '${escapeHtml(sub.comment || '')}')">
                         <span class="checkmark"></span>
                     </label>
                 </td>
                 <td class="ip-cell">${sub.ip}</td>
                 <td class="mac-cell">${sub.mac || '<span style="color: var(--text-muted);">—</span>'}</td>
                 <td class="comment-cell" title="${escapeHtml(sub.comment || '')}">${sub.comment || '<span style="color: var(--text-muted);">—</span>'}</td>
+                <td class="col-actions" onclick="event.stopPropagation()">
+                    <div class="edit-dropdown">
+                        <button class="btn btn-sm btn-edit dropdown-toggle" onclick="toggleEditDropdown(event, '${sub.ip}')" title="Редактировать">
+                            <i class="fas fa-edit"></i> <i class="fas fa-caret-down" style="font-size: 10px; margin-left: 2px;"></i>
+                        </button>
+                        <div class="edit-dropdown-menu" id="edit-dropdown-${sub.ip.replace(/\./g, '-')}">
+                            <a href="#" onclick="showMacReplaceForIp(event, '${sub.ip}', '${sub.mac || ''}', '${escapeHtml(sub.comment || '')}')">
+                                <i class="fas fa-exchange-alt"></i> Замена MAC
+                            </a>
+                            <a href="#" onclick="showChangeIpDialog(event, '${sub.ip}')" class="disabled" title="Скоро">
+                                <i class="fas fa-network-wired"></i> Изменить IP
+                            </a>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-danger" onclick="quickRemove('${sub.ip}', '${sub.mac || ''}', '${escapeHtml(sub.comment || '')}')" title="Удалить">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
             </tr>
         `;
     }).join('');
@@ -3067,28 +3088,301 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Выбор абонента
-function selectSubscriber(row) {
-    console.log('Выбор абонента:', row);
+// Выбор абонента - обработка клика по строке
+function handleRowClick(event, row) {
+    const ip = row.getAttribute('data-ip');
+    const mac = row.getAttribute('data-mac');
+    const comment = row.getAttribute('data-comment');
     
-    // Снимаем выделение со всех
-    const rows = document.querySelectorAll('#subscribers-tbody tr');
-    rows.forEach(r => r.classList.remove('selected'));
+    // Ctrl+ЛКМ — множественный выбор
+    if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        
+        if (selectedSubscribers.has(ip)) {
+            selectedSubscribers.delete(ip);
+            row.classList.remove('multi-selected');
+        } else {
+            selectedSubscribers.add(ip);
+            row.classList.add('multi-selected');
+        }
+        
+        updateBulkDeleteBtn();
+        
+        // Если есть множественный выбор — скрываем action-panel
+        if (selectedSubscribers.size > 0) {
+            document.getElementById('subscriber-action-panel').style.display = 'none';
+            selectedSubscriber = null;
+        }
+    } 
+    // Обычный клик — только выделение строки (БЕЗ action-panel)
+    else {
+        // Снимаем множественный выбор
+        selectedSubscribers.clear();
+        document.querySelectorAll('#subscribers-tbody tr.multi-selected').forEach(r => {
+            r.classList.remove('multi-selected');
+        });
+        updateBulkDeleteBtn();
+        
+        // Одиночное выделение строки
+        const rows = document.querySelectorAll('#subscribers-tbody tr');
+        rows.forEach(r => r.classList.remove('selected'));
+        row.classList.add('selected');
+        
+        selectedSubscriber = { ip, mac, comment };
+        
+        // Action-panel НЕ показываем - она открывается из меню [✎▼]
+    }
+}
+
+// Обновить кнопку массового удаления
+function updateBulkDeleteBtn() {
+    const btn = document.getElementById('bulk-delete-btn');
+    const countEl = document.getElementById('bulk-count');
+    const count = selectedSubscribers.size;
     
-    // Выделяем выбранную строку
-    row.classList.add('selected');
+    if (count > 0) {
+        btn.style.display = 'inline-flex';
+        countEl.textContent = count;
+    } else {
+        btn.style.display = 'none';
+    }
+}
+
+// Очистить множественный выбор
+function clearMultiSelection() {
+    selectedSubscribers.clear();
+    document.querySelectorAll('#subscribers-tbody tr.multi-selected').forEach(r => {
+        r.classList.remove('multi-selected');
+    });
+    updateBulkDeleteBtn();
+}
+
+// Быстрое удаление из строки
+function quickRemove(ip, mac, comment) {
+    selectedSubscriber = { ip, mac, comment };
+    showRemoveDialog();
+}
+
+// Переключение выпадающего меню редактирования
+function toggleEditDropdown(event, ip) {
+    event.stopPropagation();
+    event.preventDefault();
     
-    // Сохраняем данные выбранного абонента
-    selectedSubscriber = {
-        ip: row.getAttribute('data-ip'),
-        mac: row.getAttribute('data-mac'),
-        comment: row.getAttribute('data-comment')
+    const dropdownId = 'edit-dropdown-' + ip.replace(/\./g, '-');
+    const dropdown = document.getElementById(dropdownId);
+    
+    if (!dropdown) return;
+    
+    // Если меню уже открыто - закрываем
+    if (dropdown.classList.contains('show')) {
+        dropdown.classList.remove('show');
+        return;
+    }
+    
+    // Закрываем все другие dropdown
+    document.querySelectorAll('.edit-dropdown-menu.show').forEach(menu => {
+        menu.classList.remove('show');
+    });
+    
+    // Вычисляем позицию кнопки
+    const btn = event.currentTarget;
+    const rect = btn.getBoundingClientRect();
+    
+    // Устанавливаем позицию dropdown (fixed)
+    dropdown.style.top = (rect.bottom + 4) + 'px';
+    dropdown.style.right = (window.innerWidth - rect.right) + 'px';
+    dropdown.style.left = 'auto';
+    
+    // Показываем меню
+    dropdown.classList.add('show');
+}
+
+// Закрыть все dropdown меню редактирования
+function closeAllEditDropdowns() {
+    document.querySelectorAll('.edit-dropdown-menu.show').forEach(menu => {
+        menu.classList.remove('show');
+    });
+}
+
+// Глобальный обработчик клика для закрытия dropdown
+document.addEventListener('click', function(event) {
+    // Закрываем dropdown редактирования если клик вне его
+    if (!event.target.closest('.edit-dropdown')) {
+        closeAllEditDropdowns();
+    }
+});
+
+// Показать action-panel для конкретного IP (из dropdown меню)
+function showMacReplaceForIp(event, ip, mac, comment) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    // Устанавливаем выбранного абонента
+    selectedSubscriber = { ip, mac, comment };
+    
+    // Выделяем строку
+    const row = document.querySelector(`tr[data-ip="${ip}"]`);
+    if (row) {
+        const rows = document.querySelectorAll('#subscribers-tbody tr');
+        rows.forEach(r => r.classList.remove('selected'));
+        row.classList.add('selected');
+    }
+    
+    // Закрываем dropdown
+    closeAllEditDropdowns();
+    
+    // Показываем action-panel
+    showActionPanel(selectedSubscriber);
+}
+
+// Заглушка для будущего функционала изменения IP
+function showChangeIpDialog(event, ip) {
+    event.preventDefault();
+    event.stopPropagation();
+    // TODO: реализовать изменение IP
+    console.log('Изменение IP для:', ip);
+}
+
+// Показать диалог удаления (одиночный)
+function showRemoveDialog(event) {
+    if (event) event.preventDefault();
+    
+    if (!selectedSubscriber) return;
+    
+    document.getElementById('remove-dialog-title').innerHTML = 
+        '<i class="fas fa-exclamation-triangle" style="color: #dc3545;"></i> Удаление абонента';
+    document.getElementById('remove-ip').textContent = selectedSubscriber.ip;
+    document.getElementById('remove-mac').textContent = selectedSubscriber.mac || 'нет MAC';
+    document.getElementById('remove-comment').textContent = selectedSubscriber.comment || 'нет комментария';
+    document.getElementById('remove-result').style.display = 'none';
+    document.getElementById('confirm-remove-btn').disabled = false;
+    
+    document.getElementById('remove-dialog').style.display = 'flex';
+    
+    // Закрываем dropdown
+    closeActionDropdown();
+}
+
+// Показать диалог массового удаления
+function showBulkRemoveDialog() {
+    if (selectedSubscribers.size === 0) return;
+    
+    const ips = Array.from(selectedSubscribers);
+    
+    document.getElementById('remove-dialog-title').innerHTML = 
+        `<i class="fas fa-exclamation-triangle" style="color: #dc3545;"></i> Удаление ${ips.length} абонентов`;
+    document.getElementById('remove-ip').textContent = ips.join(', ');
+    document.getElementById('remove-mac').textContent = '—';
+    document.getElementById('remove-comment').textContent = `Выбрано: ${ips.length} абонентов`;
+    document.getElementById('remove-result').style.display = 'none';
+    document.getElementById('confirm-remove-btn').disabled = false;
+    
+    document.getElementById('remove-dialog').style.display = 'flex';
+}
+
+// Закрыть диалог удаления
+function closeRemoveDialog() {
+    document.getElementById('remove-dialog').style.display = 'none';
+}
+
+// Подтверждение удаления
+function confirmRemoveSubscriber() {
+    const btn = document.getElementById('confirm-remove-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Удаление...';
+    
+    const resultDiv = document.getElementById('remove-result');
+    resultDiv.style.display = 'block';
+    
+    // Проверяем — одиночное или массовое
+    const ipText = document.getElementById('remove-ip').textContent;
+    const ips = ipText.includes(',') ? ipText.split(', ') : [ipText];
+    
+    if (ips.length > 1) {
+        bulkRemove(ips, resultDiv, btn);
+    } else {
+        singleRemove(ips[0], resultDiv, btn);
+    }
+}
+
+// Одиночное удаление
+function singleRemove(ip, resultDiv, btn) {
+    resultDiv.innerHTML = '<p style="color: #666;"><i class="fas fa-spinner fa-spin"></i> Удаление...</p>';
+    
+    fetch(`/api/subscriber/remove?ip=${encodeURIComponent(ip)}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                resultDiv.innerHTML = `
+                    <div style="background: #d4edda; padding: 12px; border-radius: 6px;">
+                        <p style="color: #155724; margin: 0;">✅ Удалено элементов: ${data.total_removed}</p>
+                    </div>`;
+                setTimeout(() => {
+                    closeRemoveDialog();
+                    document.getElementById('subscriber-action-panel').style.display = 'none';
+                    loadDhcpSubscribers();
+                }, 1500);
+            } else {
+                resultDiv.innerHTML = `
+                    <div style="background: #f8d7da; padding: 12px; border-radius: 6px;">
+                        <p style="color: #721c24; margin: 0;">❌ ${data.error}</p>
+                    </div>`;
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-trash"></i> Удалить';
+            }
+        })
+        .catch(err => {
+            resultDiv.innerHTML = `
+                <div style="background: #f8d7da; padding: 12px; border-radius: 6px;">
+                    <p style="color: #721c24; margin: 0;">❌ Ошибка: ${err}</p>
+                </div>`;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-trash"></i> Удалить';
+        });
+}
+
+// Массовое удаление
+function bulkRemove(ips, resultDiv, btn) {
+    let totalRemoved = 0;
+    let errors = [];
+    
+    const removeNext = (index) => {
+        if (index >= ips.length) {
+            const bg = errors.length > 0 ? '#fff3cd' : '#d4edda';
+            const color = errors.length > 0 ? '#856404' : '#155724';
+            resultDiv.innerHTML = `
+                <div style="background: ${bg}; padding: 12px; border-radius: 6px;">
+                    <p style="color: ${color}; margin: 0;">✅ Массовое удаление завершено</p>
+                    <p style="margin: 4px 0 0 0;">Обработано: ${ips.length}, удалено: ${totalRemoved}</p>
+                    ${errors.length > 0 ? `<p style="color: #856404; margin: 4px 0 0 0;">Ошибок: ${errors.length}</p>` : ''}
+                </div>`;
+            setTimeout(() => {
+                closeRemoveDialog();
+                clearMultiSelection();
+                loadDhcpSubscribers();
+            }, 2000);
+            return;
+        }
+        
+        resultDiv.innerHTML = `<p style="color: #666;"><i class="fas fa-spinner fa-spin"></i> Удаление: ${index + 1}/${ips.length}...</p>`;
+        
+        fetch(`/api/subscriber/remove?ip=${encodeURIComponent(ips[index])}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    totalRemoved += data.total_removed;
+                } else {
+                    errors.push({ ip: ips[index], error: data.error });
+                }
+                removeNext(index + 1);
+            })
+            .catch(err => {
+                errors.push({ ip: ips[index], error: err.toString() });
+                removeNext(index + 1);
+            });
     };
     
-    console.log('Данные абонента:', selectedSubscriber);
-    
-    // Показываем панель действий
-    showActionPanel(selectedSubscriber);
+    removeNext(0);
 }
 
 // Показать панель действий
@@ -3121,9 +3415,12 @@ function showActionPanel(subscriber) {
 function clearSubscriberSelection() {
     selectedSubscriber = null;
     
-    // Снимаем выделение
+    // Снимаем одиночное выделение
     const rows = document.querySelectorAll('#subscribers-tbody tr');
     rows.forEach(r => r.classList.remove('selected'));
+    
+    // Снимаем множественное выделение
+    clearMultiSelection();
     
     // Скрываем панель
     const panel = document.getElementById('subscriber-action-panel');

@@ -206,6 +206,9 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             # ===== INTERNET ACCESS =====
             elif path == '/api/internet_access':
                 self._get_internet_access_list()
+            # ===== УДАЛЕНИЕ АБОНЕНТА =====
+            elif path == '/api/subscriber/remove':
+                self._remove_subscriber(parsed)
             # ===== ОБРАБОТКА FAVICON =====
             elif path == '/favicon.ico':
                 try:
@@ -1326,6 +1329,29 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             print(f"❌ Ошибка получения internet_access: {e}")
             traceback.print_exc()
             self._send_json({'error': str(e)}, 500)
+    
+    def _remove_subscriber(self, parsed):
+        """Удаление абонента по IP"""
+        global mikrotik_manager
+        
+        query = parse_qs(parsed.query)
+        ip_address = query.get('ip', [''])[0]
+        
+        if not ip_address:
+            self._send_json({'success': False, 'error': 'IP адрес не указан'}, 400)
+            return
+        
+        if not mikrotik_manager or not mikrotik_manager.connected:
+            self._send_json({'success': False, 'error': 'Нет соединения с MikroTik'}, 400)
+            return
+        
+        try:
+            result = mikrotik_manager.remove_subscriber(ip_address)
+            self._send_json(result)
+        except Exception as e:
+            print(f"❌ Ошибка удаления абонента: {e}")
+            traceback.print_exc()
+            self._send_json({'success': False, 'error': str(e)}, 500)
     
     def _toggle_internet_access(self, data):
         """Включить/выключить доступ в интернет для IP"""

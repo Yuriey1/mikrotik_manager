@@ -550,7 +550,7 @@ class MikroTikManager:
 
     def add_internet_access(self, ip: str, comment: str = "") -> bool:
         """Добавить IP в список internet_access"""
-        return self.add_to_address_list(ip, "internet_access", comment)
+        return self.add_to_address_list("internet_access", ip, comment)
 
     def remove_internet_access(self, ip: str) -> bool:
         """Удалить IP из списка internet_access"""
@@ -932,14 +932,14 @@ class MikroTikManager:
     def get_dhcp_subscribers(self, pool_name: str = None) -> List[Dict]:
         """
         Получить список абонентов из DHCP leases
-        Абоненты - это leases с непустыми комментариями (ФИО, должность)
-        
+        Абоненты - все leases (с комментарием или без)
+    
         Args:
             pool_name: Имя DHCP пула для фильтрации (если None - все абоненты)
         """
         try:
             leases = self.get_dhcp_leases()
-            
+        
             # Получаем информацию о пулах если нужна фильтрация
             pool_ranges = {}
             if pool_name:
@@ -958,44 +958,42 @@ class MikroTikManager:
                                     except:
                                         pass
                         break
-            
+        
             subscribers = []
-            
+        
             for lease in leases:
                 comment = lease.get('comment', '')
-                # Абонент - это lease с комментарием (там ФИО/должность)
-                if comment and comment.strip():
-                    ip = lease.get('address', '')
-                    
-                    # Если указан пул, проверяем принадлежность IP к диапазону пула
-                    if pool_name and pool_ranges:
-                        ip_in_pool = False
-                        try:
-                            ip_obj = ipaddress.ip_address(ip.split('/')[0])
-                            for (start, end) in pool_ranges.keys():
-                                start_obj = ipaddress.ip_address(start)
-                                end_obj = ipaddress.ip_address(end)
-                                if start_obj <= ip_obj <= end_obj:
-                                    ip_in_pool = True
-                                    break
-                        except:
-                            pass
-                        
-                        if not ip_in_pool:
-                            continue
-                    
-                    subscriber = {
-                        'ip': ip,
-                        'mac': lease.get('mac-address', ''),
-                        'comment': comment,
-                        'host_name': lease.get('host-name', ''),
-                        'dynamic': lease.get('dynamic') == 'true',
-                        'disabled': lease.get('disabled') == 'true',
-                        'server': lease.get('server', ''),
-                        'id': lease.get('.id', '')
-                    }
-                    subscribers.append(subscriber)
+                ip = lease.get('address', '')
             
+                # Если указан пул, проверяем принадлежность IP к диапазону пула
+                if pool_name and pool_ranges:
+                    ip_in_pool = False
+                    try:
+                        ip_obj = ipaddress.ip_address(ip.split('/')[0])
+                        for (start, end) in pool_ranges.keys():
+                            start_obj = ipaddress.ip_address(start)
+                            end_obj = ipaddress.ip_address(end)
+                            if start_obj <= ip_obj <= end_obj:
+                                ip_in_pool = True
+                                break
+                    except:
+                        pass
+                
+                    if not ip_in_pool:
+                        continue
+            
+                subscriber = {
+                    'ip': ip,
+                    'mac': lease.get('mac-address', ''),
+                    'comment': comment,
+                    'host_name': lease.get('host-name', ''),
+                    'dynamic': lease.get('dynamic') == 'true',
+                    'disabled': lease.get('disabled') == 'true',
+                    'server': lease.get('server', ''),
+                    'id': lease.get('.id', '')
+                }
+                subscribers.append(subscriber)
+        
             # Безопасная сортировка по IP
             def safe_ip_sort(item):
                 try:
@@ -1007,15 +1005,15 @@ class MikroTikManager:
                     return (1, ipaddress.ip_address('0.0.0.0'))
                 except:
                     return (2, ipaddress.ip_address('0.0.0.0'))
-            
+        
             subscribers.sort(key=safe_ip_sort)
-            
+        
             if pool_name:
                 print(f"✅ Найдено абонентов в пуле '{pool_name}': {len(subscribers)}")
             else:
                 print(f"✅ Найдено абонентов: {len(subscribers)}")
             return subscribers
-            
+        
         except Exception as e:
             print(f"❌ Ошибка получения абонентов: {e}")
             traceback.print_exc()
@@ -1207,5 +1205,130 @@ class MikroTikManager:
             result['error'] = f"Ошибка при замене MAC: {str(e)}"
             result['steps'].append(f"❌ Ошибка: {str(e)}")
             print(f"❌ Ошибка ручной замены MAC: {e}")
+            traceback.print_exc()
+            return result
+
+    def remove_subscriber(self, ip_address: str) -> Dict:
+        """
+        Полное удаление абонента по IP из:
+        - DHCP Leases
+        - ARP таблицы
+        - Firewall Address Lists
+        - Simple Queues
+        """
+        result = {
+            'success': False,
+            'ip': ip_address,
+            'dhcp_leases': [],
+            'arp': [],
+            'firewall_lists': [],
+            'queues': [],
+            'total_removed': 0,
+            'steps': []
+        }
+        
+        if not self.api:
+            result['error'] = 'Нет соединения с MikroTik'
+            return result
+        
+        try:
+            ip_clean = ip_address.split('/')[0]
+            result['steps'].append(f"🔍 Удаление абонента: {ip_clean}")
+            
+            # 1. Удаление из DHCP Lease
+            result['steps'].append("📋 DHCP Leases:")
+            try:
+                for lease in self.api.path('/ip/dhcp-server/lease'):
+                    lease_addr = lease.get('address', '')
+                    if lease_addr == ip_address or lease_addr == ip_clean:
+                        lease_id = lease.get('.id')
+                        if lease_id:
+                            self.api.path('/ip/dhcp-server/lease').remove(lease_id)
+                            result['dhcp_leases'].append({
+                                'address': lease_addr,
+                                'mac': lease.get('mac-address', 'N/A')
+                            })
+                            result['steps'].append(f"   ✅ Удалён lease: {lease_addr}")
+                            result['total_removed'] += 1
+            except Exception as e:
+                result['steps'].append(f"   ❌ Ошибка: {e}")
+            
+            # 2. Удаление из ARP таблицы
+            result['steps'].append("📋 ARP таблица:")
+            try:
+                for arp in self.api.path('/ip/arp'):
+                    if arp.get('address') == ip_clean:
+                        arp_id = arp.get('.id')
+                        if arp_id:
+                            self.api.path('/ip/arp').remove(arp_id)
+                            result['arp'].append({'address': ip_clean})
+                            result['steps'].append(f"   ✅ Удалена ARP запись")
+                            result['total_removed'] += 1
+            except Exception as e:
+                result['steps'].append(f"   ❌ Ошибка: {e}")
+            
+            # 3. Удаление из Firewall Address Lists
+            result['steps'].append("📋 Firewall Address Lists:")
+            try:
+                for addr in self.api.path('/ip/firewall/address-list'):
+                    addr_value = addr.get('address', '')
+                    if addr_value == ip_address or addr_value == ip_clean:
+                        addr_id = addr.get('.id')
+                        if addr_id:
+                            list_name = addr.get('list', 'N/A')
+                            self.api.path('/ip/firewall/address-list').remove(addr_id)
+                            result['firewall_lists'].append({
+                                'list': list_name,
+                                'address': addr_value
+                            })
+                            result['steps'].append(f"   ✅ Удалён из списка '{list_name}'")
+                            result['total_removed'] += 1
+            except Exception as e:
+                result['steps'].append(f"   ❌ Ошибка: {e}")
+            
+            # 4. Обработка Simple Queues
+            result['steps'].append("📋 Simple Queues:")
+            try:
+                for queue in self.api.path('/queue/simple'):
+                    target = queue.get('target', '')
+                    if target and ip_clean in target:
+                        queue_id = queue.get('.id')
+                        queue_name = queue.get('name', 'N/A')
+                        
+                        addresses = [a.strip() for a in target.split(',')]
+                        new_addresses = [a for a in addresses if ip_clean not in a]
+                        
+                        if len(new_addresses) < len(addresses):
+                            if new_addresses:
+                                new_target = ','.join(new_addresses)
+                                self.api.path('/queue/simple').update(**{
+                                    '.id': queue_id, 
+                                    'target': new_target
+                                })
+                                result['steps'].append(f"   ✅ Обновлена очередь '{queue_name}'")
+                                result['queues'].append({
+                                    'name': queue_name,
+                                    'action': 'updated'
+                                })
+                            else:
+                                self.api.path('/queue/simple').remove(queue_id)
+                                result['steps'].append(f"   ✅ Удалена очередь '{queue_name}' (пустой target)")
+                                result['queues'].append({
+                                    'name': queue_name,
+                                    'action': 'deleted'
+                                })
+                            result['total_removed'] += 1
+            except Exception as e:
+                result['steps'].append(f"   ❌ Ошибка: {e}")
+            
+            result['success'] = True
+            result['message'] = f"Удалено элементов: {result['total_removed']}"
+            print(f"✅ Удаление абонента {ip_clean} завершено. Всего: {result['total_removed']}")
+            return result
+            
+        except Exception as e:
+            result['error'] = str(e)
+            result['steps'].append(f"❌ Критическая ошибка: {e}")
+            print(f"❌ Ошибка удаления абонента: {e}")
             traceback.print_exc()
             return result
