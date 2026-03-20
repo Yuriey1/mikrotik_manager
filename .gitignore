@@ -58,6 +58,8 @@ config/prod.py
 .env.local
 secrets.json
 
-# Ваши файлы из примера
-netbox_config.json  # если содержит секреты
-devices.json        # если локальная копия
+# Пароли и токены доступа
+./netbox_config.json    # если содержит секреты
+./devices.json          # если локальная копия
+./device_passwords.json # пароли от микротов
+./test.sh               # Тест на доступ к netbox, там есть токен доступа

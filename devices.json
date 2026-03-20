@@ -1,0 +1,194 @@
+{
+  "Шалакит": {
+    "name": "Шалакит",
+    "ip": "217.21.106.198",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Леонтьевский RT": {
+    "name": " Леонтьевский RT",
+    "ip": "92.124.97.198",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": "Леонтьевсикй Ростелеком"
+  },
+  "Караган RT": {
+    "name": "Караган RT",
+    "ip": "95.156.122.82",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": "Караган Ростелеком"
+  },
+  "Сисим Дражный ТТК": {
+    "name": "Сисим Дражный ТТК",
+    "ip": "188.43.35.17",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": "Сисим Дражный ШПД ТТК"
+  },
+  "Дражные Тайлы": {
+    "name": "Дражные Тайлы",
+    "ip": "91.109.231.83",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": "Дражные тайлы, спутник"
+  },
+  "Посольный Теле2": {
+    "name": "Посольный Теле2",
+    "ip": "81.26.80.211",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Надежда Мегафон": {
+    "name": "Надежда Мегафон",
+    "ip": "31.173.249.220",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Кувай Ростелеком": {
+    "name": "Кувай Ростелеком",
+    "ip": "92.124.98.106",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Веселый Теле2": {
+    "name": "Веселый Теле2",
+    "ip": "81.26.81.192",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Бессоновский": {
+    "name": "Бессоновский",
+    "ip": "192.168.2.246",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Юхтахта": {
+    "name": "Юхтахта",
+    "ip": "178.218.10.110",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "ПИТ-городок": {
+    "name": "ПИТ-городок",
+    "ip": "178.218.2.165",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Горевая": {
+    "name": "Горевая",
+    "ip": "31.173.162.11",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Полуденовка": {
+    "name": "Полуденовка",
+    "ip": "85.175.87.43",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Полуд.Главстан": {
+    "name": "Полуд.Главстан",
+    "ip": "85.175.87.42",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Непряхино": {
+    "name": "Непряхино",
+    "ip": "192.168.2.249",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Шумиха Нижняя": {
+    "name": "Шумиха Нижняя",
+    "ip": "91.109.231.84",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Ильинский": {
+    "name": "Ильинский",
+    "ip": "185.17.39.90",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Безымянка-Северный": {
+    "name": "Безымянка-Северный",
+    "ip": "217.21.106.173",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Новый Мамон": {
+    "name": "Новый Мамон",
+    "ip": "46.52.193.216",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Тюрепино": {
+    "name": "Тюрепино",
+    "ip": "81.18.123.114",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Еленка": {
+    "name": "Еленка",
+    "ip": "217.21.106.174",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Андат R": {
+    "name": "Андат R",
+    "ip": "217.65.89.10",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  },
+  "Правая Безымянка": {
+    "name": "Правая Безымянка",
+    "ip": "46.29.199.154",
+    "port": 8728,
+    "username": "nur001",
+    "password": "enc:WjVNZjN4cGs=",
+    "description": ""
+  }
+}
