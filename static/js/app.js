@@ -3614,23 +3614,24 @@ function analyzeTrafficPath() {
             info.parentQueues.forEach(pq => trafficParentNames.add(pq.name));
         });
         Object.keys(dstMap).forEach(dst => {
+            const isPaid = q => q.name.toLowerCase().startsWith('paid');
             let queue = null;
             if (ipData.existing && ipData.existing.length > 0) {
                 for (const name of ipData.existing) {
                     if (queueDstMap.get(name) === dst) {
-                        queue = allQueuesFlat.find(q => q.name === name);
-                        if (queue) break;
+                        const q = allQueuesFlat.find(q => q.name === name);
+                        if (q && !isPaid(q)) { queue = q; break; }
                     }
                 }
             }
             if (!queue) {
-                const dstQueues = allQueuesFlat.filter(q => queueDstMap.get(q.name) === dst);
+                const dstQueues = allQueuesFlat.filter(q => queueDstMap.get(q.name) === dst && !isPaid(q));
                 const ifaceQueues = dstQueues.filter(q => isInterfaceOnlyTarget(q.target));
                 ifaceQueues.sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
                 queue = ifaceQueues.length > 0 ? ifaceQueues[0] : null;
             }
             if (!queue) {
-                const dstQueues = allQueuesFlat.filter(q => queueDstMap.get(q.name) === dst);
+                const dstQueues = allQueuesFlat.filter(q => queueDstMap.get(q.name) === dst && !isPaid(q));
                 queue = dstQueues.find(q => !trafficParentNames.has(q.name));
             }
             if (queue) currentTrafficQueues.set(dst, queue);
