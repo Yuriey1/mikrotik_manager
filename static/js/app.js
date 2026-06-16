@@ -3721,34 +3721,6 @@ function isAncestorOf(parent, child) {
     return false;
 }
 
-function buildDstSummaryHTML() {
-    const dstMap = buildDstMap();
-    const sortedDsts = Object.entries(dstMap).sort((a, b) => b[1].totalChildren - a[1].totalChildren);
-    if (!sortedDsts.length) return '';
-
-    let html = '<div class="dst-summary"><div class="dst-summary-header"><i class="fas fa-network-wired"></i> Интерфейсы назначения и родительские очереди</div>';
-    sortedDsts.forEach(([dst, info]) => {
-        const isPrimary = channelsInfo && channelsInfo.primary_channel && channelsInfo.primary_channel.interface === dst;
-        const isBackup = channelsInfo && channelsInfo.backup_channel && channelsInfo.backup_channel.interface === dst;
-        let channelTag = '';
-        if (isPrimary) channelTag = '<span class="dst-tag primary">Основной</span>';
-        else if (isBackup) channelTag = '<span class="dst-tag backup">Резервный</span>';
-
-        html += '<div class="dst-item"><div class="dst-header">';
-        html += '<span class="dst-interface"><i class="fas fa-ethernet"></i> ' + dst + '</span>' + channelTag;
-        html += '<span class="dst-stats">' + info.parentQueues.length + ' родит., ' + info.totalChildren + ' дочерн.</span>';
-        html += '</div><div class="dst-queues">';
-        info.parentQueues.forEach(pq => {
-            const childCount = pq.children ? pq.children.length : 0;
-            html += '<div class="dst-parent-queue"><span class="pq-name">' + pq.name + '</span>';
-            html += '<span class="pq-stats">дочерних: ' + childCount + '</span></div>';
-        });
-        html += '</div></div>';
-    });
-    html += '</div>';
-    return html;
-}
-
 function renderParallelTrafficChains(ip) {
     const container = document.getElementById('traffic-route-container');
     if (!currentTrafficQueues.size) { container.innerHTML = '<div class="traffic-route-placeholder"><i class="fas fa-exclamation-circle"></i><p>Не удалось определить очередь</p></div>'; return; }
@@ -3756,9 +3728,7 @@ function renderParallelTrafficChains(ip) {
     const dstMap = buildDstMap();
     const dstEntries = Object.entries(dstMap).sort((a, b) => b[1].totalChildren - a[1].totalChildren);
 
-    let html = buildDstSummaryHTML();
-
-    html += '<div class="traffic-chains-wrapper"><div class="shared-ip-node"><div class="chain-node ip-node"><div class="node-icon"><i class="fas fa-laptop"></i></div><div class="node-content"><div class="node-label">IP адрес</div><div class="node-value">' + ip + '</div></div></div></div>';
+    let html = '<div class="traffic-chains-wrapper"><div class="shared-ip-node"><div class="chain-node ip-node"><div class="node-icon"><i class="fas fa-laptop"></i></div><div class="node-content"><div class="node-label">IP адрес</div><div class="node-value">' + ip + '</div></div></div></div>';
 
     if (dstEntries.length > 1) {
         html += '<div class="split-arrow"><svg viewBox="0 0 100 40"><path d="M50 0 L50 20 L10 40" class="arrow-line arrow-primary"/><path d="M50 20 L90 40" class="arrow-line arrow-backup"/></svg></div>';
