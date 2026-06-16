@@ -3786,7 +3786,7 @@ function renderParallelTrafficChains(ip) {
 
         html += '<div class="traffic-chain-row ' + chainClass + '" data-dst="' + dst + '">';
         html += '<div class="chain-label ' + labelClass + '"><i class="fas ' + iconClass + '"></i> ' + labelText + '</div>';
-        html += '<div class="chain-node queue-node clickable" onclick="openQueuePopover(event)"><div class="node-icon"><i class="fas fa-sitemap"></i></div><div class="node-content"><div class="node-value">' + (dstQueue ? dstQueue.name : '—') + '</div>';
+        html += '<div class="chain-node queue-node clickable" onmousedown="event.stopPropagation()" onclick="openQueuePopover(event)"><div class="node-icon"><i class="fas fa-sitemap"></i></div><div class="node-content"><div class="node-value">' + (dstQueue ? dstQueue.name : '—') + '</div>';
         if (dstQueue && dstQueue.max_limit && dstQueue.max_limit !== '0/0') html += '<div class="node-bandwidth">' + formatBandwidth(dstQueue.max_limit) + '</div>';
         html += '</div></div>';
 
@@ -3833,4 +3833,4 @@ function renderQueuePopoverList(queues) {
 }
 function selectQueueFromPopover(queueName) { const queue = allQueuesFlat.find(q => q.name === queueName); if (queue && currentPopoverDst) { currentTrafficQueues.set(currentPopoverDst, queue); closeQueuePopover(); renderParallelTrafficChains(document.getElementById('traffic-ip').value.trim()); } }
 function applyChainSelection() { const primaryDst = channelsInfo && channelsInfo.primary_channel ? channelsInfo.primary_channel.interface : null; const queue = primaryDst ? currentTrafficQueues.get(primaryDst) : null; if (!queue) { showAlert('Выберите очередь в основном канале', 'warning'); return; } const ip = document.getElementById('traffic-ip').value.trim(); const ipInput = document.getElementById('ip-address'); if (ipInput) ipInput.value = ip; switchTab('employee'); showAlert('Выбрана очередь: ' + queue.name, 'success'); }
-document.addEventListener('click', function(e) { const popover = document.getElementById('queue-selector-popover'); if (popover && popover.style.display !== 'none' && !popover.contains(e.target)) closeQueuePopover(); });
+document.addEventListener('mousedown', function(e) { const popover = document.getElementById('queue-selector-popover'); if (popover && popover.style.display !== 'none' && !popover.contains(e.target)) closeQueuePopover(); });
