@@ -11,7 +11,7 @@ let internetAccessList = []; // Список IP с доступом в инте�
 
 // Переменные для визуализации маршрута трафика
 let allQueuesFlat = [];
-let currentTrafficQueue = null;
+let currentTrafficQueues = new Map();
 let channelsInfo = null;
 let trafficParentNames = new Set();
 let queueDstMap = new Map();
@@ -3611,7 +3611,11 @@ function analyzeTrafficPath() {
         if (ipData.existing && ipData.existing.length > 0) initialQueue = allQueuesFlat.find(q => q.name === ipData.existing[0]);
         if (!initialQueue) initialQueue = allQueuesFlat.find(q => q.name.toLowerCase().includes('bridge') && q.name.toLowerCase().includes('local'));
         if (!initialQueue && allQueuesFlat.length > 0) initialQueue = allQueuesFlat[0];
-        currentTrafficQueue = initialQueue;
+        currentTrafficQueues.clear();
+        if (initialQueue) {
+            const dstMap = buildDstMap();
+            Object.keys(dstMap).forEach(dst => currentTrafficQueues.set(dst, initialQueue));
+        }
         renderParallelTrafficChains(ip);
     })
     .catch(error => { console.error('Ошибка:', error); showAlert('Ошибка соединения', 'error'); container.innerHTML = '<div class="traffic-route-placeholder"><i class="fas fa-exclamation-circle"></i><p>Ошибка загрузки данных. Проверьте подключение к устройству.</p></div>'; });
@@ -3708,7 +3712,7 @@ function buildDstSummaryHTML() {
 
 function renderParallelTrafficChains(ip) {
     const container = document.getElementById('traffic-route-container');
-    if (!currentTrafficQueue) { container.innerHTML = '<div class="traffic-route-placeholder"><i class="fas fa-exclamation-circle"></i><p>Не удалось определить очередь</p></div>'; return; }
+    if (!currentTrafficQueues.size) { container.innerHTML = '<div class="traffic-route-placeholder"><i class="fas fa-exclamation-circle"></i><p>Не удалось определить очередь</p></div>'; return; }
 
     const dstMap = buildDstMap();
     const dstEntries = Object.entries(dstMap).sort((a, b) => b[1].totalChildren - a[1].totalChildren);
@@ -3729,6 +3733,7 @@ function renderParallelTrafficChains(ip) {
     html += '<div class="parallel-chains">';
 
     dstEntries.forEach(([dst, info]) => {
+        const dstQueue = currentTrafficQueues.get(dst);
         const isPrimary = channelsInfo && channelsInfo.primary_channel && channelsInfo.primary_channel.interface === dst;
         const isBackup = channelsInfo && channelsInfo.backup_channel && channelsInfo.backup_channel.interface === dst;
         const labelClass = isPrimary ? 'primary' : (isBackup ? 'backup' : '');
@@ -3737,16 +3742,18 @@ function renderParallelTrafficChains(ip) {
         const iconClass = isPrimary ? 'fa-bolt' : (isBackup ? 'fa-shield-alt' : 'fa-ethernet');
 
         let ancestorParent = null;
-        for (const pq of info.parentQueues) {
-            if (isAncestorOf(pq, currentTrafficQueue)) {
-                ancestorParent = pq;
-                break;
+        if (dstQueue) {
+            for (const pq of info.parentQueues) {
+                if (isAncestorOf(pq, dstQueue)) {
+                    ancestorParent = pq;
+                    break;
+                }
             }
         }
 
         html += '<div class="traffic-chain-row ' + chainClass + '" data-dst="' + dst + '">';
         html += '<div class="chain-label ' + labelClass + '"><i class="fas ' + iconClass + '"></i> ' + labelText + '</div>';
-        html += '<div class="chain-node queue-node clickable" onclick="openQueuePopover(event)"><div class="node-icon"><i class="fas fa-sitemap"></i></div><div class="node-content"><div class="node-label">Очередь</div><div class="node-value">' + currentTrafficQueue.name + '</div></div></div>';
+        html += '<div class="chain-node queue-node clickable" onclick="openQueuePopover(event)"><div class="node-icon"><i class="fas fa-sitemap"></i></div><div class="node-content"><div class="node-label">Очередь</div><div class="node-value">' + (dstQueue ? dstQueue.name : '—') + '</div></div></div>';
 
         if (ancestorParent) {
             html += '<div class="chain-connector"><div class="connector-line"></div><i class="fas fa-chevron-down"></i><div class="connector-line"></div></div>';
@@ -3780,9 +3787,9 @@ function renderQueuePopoverList(queues) {
     const container = document.getElementById('queue-popover-list');
     const groups = { bridge: {name: 'Bridge', queues: []}, main: {name: 'Основной', queues: []}, backup: {name: 'Резервный', queues: []}, other: {name: 'Другие', queues: []} };
     filtered.forEach(q => { const name = q.name.toLowerCase(); let group = 'other'; if (name.includes('bridge')) group = 'bridge'; else if (name.includes('main') || name.includes('unlim') || name.includes('satellite')) group = 'main'; else if (name.includes('backup') || name.includes('резерв') || name.includes('provider')) group = 'backup'; groups[group].queues.push(q); });
-    let html = ''; Object.keys(groups).forEach(key => { if (groups[key].queues.length > 0) { html += '<div class="popover-group-header">' + groups[key].name + '</div>'; groups[key].queues.forEach(q => { const isSelected = currentTrafficQueue && currentTrafficQueue.name === q.name; html += '<div class="popover-item ' + (isSelected ? 'selected' : '') + '" onclick="selectQueueFromPopover(\'' + q.name + '\')"><div class="popover-item-name">' + q.name + '</div>' + (isSelected ? '<i class="fas fa-check check-icon"></i>' : '') + '</div>'; }); } }); container.innerHTML = html;
+     let html = ''; Object.keys(groups).forEach(key => { if (groups[key].queues.length > 0) { html += '<div class="popover-group-header">' + groups[key].name + '</div>'; groups[key].queues.forEach(q => { const selQueue = currentPopoverDst ? currentTrafficQueues.get(currentPopoverDst) : null; const isSelected = selQueue && selQueue.name === q.name; html += '<div class="popover-item ' + (isSelected ? 'selected' : '') + '" onclick="selectQueueFromPopover(\'' + q.name + '\')"><div class="popover-item-name">' + q.name + '</div>' + (isSelected ? '<i class="fas fa-check check-icon"></i>' : '') + '</div>'; }); } }); container.innerHTML = html;
 }
 function filterQueuePopover() { const search = document.getElementById('queue-search-input').value.toLowerCase(); renderQueuePopoverList(allQueuesFlat.filter(q => q.name.toLowerCase().includes(search))); }
-function selectQueueFromPopover(queueName) { const queue = allQueuesFlat.find(q => q.name === queueName); if (queue) { currentTrafficQueue = queue; closeQueuePopover(); renderParallelTrafficChains(document.getElementById('traffic-ip').value.trim()); } }
-function applyChainSelection() { if (!currentTrafficQueue) { showAlert('Выберите очередь', 'warning'); return; } const ip = document.getElementById('traffic-ip').value.trim(); const ipInput = document.getElementById('ip-address'); if (ipInput) ipInput.value = ip; switchTab('employee'); showAlert('Выбрана очередь: ' + currentTrafficQueue.name, 'success'); }
+function selectQueueFromPopover(queueName) { const queue = allQueuesFlat.find(q => q.name === queueName); if (queue && currentPopoverDst) { currentTrafficQueues.set(currentPopoverDst, queue); closeQueuePopover(); renderParallelTrafficChains(document.getElementById('traffic-ip').value.trim()); } }
+function applyChainSelection() { const primaryDst = channelsInfo && channelsInfo.primary_channel ? channelsInfo.primary_channel.interface : null; const queue = primaryDst ? currentTrafficQueues.get(primaryDst) : null; if (!queue) { showAlert('Выберите очередь в основном канале', 'warning'); return; } const ip = document.getElementById('traffic-ip').value.trim(); const ipInput = document.getElementById('ip-address'); if (ipInput) ipInput.value = ip; switchTab('employee'); showAlert('Выбрана очередь: ' + queue.name, 'success'); }
 document.addEventListener('click', function(e) { const popover = document.getElementById('queue-selector-popover'); if (popover && popover.style.display === 'block' && !popover.contains(e.target) && !e.target.closest('.queue-node')) closeQueuePopover(); });
