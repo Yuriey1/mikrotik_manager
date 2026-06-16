@@ -13,8 +13,7 @@ let internetAccessList = []; // Список IP с доступом в инте�
 let allQueuesFlat = [];
 let currentTrafficQueue = null;
 let channelsInfo = null;
-let trafficPrimaryParent = null;
-let trafficBackupParent = null;
+let trafficParentNames = new Set();
 
 // Загрузка при старте
 document.addEventListener('DOMContentLoaded', function() {
@@ -3620,31 +3619,47 @@ function flattenAllQueues(queues, parentName) {
     queues.forEach(q => { q.parent = parentName; allQueuesFlat.push(q); if (q.children && q.children.length > 0) flattenAllQueues(q.children, q.name); });
 }
 
-function buildDstSummaryHTML() {
-    if (!allQueuesFlat.length) return '';
+function buildDstMap() {
     const dstMap = {};
+    if (!allQueuesFlat.length) return dstMap;
     allQueuesFlat.forEach(q => {
         if (!q.dst || q.dst.trim() === '') return;
         const dst = q.dst.trim();
-        if (!dstMap[dst]) dstMap[dst] = { queues: [], totalChildren: 0 };
-        dstMap[dst].queues.push(q);
+        if (!dstMap[dst]) dstMap[dst] = { parentQueues: [], children: [] };
+        dstMap[dst].parentQueues.push(q);
     });
     Object.entries(dstMap).forEach(([dst, info]) => {
-        info.queues = info.queues.sort((a, b) => a.name.localeCompare(b.name));
+        info.parentQueues.sort((a, b) => a.name.localeCompare(b.name));
         let childSet = new Set();
-        info.queues.forEach(pq => {
+        info.parentQueues.forEach(pq => {
             const stack = [...(pq.children || [])];
             while (stack.length) {
                 const c = stack.pop();
                 if (!childSet.has(c.name)) {
                     childSet.add(c.name);
-                    info.totalChildren++;
+                    info.children.push(c);
                 }
                 if (c.children) stack.push(...c.children);
             }
         });
+        info.totalChildren = info.children.length;
     });
+    return dstMap;
+}
 
+function isAncestorOf(parent, child) {
+    if (!parent || !child || !parent.children) return false;
+    const stack = [...parent.children];
+    while (stack.length) {
+        const c = stack.pop();
+        if (c.name === child.name) return true;
+        if (c.children) stack.push(...c.children);
+    }
+    return false;
+}
+
+function buildDstSummaryHTML() {
+    const dstMap = buildDstMap();
     const sortedDsts = Object.entries(dstMap).sort((a, b) => b[1].totalChildren - a[1].totalChildren);
     if (!sortedDsts.length) return '';
 
@@ -3658,9 +3673,9 @@ function buildDstSummaryHTML() {
 
         html += '<div class="dst-item"><div class="dst-header">';
         html += '<span class="dst-interface"><i class="fas fa-ethernet"></i> ' + dst + '</span>' + channelTag;
-        html += '<span class="dst-stats">' + info.queues.length + ' родит., ' + info.totalChildren + ' дочерн.</span>';
+        html += '<span class="dst-stats">' + info.parentQueues.length + ' родит., ' + info.totalChildren + ' дочерн.</span>';
         html += '</div><div class="dst-queues">';
-        info.queues.forEach(pq => {
+        info.parentQueues.forEach(pq => {
             const childCount = pq.children ? pq.children.length : 0;
             html += '<div class="dst-parent-queue"><span class="pq-name">' + pq.name + '</span>';
             html += '<span class="pq-stats">дочерних: ' + childCount + '</span></div>';
@@ -3674,91 +3689,63 @@ function buildDstSummaryHTML() {
 function renderParallelTrafficChains(ip) {
     const container = document.getElementById('traffic-route-container');
     if (!currentTrafficQueue) { container.innerHTML = '<div class="traffic-route-placeholder"><i class="fas fa-exclamation-circle"></i><p>Не удалось определить очередь</p></div>'; return; }
-    trafficPrimaryParent = findQueueForChannel('primary');
-    trafficBackupParent = findQueueForChannel('backup');
-    const primaryParentQueue = trafficPrimaryParent;
-    const backupParentQueue = trafficBackupParent;
-    const primaryChannel = channelsInfo ? channelsInfo.primary_channel : null;
-    const backupChannel = channelsInfo ? channelsInfo.backup_channel : null;
+
+    const dstMap = buildDstMap();
+    const dstEntries = Object.entries(dstMap).sort((a, b) => b[1].totalChildren - a[1].totalChildren);
+
+    trafficParentNames.clear();
+    Object.values(dstMap).forEach(info => {
+        info.parentQueues.forEach(pq => trafficParentNames.add(pq.name));
+    });
 
     let html = buildDstSummaryHTML();
 
     html += '<div class="traffic-chains-wrapper"><div class="shared-ip-node"><div class="chain-node ip-node"><div class="node-icon"><i class="fas fa-laptop"></i></div><div class="node-content"><div class="node-label">IP адрес</div><div class="node-value">' + ip + '</div></div></div></div>';
-    html += '<div class="split-arrow"><svg viewBox="0 0 100 40"><path d="M50 0 L50 20 L10 40" class="arrow-line arrow-primary"/><path d="M50 20 L90 40" class="arrow-line arrow-backup"/></svg></div>';
+
+    if (dstEntries.length > 1) {
+        html += '<div class="split-arrow"><svg viewBox="0 0 100 40"><path d="M50 0 L50 20 L10 40" class="arrow-line arrow-primary"/><path d="M50 20 L90 40" class="arrow-line arrow-backup"/></svg></div>';
+    }
+
     html += '<div class="parallel-chains">';
 
-    html += '<div class="traffic-chain-row primary-chain"><div class="chain-label primary"><i class="fas fa-bolt"></i> Основной</div>';
-    html += '<div class="chain-node queue-node clickable" onclick="openQueuePopover(event)"><div class="node-icon"><i class="fas fa-sitemap"></i></div><div class="node-content"><div class="node-label">Очередь</div><div class="node-value">' + currentTrafficQueue.name + '</div></div></div>';
-    if (primaryParentQueue) {
-        html += '<div class="chain-connector"><div class="connector-line"></div><i class="fas fa-chevron-down"></i><div class="connector-line"></div></div>';
-        html += '<div class="chain-node parent-node"><div class="node-icon"><i class="fas fa-folder-tree"></i></div><div class="node-content"><div class="node-label">Родительская</div><div class="node-value">' + primaryParentQueue.name + '</div></div></div>';
-    }
-    if (primaryChannel) {
-        html += '<div class="chain-connector"><div class="connector-line"></div><i class="fas fa-chevron-down"></i><div class="connector-line"></div></div>';
-        html += '<div class="chain-node channel-node main"><div class="node-icon"><i class="fas fa-satellite-dish"></i></div><div class="node-content"><div class="node-label">Канал</div><div class="node-value">' + (primaryChannel.name || primaryChannel.interface) + '</div><div class="node-info">metric: ' + primaryChannel.distance + '</div></div></div>';
-    }
-    html += '</div>';
+    dstEntries.forEach(([dst, info]) => {
+        const isPrimary = channelsInfo && channelsInfo.primary_channel && channelsInfo.primary_channel.interface === dst;
+        const isBackup = channelsInfo && channelsInfo.backup_channel && channelsInfo.backup_channel.interface === dst;
+        const labelClass = isPrimary ? 'primary' : (isBackup ? 'backup' : '');
+        const chainClass = isPrimary ? 'primary-chain' : (isBackup ? 'backup-chain' : '');
+        const labelText = isPrimary ? 'Основной' : (isBackup ? 'Резервный' : dst);
+        const iconClass = isPrimary ? 'fa-bolt' : (isBackup ? 'fa-shield-alt' : 'fa-ethernet');
 
-    html += '<div class="traffic-chain-row backup-chain"><div class="chain-label backup"><i class="fas fa-shield-alt"></i> Резервный</div>';
-    html += '<div class="chain-node queue-node"><div class="node-icon"><i class="fas fa-sitemap"></i></div><div class="node-content"><div class="node-label">Очередь</div><div class="node-value">' + currentTrafficQueue.name + '</div></div></div>';
-    if (backupParentQueue) {
+        let ancestorParent = null;
+        for (const pq of info.parentQueues) {
+            if (isAncestorOf(pq, currentTrafficQueue)) {
+                ancestorParent = pq;
+                break;
+            }
+        }
+
+        html += '<div class="traffic-chain-row ' + chainClass + '">';
+        html += '<div class="chain-label ' + labelClass + '"><i class="fas ' + iconClass + '"></i> ' + labelText + '</div>';
+        html += '<div class="chain-node queue-node clickable" onclick="openQueuePopover(event)"><div class="node-icon"><i class="fas fa-sitemap"></i></div><div class="node-content"><div class="node-label">Очередь</div><div class="node-value">' + currentTrafficQueue.name + '</div></div></div>';
+
+        if (ancestorParent) {
+            html += '<div class="chain-connector"><div class="connector-line"></div><i class="fas fa-chevron-down"></i><div class="connector-line"></div></div>';
+            html += '<div class="chain-node parent-node"><div class="node-icon"><i class="fas fa-folder-tree"></i></div><div class="node-content"><div class="node-label">Родительская</div><div class="node-value">' + ancestorParent.name + '</div></div></div>';
+        }
+
         html += '<div class="chain-connector"><div class="connector-line"></div><i class="fas fa-chevron-down"></i><div class="connector-line"></div></div>';
-        html += '<div class="chain-node parent-node"><div class="node-icon"><i class="fas fa-folder-tree"></i></div><div class="node-content"><div class="node-label">Родительская</div><div class="node-value">' + backupParentQueue.name + '</div></div></div>';
-    }
-    if (backupChannel) {
-        html += '<div class="chain-connector"><div class="connector-line"></div><i class="fas fa-chevron-down"></i><div class="connector-line"></div></div>';
-        html += '<div class="chain-node channel-node backup"><div class="node-icon"><i class="fas fa-satellite"></i></div><div class="node-content"><div class="node-label">Канал</div><div class="node-value">' + (backupChannel.name || backupChannel.interface) + '</div><div class="node-info">metric: ' + backupChannel.distance + '</div></div></div>';
-    }
-    html += '</div>';
+        html += '<div class="chain-node channel-node ' + (labelClass || '') + '"><div class="node-icon"><i class="fas fa-satellite-dish"></i></div><div class="node-content"><div class="node-label">Интерфейс</div><div class="node-value">' + dst + '</div>';
+        if (channelsInfo) {
+            const ch = isPrimary ? channelsInfo.primary_channel : (isBackup ? channelsInfo.backup_channel : null);
+            if (ch) html += '<div class="node-info">metric: ' + ch.distance + '</div>';
+        }
+        html += '</div></div>';
+
+        html += '</div>';
+    });
 
     html += '</div></div><div class="chain-actions"><button class="btn btn-success" onclick="applyChainSelection()"><i class="fas fa-check"></i> Применить</button></div>';
     container.innerHTML = html;
-}
-
-function findQueueForChannel(channelType) {
-    if (!channelsInfo || !allQueuesFlat.length) return null;
-    const targetChannel = channelType === 'primary' ? channelsInfo.primary_channel : channelsInfo.backup_channel;
-    if (!targetChannel) return null;
-    const channelIface = (targetChannel.interface || '').toLowerCase();
-    const parentQueues = allQueuesFlat.filter(q => (q.target && q.target.length > 0) || (q.dst && q.dst.trim() !== ''));
-
-    function dstExactMatch(q, iface) {
-        if (!iface || !q.dst) return false;
-        return q.dst.toLowerCase() === iface;
-    }
-    function dstPartialMatch(q, iface) {
-        if (!iface || !q.dst) return false;
-        const dl = q.dst.toLowerCase();
-        return dl.includes(iface) || iface.includes(dl);
-    }
-    function targetsMatchIface(q, iface) {
-        if (!iface) return false;
-        for (const t of q.target) { if (t.toLowerCase() === iface) return true; }
-        return false;
-    }
-    function targetsContainIface(q, iface) {
-        if (!iface) return false;
-        for (const t of q.target) { const tl = t.toLowerCase(); if (tl.includes(iface) || iface.includes(tl)) return true; }
-        return false;
-    }
-
-    if (channelIface) {
-        const dstExact = parentQueues.find(q => dstExactMatch(q, channelIface));
-        if (dstExact) return dstExact;
-        const dstPartial = parentQueues.find(q => dstPartialMatch(q, channelIface));
-        if (dstPartial) return dstPartial;
-        const tgtExact = parentQueues.find(q => targetsMatchIface(q, channelIface));
-        if (tgtExact) return tgtExact;
-        const tgtPartial = parentQueues.find(q => targetsContainIface(q, channelIface));
-        if (tgtPartial) return tgtPartial;
-    }
-
-    for (const q of parentQueues) {
-        const qName = q.name.toLowerCase();
-        if (channelType === 'primary') { if (qName.includes('main') || qName.includes('unlim') || qName.includes('satellite') || qName.includes('осн')) return q; }
-        else { if (qName.includes('backup') || qName.includes('резерв') || qName.includes('provider')) return q; }
-    }
-    return parentQueues.length > 0 ? parentQueues[0] : null;
 }
 
 function openQueuePopover(event) { event.stopPropagation(); const popover = document.getElementById('queue-selector-popover'); const rect = event.currentTarget.getBoundingClientRect(); popover.style.top = (rect.bottom + window.scrollY + 5) + 'px'; popover.style.left = Math.max(10, rect.left + window.scrollX - 100) + 'px'; popover.style.display = 'block'; renderQueuePopoverList(allQueuesFlat); document.getElementById('queue-search-input').value = ''; }
@@ -3766,8 +3753,7 @@ function closeQueuePopover() { document.getElementById('queue-selector-popover')
 function renderQueuePopoverList(queues) {
     const filtered = queues.filter(q => {
         if (q.name.toLowerCase().startsWith('paid')) return false;
-        if (trafficPrimaryParent && q.name === trafficPrimaryParent.name) return false;
-        if (trafficBackupParent && q.name === trafficBackupParent.name) return false;
+        if (trafficParentNames.has(q.name)) return false;
         return true;
     });
     const container = document.getElementById('queue-popover-list');

@@ -2237,6 +2237,7 @@ textarea {
 .chain-node.parent-node .node-icon { background: rgba(255, 152, 48, 0.2); color: #ff9830; }
 .chain-node.channel-node.main .node-icon { background: rgba(240, 147, 251, 0.3); color: #f093fb; }
 .chain-node.channel-node.backup .node-icon { background: rgba(79, 172, 254, 0.3); color: #4facfe; }
+.chain-node.channel-node:not(.main):not(.backup) .node-icon { background: rgba(115, 191, 105, 0.2); color: #73bf69; }
 .chain-actions { text-align: center; padding: 20px; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 10px; }
 .queue-selector-popover { position: absolute; z-index: 1000; width: 350px; max-height: 450px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); overflow: hidden; }
 .popover-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); font-weight: 600; color: var(--text-primary); }
