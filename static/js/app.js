@@ -3260,13 +3260,10 @@ function showMacReplaceDialog() {
         
         if (allSubscribers && allSubscribers.length > 0) {
             allSubscribers.forEach(sub => {
-                if (sub.ip !== selectedSubscriber.ip) {
                     const option = document.createElement('option');
                     option.value = sub.ip;
                     option.textContent = `${sub.ip} (${sub.comment || 'без имени'})`;
                     targetSelect.appendChild(option);
-                }
-            });
         }
         
         // При выборе из списка - заполняем поле ввода
