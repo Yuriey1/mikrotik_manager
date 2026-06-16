@@ -8,7 +8,11 @@ let allDevices = {}; // Хранит все устройства для поис
 let allSubscribers = []; // Хранит всех абонентов DHCP для замены MAC
 let selectedSubscriber = null; // Выбранный абонент для действий
 let internetAccessList = []; // Список IP с доступом в интернет
-let selectedSubscribers = new Set(); // Множественный выбор (Ctrl+клик)
+
+// Переменные для визуализации маршрута трафика
+let allQueuesFlat = [];
+let currentTrafficQueue = null;
+let channelsInfo = null;
 
 // Загрузка при старте
 document.addEventListener('DOMContentLoaded', function() {
@@ -103,8 +107,9 @@ function getTabName(tabKey) {
     const tabs = {
         'employee': 'Добавить сотрудника',
         'queues': 'Дерево очередей',
-        'mac-replace': 'Настройка абонентов',
-        'tools': 'Инструменты'
+        'mac-replace': 'Замена MAC',
+        'tools': 'Инструменты',
+        'visualization': 'Маршрут'
     };
     return tabs[tabKey] || tabKey;
 }
@@ -2968,7 +2973,7 @@ function renderSubscribersTable(subscribers) {
     if (!subscribers || subscribers.length === 0) {
         tbody.innerHTML = `
             <tr class="empty-row">
-                <td colspan="5">
+                <td colspan="4">
                     <div class="empty-state">
                         <i class="fas fa-users"></i>
                         <p>${currentDevice ? 'Нет абонентов в DHCP' : 'Подключитесь к устройству для загрузки абонентов'}</p>
@@ -2984,36 +2989,16 @@ function renderSubscribersTable(subscribers) {
         const rowClass = hasInet ? 'has-internet' : '';
         
         return `
-            <tr data-ip="${sub.ip}" data-mac="${sub.mac || ''}" data-comment="${escapeHtml(sub.comment || '')}" 
-                class="${rowClass}" onclick="handleRowClick(event, this)">
+            <tr data-ip="${sub.ip}" data-mac="${sub.mac || ''}" data-comment="${escapeHtml(sub.comment || '')}" class="${rowClass}" onclick="selectSubscriber(this)">
                 <td class="col-inet" onclick="event.stopPropagation()">
                     <label class="inet-checkbox" title="${hasInet ? 'Доступ есть. Нажмите чтобы выключить' : 'Доступа нет. Нажмите чтобы включить'}">
-                        <input type="checkbox" ${hasInet ? 'checked' : ''} 
-                               onchange="toggleInternetAccess('${sub.ip}', this.checked, '${escapeHtml(sub.comment || '')}')">
+                        <input type="checkbox" ${hasInet ? 'checked' : ''} onchange="toggleInternetAccess('${sub.ip}', this.checked, '${escapeHtml(sub.comment || '')}')">
                         <span class="checkmark"></span>
                     </label>
                 </td>
                 <td class="ip-cell">${sub.ip}</td>
                 <td class="mac-cell">${sub.mac || '<span style="color: var(--text-muted);">—</span>'}</td>
                 <td class="comment-cell" title="${escapeHtml(sub.comment || '')}">${sub.comment || '<span style="color: var(--text-muted);">—</span>'}</td>
-                <td class="col-actions" onclick="event.stopPropagation()">
-                    <div class="edit-dropdown">
-                        <button class="btn btn-sm btn-edit dropdown-toggle" onclick="toggleEditDropdown(event, '${sub.ip}')" title="Редактировать">
-                            <i class="fas fa-edit"></i> <i class="fas fa-caret-down" style="font-size: 10px; margin-left: 2px;"></i>
-                        </button>
-                        <div class="edit-dropdown-menu" id="edit-dropdown-${sub.ip.replace(/\./g, '-')}">
-                            <a href="#" onclick="showMacReplaceForIp(event, '${sub.ip}', '${sub.mac || ''}', '${escapeHtml(sub.comment || '')}')">
-                                <i class="fas fa-exchange-alt"></i> Замена MAC
-                            </a>
-                            <a href="#" onclick="showChangeIpDialog(event, '${sub.ip}')" class="disabled" title="Скоро">
-                                <i class="fas fa-network-wired"></i> Изменить IP
-                            </a>
-                        </div>
-                    </div>
-                    <button class="btn btn-sm btn-danger" onclick="quickRemove('${sub.ip}', '${sub.mac || ''}', '${escapeHtml(sub.comment || '')}')" title="Удалить">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </td>
             </tr>
         `;
     }).join('');
@@ -3088,301 +3073,28 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Выбор абонента - обработка клика по строке
-function handleRowClick(event, row) {
-    const ip = row.getAttribute('data-ip');
-    const mac = row.getAttribute('data-mac');
-    const comment = row.getAttribute('data-comment');
+// Выбор абонента
+function selectSubscriber(row) {
+    console.log('Выбор абонента:', row);
     
-    // Ctrl+ЛКМ — множественный выбор
-    if (event.ctrlKey || event.metaKey) {
-        event.preventDefault();
-        
-        if (selectedSubscribers.has(ip)) {
-            selectedSubscribers.delete(ip);
-            row.classList.remove('multi-selected');
-        } else {
-            selectedSubscribers.add(ip);
-            row.classList.add('multi-selected');
-        }
-        
-        updateBulkDeleteBtn();
-        
-        // Если есть множественный выбор — скрываем action-panel
-        if (selectedSubscribers.size > 0) {
-            document.getElementById('subscriber-action-panel').style.display = 'none';
-            selectedSubscriber = null;
-        }
-    } 
-    // Обычный клик — только выделение строки (БЕЗ action-panel)
-    else {
-        // Снимаем множественный выбор
-        selectedSubscribers.clear();
-        document.querySelectorAll('#subscribers-tbody tr.multi-selected').forEach(r => {
-            r.classList.remove('multi-selected');
-        });
-        updateBulkDeleteBtn();
-        
-        // Одиночное выделение строки
-        const rows = document.querySelectorAll('#subscribers-tbody tr');
-        rows.forEach(r => r.classList.remove('selected'));
-        row.classList.add('selected');
-        
-        selectedSubscriber = { ip, mac, comment };
-        
-        // Action-panel НЕ показываем - она открывается из меню [✎▼]
-    }
-}
-
-// Обновить кнопку массового удаления
-function updateBulkDeleteBtn() {
-    const btn = document.getElementById('bulk-delete-btn');
-    const countEl = document.getElementById('bulk-count');
-    const count = selectedSubscribers.size;
+    // Снимаем выделение со всех
+    const rows = document.querySelectorAll('#subscribers-tbody tr');
+    rows.forEach(r => r.classList.remove('selected'));
     
-    if (count > 0) {
-        btn.style.display = 'inline-flex';
-        countEl.textContent = count;
-    } else {
-        btn.style.display = 'none';
-    }
-}
-
-// Очистить множественный выбор
-function clearMultiSelection() {
-    selectedSubscribers.clear();
-    document.querySelectorAll('#subscribers-tbody tr.multi-selected').forEach(r => {
-        r.classList.remove('multi-selected');
-    });
-    updateBulkDeleteBtn();
-}
-
-// Быстрое удаление из строки
-function quickRemove(ip, mac, comment) {
-    selectedSubscriber = { ip, mac, comment };
-    showRemoveDialog();
-}
-
-// Переключение выпадающего меню редактирования
-function toggleEditDropdown(event, ip) {
-    event.stopPropagation();
-    event.preventDefault();
+    // Выделяем выбранную строку
+    row.classList.add('selected');
     
-    const dropdownId = 'edit-dropdown-' + ip.replace(/\./g, '-');
-    const dropdown = document.getElementById(dropdownId);
-    
-    if (!dropdown) return;
-    
-    // Если меню уже открыто - закрываем
-    if (dropdown.classList.contains('show')) {
-        dropdown.classList.remove('show');
-        return;
-    }
-    
-    // Закрываем все другие dropdown
-    document.querySelectorAll('.edit-dropdown-menu.show').forEach(menu => {
-        menu.classList.remove('show');
-    });
-    
-    // Вычисляем позицию кнопки
-    const btn = event.currentTarget;
-    const rect = btn.getBoundingClientRect();
-    
-    // Устанавливаем позицию dropdown (fixed)
-    dropdown.style.top = (rect.bottom + 4) + 'px';
-    dropdown.style.right = (window.innerWidth - rect.right) + 'px';
-    dropdown.style.left = 'auto';
-    
-    // Показываем меню
-    dropdown.classList.add('show');
-}
-
-// Закрыть все dropdown меню редактирования
-function closeAllEditDropdowns() {
-    document.querySelectorAll('.edit-dropdown-menu.show').forEach(menu => {
-        menu.classList.remove('show');
-    });
-}
-
-// Глобальный обработчик клика для закрытия dropdown
-document.addEventListener('click', function(event) {
-    // Закрываем dropdown редактирования если клик вне его
-    if (!event.target.closest('.edit-dropdown')) {
-        closeAllEditDropdowns();
-    }
-});
-
-// Показать action-panel для конкретного IP (из dropdown меню)
-function showMacReplaceForIp(event, ip, mac, comment) {
-    event.preventDefault();
-    event.stopPropagation();
-    
-    // Устанавливаем выбранного абонента
-    selectedSubscriber = { ip, mac, comment };
-    
-    // Выделяем строку
-    const row = document.querySelector(`tr[data-ip="${ip}"]`);
-    if (row) {
-        const rows = document.querySelectorAll('#subscribers-tbody tr');
-        rows.forEach(r => r.classList.remove('selected'));
-        row.classList.add('selected');
-    }
-    
-    // Закрываем dropdown
-    closeAllEditDropdowns();
-    
-    // Показываем action-panel
-    showActionPanel(selectedSubscriber);
-}
-
-// Заглушка для будущего функционала изменения IP
-function showChangeIpDialog(event, ip) {
-    event.preventDefault();
-    event.stopPropagation();
-    // TODO: реализовать изменение IP
-    console.log('Изменение IP для:', ip);
-}
-
-// Показать диалог удаления (одиночный)
-function showRemoveDialog(event) {
-    if (event) event.preventDefault();
-    
-    if (!selectedSubscriber) return;
-    
-    document.getElementById('remove-dialog-title').innerHTML = 
-        '<i class="fas fa-exclamation-triangle" style="color: #dc3545;"></i> Удаление абонента';
-    document.getElementById('remove-ip').textContent = selectedSubscriber.ip;
-    document.getElementById('remove-mac').textContent = selectedSubscriber.mac || 'нет MAC';
-    document.getElementById('remove-comment').textContent = selectedSubscriber.comment || 'нет комментария';
-    document.getElementById('remove-result').style.display = 'none';
-    document.getElementById('confirm-remove-btn').disabled = false;
-    
-    document.getElementById('remove-dialog').style.display = 'flex';
-    
-    // Закрываем dropdown
-    closeActionDropdown();
-}
-
-// Показать диалог массового удаления
-function showBulkRemoveDialog() {
-    if (selectedSubscribers.size === 0) return;
-    
-    const ips = Array.from(selectedSubscribers);
-    
-    document.getElementById('remove-dialog-title').innerHTML = 
-        `<i class="fas fa-exclamation-triangle" style="color: #dc3545;"></i> Удаление ${ips.length} абонентов`;
-    document.getElementById('remove-ip').textContent = ips.join(', ');
-    document.getElementById('remove-mac').textContent = '—';
-    document.getElementById('remove-comment').textContent = `Выбрано: ${ips.length} абонентов`;
-    document.getElementById('remove-result').style.display = 'none';
-    document.getElementById('confirm-remove-btn').disabled = false;
-    
-    document.getElementById('remove-dialog').style.display = 'flex';
-}
-
-// Закрыть диалог удаления
-function closeRemoveDialog() {
-    document.getElementById('remove-dialog').style.display = 'none';
-}
-
-// Подтверждение удаления
-function confirmRemoveSubscriber() {
-    const btn = document.getElementById('confirm-remove-btn');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Удаление...';
-    
-    const resultDiv = document.getElementById('remove-result');
-    resultDiv.style.display = 'block';
-    
-    // Проверяем — одиночное или массовое
-    const ipText = document.getElementById('remove-ip').textContent;
-    const ips = ipText.includes(',') ? ipText.split(', ') : [ipText];
-    
-    if (ips.length > 1) {
-        bulkRemove(ips, resultDiv, btn);
-    } else {
-        singleRemove(ips[0], resultDiv, btn);
-    }
-}
-
-// Одиночное удаление
-function singleRemove(ip, resultDiv, btn) {
-    resultDiv.innerHTML = '<p style="color: #666;"><i class="fas fa-spinner fa-spin"></i> Удаление...</p>';
-    
-    fetch(`/api/subscriber/remove?ip=${encodeURIComponent(ip)}`)
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                resultDiv.innerHTML = `
-                    <div style="background: #d4edda; padding: 12px; border-radius: 6px;">
-                        <p style="color: #155724; margin: 0;">✅ Удалено элементов: ${data.total_removed}</p>
-                    </div>`;
-                setTimeout(() => {
-                    closeRemoveDialog();
-                    document.getElementById('subscriber-action-panel').style.display = 'none';
-                    loadDhcpSubscribers();
-                }, 1500);
-            } else {
-                resultDiv.innerHTML = `
-                    <div style="background: #f8d7da; padding: 12px; border-radius: 6px;">
-                        <p style="color: #721c24; margin: 0;">❌ ${data.error}</p>
-                    </div>`;
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-trash"></i> Удалить';
-            }
-        })
-        .catch(err => {
-            resultDiv.innerHTML = `
-                <div style="background: #f8d7da; padding: 12px; border-radius: 6px;">
-                    <p style="color: #721c24; margin: 0;">❌ Ошибка: ${err}</p>
-                </div>`;
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-trash"></i> Удалить';
-        });
-}
-
-// Массовое удаление
-function bulkRemove(ips, resultDiv, btn) {
-    let totalRemoved = 0;
-    let errors = [];
-    
-    const removeNext = (index) => {
-        if (index >= ips.length) {
-            const bg = errors.length > 0 ? '#fff3cd' : '#d4edda';
-            const color = errors.length > 0 ? '#856404' : '#155724';
-            resultDiv.innerHTML = `
-                <div style="background: ${bg}; padding: 12px; border-radius: 6px;">
-                    <p style="color: ${color}; margin: 0;">✅ Массовое удаление завершено</p>
-                    <p style="margin: 4px 0 0 0;">Обработано: ${ips.length}, удалено: ${totalRemoved}</p>
-                    ${errors.length > 0 ? `<p style="color: #856404; margin: 4px 0 0 0;">Ошибок: ${errors.length}</p>` : ''}
-                </div>`;
-            setTimeout(() => {
-                closeRemoveDialog();
-                clearMultiSelection();
-                loadDhcpSubscribers();
-            }, 2000);
-            return;
-        }
-        
-        resultDiv.innerHTML = `<p style="color: #666;"><i class="fas fa-spinner fa-spin"></i> Удаление: ${index + 1}/${ips.length}...</p>`;
-        
-        fetch(`/api/subscriber/remove?ip=${encodeURIComponent(ips[index])}`)
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    totalRemoved += data.total_removed;
-                } else {
-                    errors.push({ ip: ips[index], error: data.error });
-                }
-                removeNext(index + 1);
-            })
-            .catch(err => {
-                errors.push({ ip: ips[index], error: err.toString() });
-                removeNext(index + 1);
-            });
+    // Сохраняем данные выбранного абонента
+    selectedSubscriber = {
+        ip: row.getAttribute('data-ip'),
+        mac: row.getAttribute('data-mac'),
+        comment: row.getAttribute('data-comment')
     };
     
-    removeNext(0);
+    console.log('Данные абонента:', selectedSubscriber);
+    
+    // Показываем панель действий
+    showActionPanel(selectedSubscriber);
 }
 
 // Показать панель действий
@@ -3415,12 +3127,9 @@ function showActionPanel(subscriber) {
 function clearSubscriberSelection() {
     selectedSubscriber = null;
     
-    // Снимаем одиночное выделение
+    // Снимаем выделение
     const rows = document.querySelectorAll('#subscribers-tbody tr');
     rows.forEach(r => r.classList.remove('selected'));
-    
-    // Снимаем множественное выделение
-    clearMultiSelection();
     
     // Скрываем панель
     const panel = document.getElementById('subscriber-action-panel');
@@ -3874,3 +3583,102 @@ function showSubscriberStats(e) {
 function editSubscriberComment() {
     showAlert('Функция в разработке', 'info');
 }
+
+// ============================================
+// МАРШРУТ ТРАФИКА - ПАРАЛЛЕЛЬНЫЕ ЦЕПОЧКИ
+// ============================================
+
+function analyzeTrafficPath() {
+    const ip = document.getElementById('traffic-ip').value.trim();
+    if (!ip) { showAlert('Введите IP адрес', 'error'); return; }
+    if (!currentDevice) { showAlert('Подключитесь к устройству', 'error'); return; }
+    const container = document.getElementById('traffic-route-container');
+    container.innerHTML = '<div class="traffic-loading"><i class="fas fa-spinner fa-spin"></i><span>Анализ...</span></div>';
+    Promise.all([
+        fetch('/api/tree').then(r => r.json()),
+        fetch('/api/analyze_channels').then(r => r.json()),
+        fetch(`/api/find_queues?ip=${encodeURIComponent(ip)}`).then(r => r.json())
+    ])
+    .then(([treeData, channels, ipData]) => {
+        channelsInfo = channels;
+        allQueuesFlat = [];
+        if (treeData.success && treeData.tree) flattenAllQueues(treeData.tree);
+        let initialQueue = null;
+        if (ipData.existing && ipData.existing.length > 0) initialQueue = allQueuesFlat.find(q => q.name === ipData.existing[0]);
+        if (!initialQueue) initialQueue = allQueuesFlat.find(q => q.name.toLowerCase().includes('bridge') && q.name.toLowerCase().includes('local'));
+        if (!initialQueue && allQueuesFlat.length > 0) initialQueue = allQueuesFlat[0];
+        currentTrafficQueue = initialQueue;
+        renderParallelTrafficChains(ip);
+    })
+    .catch(error => { console.error('Ошибка:', error); showAlert('Ошибка соединения', 'error'); container.innerHTML = '<div class="traffic-route-placeholder"><i class="fas fa-exclamation-circle"></i><p>Ошибка загрузки данных. Проверьте подключение к устройству.</p></div>'; });
+}
+
+function flattenAllQueues(queues, parentName) {
+    if (!parentName) parentName = null;
+    queues.forEach(q => { q.parent = parentName; allQueuesFlat.push(q); if (q.children && q.children.length > 0) flattenAllQueues(q.children, q.name); });
+}
+
+function renderParallelTrafficChains(ip) {
+    const container = document.getElementById('traffic-route-container');
+    if (!currentTrafficQueue) { container.innerHTML = '<div class="traffic-route-placeholder"><i class="fas fa-exclamation-circle"></i><p>Не удалось определить очередь</p></div>'; return; }
+    const primaryParentQueue = findQueueForChannel('primary');
+    const backupParentQueue = findQueueForChannel('backup');
+    const primaryChannel = channelsInfo ? channelsInfo.primary_channel : null;
+    const backupChannel = channelsInfo ? channelsInfo.backup_channel : null;
+    let html = '<div class="traffic-chains-wrapper"><div class="shared-ip-node"><div class="chain-node ip-node"><div class="node-icon"><i class="fas fa-laptop"></i></div><div class="node-content"><div class="node-label">IP адрес</div><div class="node-value">' + ip + '</div></div></div></div>';
+    html += '<div class="split-arrow"><svg viewBox="0 0 100 40"><path d="M50 0 L50 20 L10 40" class="arrow-line arrow-primary"/><path d="M50 20 L90 40" class="arrow-line arrow-backup"/></svg></div>';
+    html += '<div class="parallel-chains">';
+    html += '<div class="traffic-chain-row primary-chain"><div class="chain-label primary"><i class="fas fa-bolt"></i> Основной</div>';
+    html += '<div class="chain-node queue-node clickable" onclick="openQueuePopover(event)"><div class="node-icon"><i class="fas fa-sitemap"></i></div><div class="node-content"><div class="node-label">Очередь</div><div class="node-value">' + currentTrafficQueue.name + '</div></div></div><div class="chain-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>';
+    if (primaryParentQueue) html += '<div class="chain-node parent-node"><div class="node-icon"><i class="fas fa-folder-tree"></i></div><div class="node-content"><div class="node-label">Родительская</div><div class="node-value">' + primaryParentQueue.name + '</div></div></div><div class="chain-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>';
+    if (primaryChannel) html += '<div class="chain-node channel-node main"><div class="node-icon"><i class="fas fa-satellite-dish"></i></div><div class="node-content"><div class="node-label">Канал</div><div class="node-value">' + (primaryChannel.name || primaryChannel.interface) + '</div><div class="node-info">metric: ' + primaryChannel.distance + '</div></div></div>';
+    html += '</div>';
+    html += '<div class="traffic-chain-row backup-chain"><div class="chain-label backup"><i class="fas fa-shield-alt"></i> Резервный</div>';
+    html += '<div class="chain-node queue-node"><div class="node-icon"><i class="fas fa-sitemap"></i></div><div class="node-content"><div class="node-label">Очередь</div><div class="node-value">' + currentTrafficQueue.name + '</div></div></div><div class="chain-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>';
+    if (backupParentQueue) html += '<div class="chain-node parent-node"><div class="node-icon"><i class="fas fa-folder-tree"></i></div><div class="node-content"><div class="node-label">Родительская</div><div class="node-value">' + backupParentQueue.name + '</div></div></div><div class="chain-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>';
+    if (backupChannel) html += '<div class="chain-node channel-node backup"><div class="node-icon"><i class="fas fa-satellite"></i></div><div class="node-content"><div class="node-label">Канал</div><div class="node-value">' + (backupChannel.name || backupChannel.interface) + '</div><div class="node-info">metric: ' + backupChannel.distance + '</div></div></div>';
+    html += '</div></div></div><div class="chain-actions"><button class="btn btn-success" onclick="applyChainSelection()"><i class="fas fa-check"></i> Применить</button></div>';
+    container.innerHTML = html;
+}
+
+function findQueueForChannel(channelType) {
+    if (!channelsInfo || !allQueuesFlat.length) return null;
+    const targetChannel = channelType === 'primary' ? channelsInfo.primary_channel : channelsInfo.backup_channel;
+    if (!targetChannel) return null;
+    const channelIface = (targetChannel.interface || '').toLowerCase();
+    const parentQueues = allQueuesFlat.filter(q => q.target && q.target.length > 0);
+
+    function targetsMatchIface(q, iface) {
+        if (!iface) return false;
+        for (const t of q.target) { if (t.toLowerCase() === iface) return true; }
+        return false;
+    }
+
+    function targetsContainIface(q, iface) {
+        if (!iface) return false;
+        for (const t of q.target) { const tl = t.toLowerCase(); if (tl.includes(iface) || iface.includes(tl)) return true; }
+        return false;
+    }
+
+    if (channelIface) {
+        const direct = parentQueues.find(q => targetsMatchIface(q, channelIface));
+        if (direct) return direct;
+        const partial = parentQueues.find(q => targetsContainIface(q, channelIface));
+        if (partial) return partial;
+    }
+
+    for (const q of parentQueues) {
+        const qName = q.name.toLowerCase();
+        if (channelType === 'primary') { if (qName.includes('main') || qName.includes('unlim') || qName.includes('satellite') || qName.includes('осн')) return q; }
+        else { if (qName.includes('backup') || qName.includes('резерв') || qName.includes('provider')) return q; }
+    }
+    return parentQueues.length > 0 ? parentQueues[0] : null;
+}
+
+function openQueuePopover(event) { event.stopPropagation(); const popover = document.getElementById('queue-selector-popover'); const rect = event.currentTarget.getBoundingClientRect(); popover.style.top = (rect.bottom + window.scrollY + 5) + 'px'; popover.style.left = Math.max(10, rect.left + window.scrollX - 100) + 'px'; popover.style.display = 'block'; renderQueuePopoverList(allQueuesFlat); document.getElementById('queue-search-input').value = ''; }
+function closeQueuePopover() { document.getElementById('queue-selector-popover').style.display = 'none'; }
+function renderQueuePopoverList(queues) { const container = document.getElementById('queue-popover-list'); const groups = { bridge: {name: 'Bridge', queues: []}, main: {name: 'Основной', queues: []}, backup: {name: 'Резервный', queues: []}, other: {name: 'Другие', queues: []} }; queues.forEach(q => { const name = q.name.toLowerCase(); let group = 'other'; if (name.includes('bridge')) group = 'bridge'; else if (name.includes('main') || name.includes('unlim') || name.includes('satellite')) group = 'main'; else if (name.includes('backup') || name.includes('резерв') || name.includes('provider')) group = 'backup'; groups[group].queues.push(q); }); let html = ''; Object.keys(groups).forEach(key => { if (groups[key].queues.length > 0) { html += '<div class="popover-group-header">' + groups[key].name + '</div>'; groups[key].queues.forEach(q => { const isSelected = currentTrafficQueue && currentTrafficQueue.name === q.name; html += '<div class="popover-item ' + (isSelected ? 'selected' : '') + '" onclick="selectQueueFromPopover(\'' + q.name + '\')"><div class="popover-item-name">' + q.name + '</div>' + (isSelected ? '<i class="fas fa-check check-icon"></i>' : '') + '</div>'; }); } }); container.innerHTML = html; }
+function filterQueuePopover() { const search = document.getElementById('queue-search-input').value.toLowerCase(); renderQueuePopoverList(allQueuesFlat.filter(q => q.name.toLowerCase().includes(search))); }
+function selectQueueFromPopover(queueName) { const queue = allQueuesFlat.find(q => q.name === queueName); if (queue) { currentTrafficQueue = queue; closeQueuePopover(); renderParallelTrafficChains(document.getElementById('traffic-ip').value.trim()); } }
+function applyChainSelection() { if (!currentTrafficQueue) { showAlert('Выберите очередь', 'warning'); return; } const ip = document.getElementById('traffic-ip').value.trim(); const ipInput = document.getElementById('ip-address'); if (ipInput) ipInput.value = ip; switchTab('employee'); showAlert('Выбрана очередь: ' + currentTrafficQueue.name, 'success'); }
+document.addEventListener('click', function(e) { const popover = document.getElementById('queue-selector-popover'); if (popover && popover.style.display === 'block' && !popover.contains(e.target) && !e.target.closest('.queue-node')) closeQueuePopover(); });

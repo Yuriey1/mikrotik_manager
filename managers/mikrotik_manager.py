@@ -932,14 +932,14 @@ class MikroTikManager:
     def get_dhcp_subscribers(self, pool_name: str = None) -> List[Dict]:
         """
         Получить список абонентов из DHCP leases
-        Абоненты - все leases (с комментарием или без)
-    
+        Абоненты - это leases с непустыми комментариями (ФИО, должность)
+        
         Args:
             pool_name: Имя DHCP пула для фильтрации (если None - все абоненты)
         """
         try:
             leases = self.get_dhcp_leases()
-        
+            
             # Получаем информацию о пулах если нужна фильтрация
             pool_ranges = {}
             if pool_name:
@@ -958,42 +958,44 @@ class MikroTikManager:
                                     except:
                                         pass
                         break
-        
+            
             subscribers = []
-        
+            
             for lease in leases:
                 comment = lease.get('comment', '')
-                ip = lease.get('address', '')
+                # Абонент - это lease с комментарием (там ФИО/должность)
+                if comment and comment.strip():
+                    ip = lease.get('address', '')
+                    
+                    # Если указан пул, проверяем принадлежность IP к диапазону пула
+                    if pool_name and pool_ranges:
+                        ip_in_pool = False
+                        try:
+                            ip_obj = ipaddress.ip_address(ip.split('/')[0])
+                            for (start, end) in pool_ranges.keys():
+                                start_obj = ipaddress.ip_address(start)
+                                end_obj = ipaddress.ip_address(end)
+                                if start_obj <= ip_obj <= end_obj:
+                                    ip_in_pool = True
+                                    break
+                        except:
+                            pass
+                        
+                        if not ip_in_pool:
+                            continue
+                    
+                    subscriber = {
+                        'ip': ip,
+                        'mac': lease.get('mac-address', ''),
+                        'comment': comment,
+                        'host_name': lease.get('host-name', ''),
+                        'dynamic': lease.get('dynamic') == 'true',
+                        'disabled': lease.get('disabled') == 'true',
+                        'server': lease.get('server', ''),
+                        'id': lease.get('.id', '')
+                    }
+                    subscribers.append(subscriber)
             
-                # Если указан пул, проверяем принадлежность IP к диапазону пула
-                if pool_name and pool_ranges:
-                    ip_in_pool = False
-                    try:
-                        ip_obj = ipaddress.ip_address(ip.split('/')[0])
-                        for (start, end) in pool_ranges.keys():
-                            start_obj = ipaddress.ip_address(start)
-                            end_obj = ipaddress.ip_address(end)
-                            if start_obj <= ip_obj <= end_obj:
-                                ip_in_pool = True
-                                break
-                    except:
-                        pass
-                
-                    if not ip_in_pool:
-                        continue
-            
-                subscriber = {
-                    'ip': ip,
-                    'mac': lease.get('mac-address', ''),
-                    'comment': comment,
-                    'host_name': lease.get('host-name', ''),
-                    'dynamic': lease.get('dynamic') == 'true',
-                    'disabled': lease.get('disabled') == 'true',
-                    'server': lease.get('server', ''),
-                    'id': lease.get('.id', '')
-                }
-                subscribers.append(subscriber)
-        
             # Безопасная сортировка по IP
             def safe_ip_sort(item):
                 try:
@@ -1005,15 +1007,15 @@ class MikroTikManager:
                     return (1, ipaddress.ip_address('0.0.0.0'))
                 except:
                     return (2, ipaddress.ip_address('0.0.0.0'))
-        
+            
             subscribers.sort(key=safe_ip_sort)
-        
+            
             if pool_name:
                 print(f"✅ Найдено абонентов в пуле '{pool_name}': {len(subscribers)}")
             else:
                 print(f"✅ Найдено абонентов: {len(subscribers)}")
             return subscribers
-        
+            
         except Exception as e:
             print(f"❌ Ошибка получения абонентов: {e}")
             traceback.print_exc()
@@ -1208,127 +1210,67 @@ class MikroTikManager:
             traceback.print_exc()
             return result
 
-    def remove_subscriber(self, ip_address: str) -> Dict:
-        """
-        Полное удаление абонента по IP из:
-        - DHCP Leases
-        - ARP таблицы
-        - Firewall Address Lists
-        - Simple Queues
-        """
-        result = {
-            'success': False,
-            'ip': ip_address,
-            'dhcp_leases': [],
-            'arp': [],
-            'firewall_lists': [],
-            'queues': [],
-            'total_removed': 0,
-            'steps': []
-        }
-        
-        if not self.api:
-            result['error'] = 'Нет соединения с MikroTik'
-            return result
-        
+    # ========== АНАЛИЗ КАНАЛОВ ==========
+    def get_interfaces(self) -> List[Dict]:
+        """Получить список всех интерфейсов"""
         try:
-            ip_clean = ip_address.split('/')[0]
-            result['steps'].append(f"🔍 Удаление абонента: {ip_clean}")
-            
-            # 1. Удаление из DHCP Lease
-            result['steps'].append("📋 DHCP Leases:")
-            try:
-                for lease in self.api.path('/ip/dhcp-server/lease'):
-                    lease_addr = lease.get('address', '')
-                    if lease_addr == ip_address or lease_addr == ip_clean:
-                        lease_id = lease.get('.id')
-                        if lease_id:
-                            self.api.path('/ip/dhcp-server/lease').remove(lease_id)
-                            result['dhcp_leases'].append({
-                                'address': lease_addr,
-                                'mac': lease.get('mac-address', 'N/A')
-                            })
-                            result['steps'].append(f"   ✅ Удалён lease: {lease_addr}")
-                            result['total_removed'] += 1
-            except Exception as e:
-                result['steps'].append(f"   ❌ Ошибка: {e}")
-            
-            # 2. Удаление из ARP таблицы
-            result['steps'].append("📋 ARP таблица:")
-            try:
-                for arp in self.api.path('/ip/arp'):
-                    if arp.get('address') == ip_clean:
-                        arp_id = arp.get('.id')
-                        if arp_id:
-                            self.api.path('/ip/arp').remove(arp_id)
-                            result['arp'].append({'address': ip_clean})
-                            result['steps'].append(f"   ✅ Удалена ARP запись")
-                            result['total_removed'] += 1
-            except Exception as e:
-                result['steps'].append(f"   ❌ Ошибка: {e}")
-            
-            # 3. Удаление из Firewall Address Lists
-            result['steps'].append("📋 Firewall Address Lists:")
-            try:
-                for addr in self.api.path('/ip/firewall/address-list'):
-                    addr_value = addr.get('address', '')
-                    if addr_value == ip_address or addr_value == ip_clean:
-                        addr_id = addr.get('.id')
-                        if addr_id:
-                            list_name = addr.get('list', 'N/A')
-                            self.api.path('/ip/firewall/address-list').remove(addr_id)
-                            result['firewall_lists'].append({
-                                'list': list_name,
-                                'address': addr_value
-                            })
-                            result['steps'].append(f"   ✅ Удалён из списка '{list_name}'")
-                            result['total_removed'] += 1
-            except Exception as e:
-                result['steps'].append(f"   ❌ Ошибка: {e}")
-            
-            # 4. Обработка Simple Queues
-            result['steps'].append("📋 Simple Queues:")
-            try:
-                for queue in self.api.path('/queue/simple'):
-                    target = queue.get('target', '')
-                    if target and ip_clean in target:
-                        queue_id = queue.get('.id')
-                        queue_name = queue.get('name', 'N/A')
-                        
-                        addresses = [a.strip() for a in target.split(',')]
-                        new_addresses = [a for a in addresses if ip_clean not in a]
-                        
-                        if len(new_addresses) < len(addresses):
-                            if new_addresses:
-                                new_target = ','.join(new_addresses)
-                                self.api.path('/queue/simple').update(**{
-                                    '.id': queue_id, 
-                                    'target': new_target
-                                })
-                                result['steps'].append(f"   ✅ Обновлена очередь '{queue_name}'")
-                                result['queues'].append({
-                                    'name': queue_name,
-                                    'action': 'updated'
-                                })
-                            else:
-                                self.api.path('/queue/simple').remove(queue_id)
-                                result['steps'].append(f"   ✅ Удалена очередь '{queue_name}' (пустой target)")
-                                result['queues'].append({
-                                    'name': queue_name,
-                                    'action': 'deleted'
-                                })
-                            result['total_removed'] += 1
-            except Exception as e:
-                result['steps'].append(f"   ❌ Ошибка: {e}")
-            
-            result['success'] = True
-            result['message'] = f"Удалено элементов: {result['total_removed']}"
-            print(f"✅ Удаление абонента {ip_clean} завершено. Всего: {result['total_removed']}")
-            return result
-            
+            if not self.api:
+                return []
+            interfaces = list(self.api.path('/interface'))
+            return [{'name': i.get('name', ''), 'type': i.get('type', ''), 'running': i.get('running', False), 'disabled': i.get('disabled', False)} for i in interfaces]
         except Exception as e:
-            result['error'] = str(e)
-            result['steps'].append(f"❌ Критическая ошибка: {e}")
-            print(f"❌ Ошибка удаления абонента: {e}")
-            traceback.print_exc()
+            print(f"❌ Ошибка получения интерфейсов: {e}")
+            return []
+
+    def get_ip_addresses(self) -> List[Dict]:
+        """Получить все IP адреса интерфейсов"""
+        try:
+            if not self.api:
+                return []
+            addresses = list(self.api.path('/ip/address'))
+            return [{'address': addr.get('address', ''), 'interface': addr.get('interface', ''), 'network': addr.get('network', '')} for addr in addresses]
+        except Exception as e:
+            print(f"❌ Ошибка получения IP адресов: {e}")
+            return []
+
+    def get_routes(self) -> List[Dict]:
+        """Получить таблицу маршрутизации"""
+        try:
+            if not self.api:
+                return []
+            routes = list(self.api.path('/ip/route'))
+            return [{'dst_address': r.get('dst-address', ''), 'gateway': r.get('gateway', ''), 'interface': r.get('interface', ''), 'distance': int(r.get('distance', 255)), 'active': r.get('active', False)} for r in routes]
+        except Exception as e:
+            print(f"❌ Ошибка получения маршрутов: {e}")
+            return []
+
+    def analyze_channels(self) -> Dict:
+        """Анализ конфигурации каналов"""
+        try:
+            result = {'success': True, 'channels': [], 'primary_channel': None, 'backup_channel': None, 'interfaces': []}
+            interfaces = self.get_interfaces()
+            result['interfaces'] = interfaces
+            ip_addresses = self.get_ip_addresses()
+            routes = self.get_routes()
+            default_routes = [r for r in routes if r['dst_address'] in ['0.0.0.0/0', '::/0']]
+            if not default_routes:
+                result['success'] = False
+                result['error'] = 'Маршруты по умолчанию не найдены'
+                return result
+            default_routes.sort(key=lambda x: x['distance'])
+            channels = []
+            for idx, route in enumerate(default_routes):
+                channel = {'name': route['interface'] or route['gateway'], 'interface': route['interface'], 'gateway': route['gateway'], 'distance': route['distance'], 'active': route['active'], 'type': 'primary' if idx == 0 else 'backup', 'ip_address': ''}
+                for addr in ip_addresses:
+                    if addr['interface'] == route['interface']:
+                        channel['ip_address'] = addr['address']
+                        break
+                channels.append(channel)
+            result['channels'] = channels
+            result['primary_channel'] = channels[0] if channels else None
+            result['backup_channel'] = channels[1] if len(channels) > 1 else None
             return result
+        except Exception as e:
+            print(f"❌ Ошибка анализа каналов: {e}")
+            traceback.print_exc()
+            return {'success': False, 'error': str(e)}

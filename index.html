@@ -160,10 +160,13 @@
                         <i class="fas fa-sitemap"></i> Дерево очередей
                     </div>
                     <div class="tab" onclick="switchTab('mac-replace')">
-                        <i class="fas fa-exchange-alt"></i> Настройка абонентов
+                        <i class="fas fa-exchange-alt"></i> Замена MAC
                     </div>
                     <div class="tab" onclick="switchTab('tools')">
                         <i class="fas fa-tools"></i> Инструменты
+                    </div>
+                    <div class="tab" onclick="switchTab('visualization')">
+                        <i class="fas fa-route"></i> Маршрут
                     </div>
                 </div>
 
@@ -315,7 +318,7 @@
                 <!-- ВКЛАДКА: ЗАМЕНА MAC -->
                 <div id="mac-replace-tab" class="tab-content">
                     <div class="section mac-replace-section">
-                        <h2><i class="fas fa-exchange-alt"></i> Настройка абонентов</h2>
+                        <h2><i class="fas fa-exchange-alt"></i> Замена MAC адреса</h2>
                         
                         <!-- Панель инструментов -->
                         <div class="subscribers-toolbar">
@@ -332,12 +335,6 @@
                                 </select>
                                 <button class="btn btn-secondary" onclick="refreshSubscribers()" title="Обновить список">
                                     <i class="fas fa-sync-alt"></i>
-                                </button>
-                            </div>
-                            <div class="subscribers-actions">
-                                <span class="selection-hint">Ctrl+ЛКМ — множественный выбор</span>
-                                <button id="bulk-delete-btn" class="btn btn-danger btn-sm" style="display: none;" onclick="showBulkRemoveDialog()">
-                                    <i class="fas fa-trash"></i> Удалить (<span id="bulk-count">0</span>)
                                 </button>
                             </div>
                         </div>
@@ -363,12 +360,11 @@
                                         <th class="col-ip">IP адрес</th>
                                         <th class="col-mac">MAC адрес</th>
                                         <th class="col-comment">Комментарий / ФИО</th>
-                                        <th class="col-actions">Действия</th>
                                     </tr>
                                 </thead>
                                 <tbody id="subscribers-tbody">
                                     <tr class="empty-row">
-                                        <td colspan="5">
+                                        <td colspan="4">
                                             <div class="empty-state">
                                                 <i class="fas fa-plug"></i>
                                                 <p>Подключитесь к устройству для загрузки абонентов</p>
@@ -399,10 +395,31 @@
                                         <i class="fas fa-exchange-alt"></i>
                                         <span>Замена MAC</span>
                                     </button>
-                                    <button class="action-btn action-btn-danger" onclick="showRemoveDialog(event)">
-                                        <i class="fas fa-trash-alt"></i>
-                                        <span>Удалить абонента</span>
+                                    <button class="action-btn action-btn-secondary" onclick="editSubscriberComment()" disabled title="Скоро">
+                                        <i class="fas fa-edit"></i>
+                                        <span>Редактировать</span>
                                     </button>
+                                    <button class="action-btn action-btn-secondary" onclick="copySubscriberData()">
+                                        <i class="fas fa-copy"></i>
+                                        <span>Копировать</span>
+                                    </button>
+                                    <div class="action-dropdown">
+                                        <button class="action-btn action-btn-secondary dropdown-toggle" onclick="toggleActionDropdown()">
+                                            <i class="fas fa-ellipsis-h"></i>
+                                            <span>Ещё</span>
+                                        </button>
+                                        <div class="dropdown-menu" id="action-dropdown-menu">
+                                            <a href="#" onclick="deleteSubscriberLease(event)" title="Удалить lease из DHCP">
+                                                <i class="fas fa-trash-alt"></i> Удалить lease
+                                            </a>
+                                            <a href="#" onclick="blockSubscriber(event)" title="Заблокировать абонента" disabled>
+                                                <i class="fas fa-ban"></i> Заблокировать
+                                            </a>
+                                            <a href="#" onclick="showSubscriberStats(event)" title="Показать статистику" disabled>
+                                                <i class="fas fa-chart-bar"></i> Статистика
+                                            </a>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             
@@ -493,41 +510,27 @@
                                 </div>
                             </div>
                         </div>
-                        
-                        <!-- Диалог удаления абонента -->
-                        <div id="remove-dialog" class="modal" style="display: none;">
-                            <div class="modal-content" style="max-width: 500px;">
-                                <div class="modal-header">
-                                    <h3 id="remove-dialog-title">
-                                        <i class="fas fa-exclamation-triangle" style="color: #dc3545;"></i> 
-                                        Удаление абонента
-                                    </h3>
-                                    <button class="close-btn" onclick="closeRemoveDialog()">&times;</button>
-                                </div>
-                                <div class="modal-body">
-                                    <div id="remove-dialog-info" style="background: var(--bg-hover); padding: 12px; border-radius: 6px; margin-bottom: 12px;">
-                                        <p><strong>IP:</strong> <span id="remove-ip"></span></p>
-                                        <p><strong>MAC:</strong> <span id="remove-mac"></span></p>
-                                        <p><strong>Комментарий:</strong> <span id="remove-comment"></span></p>
-                                    </div>
-                                    <div style="background: #fff3cd; padding: 12px; border-radius: 6px; margin: 12px 0;">
-                                        <strong>⚠️ Будет удалено из:</strong>
-                                        <ul style="margin: 8px 0 0 20px; padding: 0;">
-                                            <li>DHCP Leases</li>
-                                            <li>ARP таблица</li>
-                                            <li>Firewall Address Lists</li>
-                                            <li>Simple Queues</li>
-                                        </ul>
-                                    </div>
-                                    <div id="remove-result" style="display: none; margin-top: 12px;"></div>
-                                </div>
-                                <div class="modal-footer">
-                                    <button class="btn btn-secondary" onclick="closeRemoveDialog()">Отмена</button>
-                                    <button class="btn btn-danger" id="confirm-remove-btn" onclick="confirmRemoveSubscriber()">
-                                        <i class="fas fa-trash"></i> Удалить
-                                    </button>
-                                </div>
+                    </div>
+                </div>
+
+                <!-- ВКЛАДКА: МАРШРУТ ТРАФИКА -->
+                <div id="visualization-tab" class="tab-content">
+                    <div class="section">
+                        <h2><i class="fas fa-route"></i> Маршрут трафика</h2>
+                        <div class="traffic-input-row">
+                            <div class="traffic-input-group">
+                                <label><i class="fas fa-map-marker-alt"></i> IP адрес:</label>
+                                <input type="text" id="traffic-ip" placeholder="192.168.1.100" class="traffic-input" onkeyup="if(event.key==='Enter')analyzeTrafficPath()">
                             </div>
+                            <button class="btn btn-primary" onclick="analyzeTrafficPath()"><i class="fas fa-search"></i> Показать маршрут</button>
+                        </div>
+                        <div id="traffic-route-container" class="traffic-route-container">
+                            <div class="traffic-route-placeholder"><i class="fas fa-route"></i><p>Введите IP адрес для отображения маршрута трафика</p></div>
+                        </div>
+                        <div id="queue-selector-popover" class="queue-selector-popover" style="display: none;">
+                            <div class="popover-header"><span>Выберите очередь</span><button class="popover-close" onclick="closeQueuePopover()"><i class="fas fa-times"></i></button></div>
+                            <div class="popover-search"><i class="fas fa-search"></i><input type="text" id="queue-search-input" placeholder="Поиск очереди..." oninput="filterQueuePopover()"></div>
+                            <div id="queue-popover-list" class="popover-list"></div>
                         </div>
                     </div>
                 </div>
