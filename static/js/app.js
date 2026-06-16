@@ -3688,11 +3688,10 @@ function formatBandwidth(maxLimit) {
     }
     const up = fmtOne(parts[0]);
     const down = fmtOne(parts[1]);
-    if (!up && !down) return '';
-    if (!up) return down;
-    if (!down) return up;
-    if (up === down) return up;
-    return up + ' / ' + down;
+    if (up && down) return up + ' / ' + down;
+    if (up) return up;
+    if (down) return down;
+    return '';
 }
 
 function buildDstMap() {
