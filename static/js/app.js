@@ -3728,7 +3728,7 @@ function renderParallelTrafficChains(ip) {
     const dstMap = buildDstMap();
     const dstEntries = Object.entries(dstMap).sort((a, b) => b[1].totalChildren - a[1].totalChildren);
 
-    let html = '<div class="traffic-chains-wrapper"><div class="shared-ip-node"><div class="chain-node ip-node"><div class="node-icon"><i class="fas fa-laptop"></i></div><div class="node-content"><div class="node-label">IP адрес</div><div class="node-value">' + ip + '</div></div></div></div>';
+    let html = '<div class="traffic-chains-wrapper"><div class="shared-ip-node"><div class="chain-node ip-node"><div class="node-icon"><i class="fas fa-laptop"></i></div><div class="node-content"><div class="node-value">' + ip + '</div></div></div></div>';
 
     if (dstEntries.length > 1) {
         html += '<div class="split-arrow"><svg viewBox="0 0 100 40"><path d="M50 0 L50 20 L10 40" class="arrow-line arrow-primary"/><path d="M50 20 L90 40" class="arrow-line arrow-backup"/></svg></div>';
@@ -3757,15 +3757,19 @@ function renderParallelTrafficChains(ip) {
 
         html += '<div class="traffic-chain-row ' + chainClass + '" data-dst="' + dst + '">';
         html += '<div class="chain-label ' + labelClass + '"><i class="fas ' + iconClass + '"></i> ' + labelText + '</div>';
-        html += '<div class="chain-node queue-node clickable" onclick="openQueuePopover(event)"><div class="node-icon"><i class="fas fa-sitemap"></i></div><div class="node-content"><div class="node-label">Очередь</div><div class="node-value">' + (dstQueue ? dstQueue.name : '—') + '</div></div></div>';
+        html += '<div class="chain-node queue-node clickable" onclick="openQueuePopover(event)"><div class="node-icon"><i class="fas fa-sitemap"></i></div><div class="node-content"><div class="node-value">' + (dstQueue ? dstQueue.name : '—') + '</div>';
+        if (dstQueue && dstQueue.max_limit && dstQueue.max_limit !== '0/0') html += '<div class="node-bandwidth">' + dstQueue.max_limit + '</div>';
+        html += '</div></div>';
 
         if (ancestorParent) {
             html += '<div class="chain-connector"><div class="connector-line"></div><i class="fas fa-chevron-down"></i><div class="connector-line"></div></div>';
-            html += '<div class="chain-node parent-node"><div class="node-icon"><i class="fas fa-folder-tree"></i></div><div class="node-content"><div class="node-label">Родительская</div><div class="node-value">' + ancestorParent.name + '</div></div></div>';
+            html += '<div class="chain-node parent-node"><div class="node-icon"><i class="fas fa-folder-tree"></i></div><div class="node-content"><div class="node-value">' + ancestorParent.name + '</div>';
+            if (ancestorParent.max_limit && ancestorParent.max_limit !== '0/0') html += '<div class="node-bandwidth">' + ancestorParent.max_limit + '</div>';
+            html += '</div></div>';
         }
 
         html += '<div class="chain-connector"><div class="connector-line"></div><i class="fas fa-chevron-down"></i><div class="connector-line"></div></div>';
-        html += '<div class="chain-node channel-node ' + (labelClass || '') + '"><div class="node-icon"><i class="fas fa-satellite-dish"></i></div><div class="node-content"><div class="node-label">Интерфейс</div><div class="node-value">' + dst + '</div>';
+        html += '<div class="chain-node channel-node ' + (labelClass || '') + '"><div class="node-icon"><i class="fas fa-satellite-dish"></i></div><div class="node-content"><div class="node-value">' + dst + '</div>';
         if (channelsInfo) {
             const ch = isPrimary ? channelsInfo.primary_channel : (isBackup ? channelsInfo.backup_channel : null);
             if (ch) html += '<div class="node-info">metric: ' + ch.distance + '</div>';
