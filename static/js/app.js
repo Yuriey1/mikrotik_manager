@@ -3626,7 +3626,7 @@ function buildDstMap() {
         if (!q.dst || q.dst.trim() === '') return;
         const dst = q.dst.trim();
         if (!dstMap[dst]) dstMap[dst] = { parentQueues: [], children: [] };
-        dstMap[dst].parentQueues.push(q);
+        if (!q.parent) dstMap[dst].parentQueues.push(q);
     });
     Object.entries(dstMap).forEach(([dst, info]) => {
         info.parentQueues.sort((a, b) => a.name.localeCompare(b.name));
