@@ -3818,9 +3818,14 @@ function renderQueuePopoverList(queues) {
         return true;
     });
     const container = document.getElementById('queue-popover-list');
-    const groups = { bridge: {name: 'Bridge', queues: []}, main: {name: 'Основной', queues: []}, backup: {name: 'Резервный', queues: []}, other: {name: 'Другие', queues: []} };
-    filtered.forEach(q => { const name = q.name.toLowerCase(); let group = 'other'; if (name.includes('bridge')) group = 'bridge'; else if (name.includes('main') || name.includes('unlim') || name.includes('satellite')) group = 'main'; else if (name.includes('backup') || name.includes('резерв') || name.includes('provider')) group = 'backup'; groups[group].queues.push(q); });
-     let html = ''; Object.keys(groups).forEach(key => { if (groups[key].queues.length > 0) { html += '<div class="popover-group-header">' + groups[key].name + '</div>'; groups[key].queues.forEach(q => { const selQueue = currentPopoverDst ? currentTrafficQueues.get(currentPopoverDst) : null; const isSelected = selQueue && selQueue.name === q.name; html += '<div class="popover-item ' + (isSelected ? 'selected' : '') + '" onclick="selectQueueFromPopover(\'' + q.name + '\')"><div class="popover-item-name">' + q.name + '</div>' + (isSelected ? '<i class="fas fa-check check-icon"></i>' : '') + '</div>'; }); } }); container.innerHTML = html;
+    let html = '';
+    filtered.forEach(q => {
+        const selQueue = currentPopoverDst ? currentTrafficQueues.get(currentPopoverDst) : null;
+        const isSelected = selQueue && selQueue.name === q.name;
+        html += '<div class="popover-item ' + (isSelected ? 'selected' : '') + '" onclick="selectQueueFromPopover(\'' + q.name + '\')"><div class="popover-item-name">' + q.name + '</div>' + (isSelected ? '<i class="fas fa-check check-icon"></i>' : '') + '</div>';
+    });
+    if (!filtered.length) html = '<div class="popover-item" style="color: var(--text-muted); cursor: default;">Нет доступных очередей</div>';
+    container.innerHTML = html;
 }
 function filterQueuePopover() { const search = document.getElementById('queue-search-input').value.toLowerCase(); renderQueuePopoverList(allQueuesFlat.filter(q => q.name.toLowerCase().includes(search))); }
 function selectQueueFromPopover(queueName) { const queue = allQueuesFlat.find(q => q.name === queueName); if (queue && currentPopoverDst) { currentTrafficQueues.set(currentPopoverDst, queue); closeQueuePopover(); renderParallelTrafficChains(document.getElementById('traffic-ip').value.trim()); } }
