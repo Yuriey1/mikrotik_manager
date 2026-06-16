@@ -3615,6 +3615,7 @@ function analyzeTrafficPath() {
         });
         Object.keys(dstMap).forEach(dst => {
             const isPaid = q => q.name.toLowerCase().startsWith('paid');
+            const isMarked = q => !!(q.packet_marks && q.packet_marks.trim());
             let queue = null;
             if (ipData.existing && ipData.existing.length > 0) {
                 for (const name of ipData.existing) {
@@ -3625,13 +3626,13 @@ function analyzeTrafficPath() {
                 }
             }
             if (!queue) {
-                const dstQueues = allQueuesFlat.filter(q => queueDstMap.get(q.name) === dst && !isPaid(q));
+                const dstQueues = allQueuesFlat.filter(q => queueDstMap.get(q.name) === dst && !isPaid(q) && !isMarked(q));
                 const ifaceQueues = dstQueues.filter(q => isInterfaceOnlyTarget(q.target));
                 ifaceQueues.sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
                 queue = ifaceQueues.length > 0 ? ifaceQueues[0] : null;
             }
             if (!queue) {
-                const dstQueues = allQueuesFlat.filter(q => queueDstMap.get(q.name) === dst && !isPaid(q));
+                const dstQueues = allQueuesFlat.filter(q => queueDstMap.get(q.name) === dst && !isPaid(q) && !isMarked(q));
                 queue = dstQueues.find(q => !trafficParentNames.has(q.name));
             }
             if (queue) currentTrafficQueues.set(dst, queue);
