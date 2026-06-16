@@ -3607,15 +3607,34 @@ function analyzeTrafficPath() {
         allQueuesFlat = [];
         if (treeData.success && treeData.tree) flattenAllQueues(treeData.tree);
         queueDstMap = buildQueueDstMap();
-        let initialQueue = null;
-        if (ipData.existing && ipData.existing.length > 0) initialQueue = allQueuesFlat.find(q => q.name === ipData.existing[0]);
-        if (!initialQueue) initialQueue = allQueuesFlat.find(q => q.name.toLowerCase().includes('bridge') && q.name.toLowerCase().includes('local'));
-        if (!initialQueue && allQueuesFlat.length > 0) initialQueue = allQueuesFlat[0];
         currentTrafficQueues.clear();
-        if (initialQueue) {
-            const dstMap = buildDstMap();
-            Object.keys(dstMap).forEach(dst => currentTrafficQueues.set(dst, initialQueue));
-        }
+        const dstMap = buildDstMap();
+        trafficParentNames.clear();
+        Object.values(dstMap).forEach(info => {
+            info.parentQueues.forEach(pq => trafficParentNames.add(pq.name));
+        });
+        Object.keys(dstMap).forEach(dst => {
+            let queue = null;
+            if (ipData.existing && ipData.existing.length > 0) {
+                for (const name of ipData.existing) {
+                    if (queueDstMap.get(name) === dst) {
+                        queue = allQueuesFlat.find(q => q.name === name);
+                        if (queue) break;
+                    }
+                }
+            }
+            if (!queue) {
+                const dstQueues = allQueuesFlat.filter(q => queueDstMap.get(q.name) === dst);
+                const ifaceQueues = dstQueues.filter(q => isInterfaceOnlyTarget(q.target));
+                ifaceQueues.sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
+                queue = ifaceQueues.length > 0 ? ifaceQueues[0] : null;
+            }
+            if (!queue) {
+                const dstQueues = allQueuesFlat.filter(q => queueDstMap.get(q.name) === dst);
+                queue = dstQueues.find(q => !trafficParentNames.has(q.name));
+            }
+            if (queue) currentTrafficQueues.set(dst, queue);
+        });
         renderParallelTrafficChains(ip);
     })
     .catch(error => { console.error('Ошибка:', error); showAlert('Ошибка соединения', 'error'); container.innerHTML = '<div class="traffic-route-placeholder"><i class="fas fa-exclamation-circle"></i><p>Ошибка загрузки данных. Проверьте подключение к устройству.</p></div>'; });
@@ -3624,6 +3643,24 @@ function analyzeTrafficPath() {
 function flattenAllQueues(queues, parentName) {
     if (!parentName) parentName = null;
     queues.forEach(q => { q.parent = parentName; allQueuesFlat.push(q); if (q.children && q.children.length > 0) flattenAllQueues(q.children, q.name); });
+}
+
+function isInterfaceOnlyTarget(targetList) {
+    if (!targetList || !targetList.length) return false;
+    for (const t of targetList) {
+        if (/^\d+\.\d+\.\d+\.\d+/.test(t.trim())) return false;
+    }
+    return true;
+}
+
+function getQueueDepth(q) {
+    let depth = 0;
+    let cur = q;
+    while (cur && cur.parent) {
+        depth++;
+        cur = allQueuesFlat.find(p => p.name === cur.parent);
+    }
+    return depth;
 }
 
 function buildDstMap() {
@@ -3716,11 +3753,6 @@ function renderParallelTrafficChains(ip) {
 
     const dstMap = buildDstMap();
     const dstEntries = Object.entries(dstMap).sort((a, b) => b[1].totalChildren - a[1].totalChildren);
-
-    trafficParentNames.clear();
-    Object.values(dstMap).forEach(info => {
-        info.parentQueues.forEach(pq => trafficParentNames.add(pq.name));
-    });
 
     let html = buildDstSummaryHTML();
 
