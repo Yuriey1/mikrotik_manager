@@ -3665,6 +3665,36 @@ function getQueueDepth(q) {
     return depth;
 }
 
+function formatBandwidth(maxLimit) {
+    if (!maxLimit || maxLimit === '0/0') return '';
+    const parts = maxLimit.split('/');
+    if (parts.length !== 2) return maxLimit;
+    function fmtOne(v) {
+        v = v.trim();
+        if (!v || v === '0') return null;
+        const m = v.match(/^(\d+(?:\.\d+)?)\s*(k|M|G)?$/i);
+        if (m) {
+            const num = parseFloat(m[1]);
+            const unit = (m[2] || '').toUpperCase();
+            if (unit === 'G') return num + ' Gbit/s';
+            if (unit === 'M') return num + ' Mbit/s';
+            if (unit === 'k' || unit === 'K') return num + ' Kbit/s';
+            if (num >= 1000000000) return (num / 1000000000).toFixed(1).replace(/\.0$/, '') + ' Gbit/s';
+            if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + ' Mbit/s';
+            if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + ' Kbit/s';
+            return num + ' bit/s';
+        }
+        return v;
+    }
+    const up = fmtOne(parts[0]);
+    const down = fmtOne(parts[1]);
+    if (!up && !down) return '';
+    if (!up) return down;
+    if (!down) return up;
+    if (up === down) return up;
+    return up + ' / ' + down;
+}
+
 function buildDstMap() {
     const dstMap = {};
     if (!allQueuesFlat.length) return dstMap;
@@ -3758,13 +3788,13 @@ function renderParallelTrafficChains(ip) {
         html += '<div class="traffic-chain-row ' + chainClass + '" data-dst="' + dst + '">';
         html += '<div class="chain-label ' + labelClass + '"><i class="fas ' + iconClass + '"></i> ' + labelText + '</div>';
         html += '<div class="chain-node queue-node clickable" onclick="openQueuePopover(event)"><div class="node-icon"><i class="fas fa-sitemap"></i></div><div class="node-content"><div class="node-value">' + (dstQueue ? dstQueue.name : '—') + '</div>';
-        if (dstQueue && dstQueue.max_limit && dstQueue.max_limit !== '0/0') html += '<div class="node-bandwidth">' + dstQueue.max_limit + '</div>';
+        if (dstQueue && dstQueue.max_limit && dstQueue.max_limit !== '0/0') html += '<div class="node-bandwidth">' + formatBandwidth(dstQueue.max_limit) + '</div>';
         html += '</div></div>';
 
         if (ancestorParent) {
             html += '<div class="chain-connector"><div class="connector-line"></div><i class="fas fa-chevron-down"></i><div class="connector-line"></div></div>';
             html += '<div class="chain-node parent-node"><div class="node-icon"><i class="fas fa-folder-tree"></i></div><div class="node-content"><div class="node-value">' + ancestorParent.name + '</div>';
-            if (ancestorParent.max_limit && ancestorParent.max_limit !== '0/0') html += '<div class="node-bandwidth">' + ancestorParent.max_limit + '</div>';
+            if (ancestorParent.max_limit && ancestorParent.max_limit !== '0/0') html += '<div class="node-bandwidth">' + formatBandwidth(ancestorParent.max_limit) + '</div>';
             html += '</div></div>';
         }
 
