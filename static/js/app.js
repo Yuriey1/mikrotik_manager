@@ -3812,7 +3812,7 @@ function renderParallelTrafficChains(ip) {
     container.innerHTML = html;
 }
 
-function openQueuePopover(event) { event.stopPropagation(); const popover = document.getElementById('queue-selector-popover'); const rect = event.currentTarget.getBoundingClientRect(); popover.style.top = (rect.bottom + window.scrollY + 5) + 'px'; popover.style.left = Math.max(10, rect.left + window.scrollX - 100) + 'px'; popover.style.display = 'block'; const chainRow = event.currentTarget.closest('.traffic-chain-row'); currentPopoverDst = chainRow ? chainRow.dataset.dst : null; renderQueuePopoverList(allQueuesFlat); document.getElementById('queue-search-input').value = ''; }
+function openQueuePopover(event) { event.stopPropagation(); const popover = document.getElementById('queue-selector-popover'); const rect = event.currentTarget.getBoundingClientRect(); popover.style.top = (rect.bottom + window.scrollY + 5) + 'px'; popover.style.left = Math.max(10, rect.left + window.scrollX - 100) + 'px'; popover.style.display = 'block'; const chainRow = event.currentTarget.closest('.traffic-chain-row'); currentPopoverDst = chainRow ? chainRow.dataset.dst : null; renderQueuePopoverList(allQueuesFlat); }
 function closeQueuePopover() { document.getElementById('queue-selector-popover').style.display = 'none'; }
 function renderQueuePopoverList(queues) {
     const filtered = queues.filter(q => {
@@ -3831,7 +3831,6 @@ function renderQueuePopoverList(queues) {
     if (!filtered.length) html = '<div class="popover-item" style="color: var(--text-muted); cursor: default;">Нет доступных очередей</div>';
     container.innerHTML = html;
 }
-function filterQueuePopover() { const search = document.getElementById('queue-search-input').value.toLowerCase(); renderQueuePopoverList(allQueuesFlat.filter(q => q.name.toLowerCase().includes(search))); }
 function selectQueueFromPopover(queueName) { const queue = allQueuesFlat.find(q => q.name === queueName); if (queue && currentPopoverDst) { currentTrafficQueues.set(currentPopoverDst, queue); closeQueuePopover(); renderParallelTrafficChains(document.getElementById('traffic-ip').value.trim()); } }
 function applyChainSelection() { const primaryDst = channelsInfo && channelsInfo.primary_channel ? channelsInfo.primary_channel.interface : null; const queue = primaryDst ? currentTrafficQueues.get(primaryDst) : null; if (!queue) { showAlert('Выберите очередь в основном канале', 'warning'); return; } const ip = document.getElementById('traffic-ip').value.trim(); const ipInput = document.getElementById('ip-address'); if (ipInput) ipInput.value = ip; switchTab('employee'); showAlert('Выбрана очередь: ' + queue.name, 'success'); }
 document.addEventListener('click', function(e) { const popover = document.getElementById('queue-selector-popover'); if (popover && popover.style.display === 'block' && !popover.contains(e.target) && !e.target.closest('.queue-node')) closeQueuePopover(); });
