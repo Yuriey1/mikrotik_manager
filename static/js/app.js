@@ -14,6 +14,8 @@ let allQueuesFlat = [];
 let currentTrafficQueue = null;
 let channelsInfo = null;
 let trafficParentNames = new Set();
+let queueDstMap = new Map();
+let currentPopoverDst = null;
 
 // Загрузка при старте
 document.addEventListener('DOMContentLoaded', function() {
@@ -3604,6 +3606,7 @@ function analyzeTrafficPath() {
         channelsInfo = channels;
         allQueuesFlat = [];
         if (treeData.success && treeData.tree) flattenAllQueues(treeData.tree);
+        queueDstMap = buildQueueDstMap();
         let initialQueue = null;
         if (ipData.existing && ipData.existing.length > 0) initialQueue = allQueuesFlat.find(q => q.name === ipData.existing[0]);
         if (!initialQueue) initialQueue = allQueuesFlat.find(q => q.name.toLowerCase().includes('bridge') && q.name.toLowerCase().includes('local'));
@@ -3645,6 +3648,23 @@ function buildDstMap() {
         info.totalChildren = info.children.length;
     });
     return dstMap;
+}
+
+function buildQueueDstMap() {
+    const map = new Map();
+    allQueuesFlat.forEach(q => {
+        if (!q.parent && q.dst && q.dst.trim() !== '') {
+            const dst = q.dst.trim();
+            map.set(q.name, dst);
+            const stack = [...(q.children || [])];
+            while (stack.length) {
+                const c = stack.pop();
+                if (!map.has(c.name)) map.set(c.name, dst);
+                if (c.children) stack.push(...c.children);
+            }
+        }
+    });
+    return map;
 }
 
 function isAncestorOf(parent, child) {
@@ -3724,7 +3744,7 @@ function renderParallelTrafficChains(ip) {
             }
         }
 
-        html += '<div class="traffic-chain-row ' + chainClass + '">';
+        html += '<div class="traffic-chain-row ' + chainClass + '" data-dst="' + dst + '">';
         html += '<div class="chain-label ' + labelClass + '"><i class="fas ' + iconClass + '"></i> ' + labelText + '</div>';
         html += '<div class="chain-node queue-node clickable" onclick="openQueuePopover(event)"><div class="node-icon"><i class="fas fa-sitemap"></i></div><div class="node-content"><div class="node-label">Очередь</div><div class="node-value">' + currentTrafficQueue.name + '</div></div></div>';
 
@@ -3748,12 +3768,13 @@ function renderParallelTrafficChains(ip) {
     container.innerHTML = html;
 }
 
-function openQueuePopover(event) { event.stopPropagation(); const popover = document.getElementById('queue-selector-popover'); const rect = event.currentTarget.getBoundingClientRect(); popover.style.top = (rect.bottom + window.scrollY + 5) + 'px'; popover.style.left = Math.max(10, rect.left + window.scrollX - 100) + 'px'; popover.style.display = 'block'; renderQueuePopoverList(allQueuesFlat); document.getElementById('queue-search-input').value = ''; }
+function openQueuePopover(event) { event.stopPropagation(); const popover = document.getElementById('queue-selector-popover'); const rect = event.currentTarget.getBoundingClientRect(); popover.style.top = (rect.bottom + window.scrollY + 5) + 'px'; popover.style.left = Math.max(10, rect.left + window.scrollX - 100) + 'px'; popover.style.display = 'block'; const chainRow = event.currentTarget.closest('.traffic-chain-row'); currentPopoverDst = chainRow ? chainRow.dataset.dst : null; renderQueuePopoverList(allQueuesFlat); document.getElementById('queue-search-input').value = ''; }
 function closeQueuePopover() { document.getElementById('queue-selector-popover').style.display = 'none'; }
 function renderQueuePopoverList(queues) {
     const filtered = queues.filter(q => {
         if (q.name.toLowerCase().startsWith('paid')) return false;
         if (trafficParentNames.has(q.name)) return false;
+        if (currentPopoverDst && queueDstMap.has(q.name) && queueDstMap.get(q.name) !== currentPopoverDst) return false;
         return true;
     });
     const container = document.getElementById('queue-popover-list');
