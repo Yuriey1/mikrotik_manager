@@ -52,7 +52,7 @@ class NetBoxClient:
             
             params.update(default_filters)
             
-            response = self.session.get(url, params=params, verify=self.verify_ssl)
+            response = self.session.get(url, params=params, verify=self.verify_ssl, timeout=30)
             response.raise_for_status()
             
             devices_data = response.json().get('results', [])

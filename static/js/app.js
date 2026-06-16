@@ -3254,17 +3254,38 @@ function showMacReplaceDialog() {
     const radioBtn = document.querySelector('input[name="replace-mode"][value="by-ip"]');
     if (radioBtn) radioBtn.checked = true;
     
-    // Заполняем выпадающий список абонентами (для быстрого выбора)
+    // Заполняем выпадающий список всеми DHCP лизами (с комментариями и без)
     if (targetSelect) {
-        targetSelect.innerHTML = '<option value="">Из списка</option>';
+        targetSelect.innerHTML = '<option value="">Загрузка...</option>';
+        targetSelect.disabled = true;
         
-        if (allSubscribers && allSubscribers.length > 0) {
-            allSubscribers.forEach(sub => {
-                    const option = document.createElement('option');
-                    option.value = sub.ip;
-                    option.textContent = `${sub.ip} (${sub.comment || 'без имени'})`;
-                    targetSelect.appendChild(option);
-        }
+        fetch('/api/dhcp_subscribers?all=true')
+            .then(response => response.json())
+            .then(data => {
+                targetSelect.innerHTML = '<option value="">Из списка</option>';
+                if (data.success && data.subscribers && data.subscribers.length > 0) {
+                    data.subscribers.forEach(sub => {
+                        const option = document.createElement('option');
+                        option.value = sub.ip;
+                        option.textContent = `${sub.ip} (${sub.comment || 'без имени'})`;
+                        targetSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(() => {
+                targetSelect.innerHTML = '<option value="">Из списка</option>';
+                if (allSubscribers && allSubscribers.length > 0) {
+                    allSubscribers.forEach(sub => {
+                        const option = document.createElement('option');
+                        option.value = sub.ip;
+                        option.textContent = `${sub.ip} (${sub.comment || 'без имени'})`;
+                        targetSelect.appendChild(option);
+                    });
+                }
+            })
+            .finally(() => {
+                targetSelect.disabled = false;
+            });
         
         // При выборе из списка - заполняем поле ввода
         targetSelect.onchange = function() {
@@ -3783,7 +3804,7 @@ function renderParallelTrafficChains(ip) {
 
         html += '<div class="traffic-chain-row ' + chainClass + '" data-dst="' + dst + '">';
         html += '<div class="chain-label ' + labelClass + '"><i class="fas ' + iconClass + '"></i> ' + labelText + '</div>';
-        html += '<div class="chain-node queue-node clickable" onmousedown="event.stopPropagation()" onclick="openQueuePopover(event)"><div class="node-icon"><i class="fas fa-sitemap"></i></div><div class="node-content"><div class="node-value">' + (dstQueue ? dstQueue.name : '—') + '</div>';
+        html += '<div class="chain-node queue-node clickable" onclick="openQueuePopover(event)"><div class="node-icon"><i class="fas fa-sitemap"></i></div><div class="node-content"><div class="node-value">' + (dstQueue ? dstQueue.name : '—') + '</div>';
         if (dstQueue && dstQueue.max_limit && dstQueue.max_limit !== '0/0') html += '<div class="node-bandwidth">' + formatBandwidth(dstQueue.max_limit) + '</div>';
         html += '</div></div>';
 
@@ -3809,8 +3830,9 @@ function renderParallelTrafficChains(ip) {
     container.innerHTML = html;
 }
 
-function openQueuePopover(event) { event.stopPropagation(); const popover = document.getElementById('queue-selector-popover'); const rect = event.currentTarget.getBoundingClientRect(); popover.style.top = (rect.bottom + window.scrollY + 5) + 'px'; popover.style.left = Math.max(10, rect.left + window.scrollX - 100) + 'px'; popover.style.display = 'block'; const chainRow = event.currentTarget.closest('.traffic-chain-row'); currentPopoverDst = chainRow ? chainRow.dataset.dst : null; renderQueuePopoverList(allQueuesFlat); }
-function closeQueuePopover() { document.getElementById('queue-selector-popover').style.display = 'none'; }
+function openQueuePopover(event) { const popover = document.getElementById('queue-selector-popover'); const rect = event.currentTarget.getBoundingClientRect(); popover.style.position = 'fixed'; popover.style.top = (rect.bottom + 5) + 'px'; popover.style.left = Math.max(10, rect.left - 100) + 'px'; popover.style.display = 'block'; const chainRow = event.currentTarget.closest('.traffic-chain-row'); currentPopoverDst = chainRow ? chainRow.dataset.dst : null; renderQueuePopoverList(allQueuesFlat); setTimeout(() => { document.addEventListener('click', closeQueuePopoverOnOutside, { once: true }); }, 0); }
+function closeQueuePopoverOnOutside(e) { if (e.target.closest('.queue-node')) return; const popover = document.getElementById('queue-selector-popover'); if (popover && popover.style.display !== 'none' && !popover.contains(e.target)) { closeQueuePopover(); } }
+function closeQueuePopover() { const popover = document.getElementById('queue-selector-popover'); if (popover) popover.style.display = 'none'; }
 function renderQueuePopoverList(queues) {
     const filtered = queues.filter(q => {
         if (q.name.toLowerCase().startsWith('paid')) return false;
@@ -3830,4 +3852,4 @@ function renderQueuePopoverList(queues) {
 }
 function selectQueueFromPopover(queueName) { const queue = allQueuesFlat.find(q => q.name === queueName); if (queue && currentPopoverDst) { currentTrafficQueues.set(currentPopoverDst, queue); closeQueuePopover(); renderParallelTrafficChains(document.getElementById('traffic-ip').value.trim()); } }
 function applyChainSelection() { const primaryDst = channelsInfo && channelsInfo.primary_channel ? channelsInfo.primary_channel.interface : null; const queue = primaryDst ? currentTrafficQueues.get(primaryDst) : null; if (!queue) { showAlert('Выберите очередь в основном канале', 'warning'); return; } const ip = document.getElementById('traffic-ip').value.trim(); const ipInput = document.getElementById('ip-address'); if (ipInput) ipInput.value = ip; switchTab('employee'); showAlert('Выбрана очередь: ' + queue.name, 'success'); }
-document.addEventListener('mousedown', function(e) { const popover = document.getElementById('queue-selector-popover'); if (popover && popover.style.display !== 'none' && !popover.contains(e.target)) closeQueuePopover(); });
+

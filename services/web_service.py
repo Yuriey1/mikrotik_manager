@@ -1207,8 +1207,12 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
         try:
             query = parse_qs(parsed.query)
             pool_name = query.get('pool', [''])[0]
+            include_all = query.get('all', [''])[0].lower() == 'true'
             
-            subscribers = mikrotik_manager.get_dhcp_subscribers(pool_name if pool_name else None)
+            subscribers = mikrotik_manager.get_dhcp_subscribers(
+                pool_name if pool_name else None,
+                include_all=include_all
+            )
             
             self._send_json({
                 'success': True,

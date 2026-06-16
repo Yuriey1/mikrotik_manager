@@ -929,13 +929,14 @@ class MikroTikManager:
             traceback.print_exc()
             return False
 
-    def get_dhcp_subscribers(self, pool_name: str = None) -> List[Dict]:
+    def get_dhcp_subscribers(self, pool_name: str = None, include_all: bool = False) -> List[Dict]:
         """
         Получить список абонентов из DHCP leases
         Абоненты - это leases с непустыми комментариями (ФИО, должность)
         
         Args:
             pool_name: Имя DHCP пула для фильтрации (если None - все абоненты)
+            include_all: Если True — вернуть все лизинги, включая без комментариев
         """
         try:
             leases = self.get_dhcp_leases()
@@ -964,37 +965,40 @@ class MikroTikManager:
             for lease in leases:
                 comment = lease.get('comment', '')
                 # Абонент - это lease с комментарием (там ФИО/должность)
-                if comment and comment.strip():
-                    ip = lease.get('address', '')
+                # При include_all=True включаем все лизинги
+                if not include_all and not (comment and comment.strip()):
+                    continue
+                
+                ip = lease.get('address', '')
+                
+                # Если указан пул, проверяем принадлежность IP к диапазону пула
+                if pool_name and pool_ranges:
+                    ip_in_pool = False
+                    try:
+                        ip_obj = ipaddress.ip_address(ip.split('/')[0])
+                        for (start, end) in pool_ranges.keys():
+                            start_obj = ipaddress.ip_address(start)
+                            end_obj = ipaddress.ip_address(end)
+                            if start_obj <= ip_obj <= end_obj:
+                                ip_in_pool = True
+                                break
+                    except:
+                        pass
                     
-                    # Если указан пул, проверяем принадлежность IP к диапазону пула
-                    if pool_name and pool_ranges:
-                        ip_in_pool = False
-                        try:
-                            ip_obj = ipaddress.ip_address(ip.split('/')[0])
-                            for (start, end) in pool_ranges.keys():
-                                start_obj = ipaddress.ip_address(start)
-                                end_obj = ipaddress.ip_address(end)
-                                if start_obj <= ip_obj <= end_obj:
-                                    ip_in_pool = True
-                                    break
-                        except:
-                            pass
-                        
-                        if not ip_in_pool:
-                            continue
-                    
-                    subscriber = {
-                        'ip': ip,
-                        'mac': lease.get('mac-address', ''),
-                        'comment': comment,
-                        'host_name': lease.get('host-name', ''),
-                        'dynamic': lease.get('dynamic') == 'true',
-                        'disabled': lease.get('disabled') == 'true',
-                        'server': lease.get('server', ''),
-                        'id': lease.get('.id', '')
-                    }
-                    subscribers.append(subscriber)
+                    if not ip_in_pool:
+                        continue
+                
+                subscriber = {
+                    'ip': ip,
+                    'mac': lease.get('mac-address', ''),
+                    'comment': comment,
+                    'host_name': lease.get('host-name', ''),
+                    'dynamic': lease.get('dynamic') == 'true',
+                    'disabled': lease.get('disabled') == 'true',
+                    'server': lease.get('server', ''),
+                    'id': lease.get('.id', '')
+                }
+                subscribers.append(subscriber)
             
             # Безопасная сортировка по IP
             def safe_ip_sort(item):
