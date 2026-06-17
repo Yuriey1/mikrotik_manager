@@ -106,6 +106,7 @@
                                     <div class="device-name">{{ d.name }}</div>
                                     <div class="device-ip">{{ d.ip }}</div>
                                     <div class="device-type" v-if="d.device_type">{{ d.device_type }}</div>
+                                    <div v-if="store.currentDevice === d.name && store.connected" class="device-status-label">✓ Подключено</div>
                                     <div class="device-actions">
                                         <button v-if="store.currentDevice === d.name && store.connected"
                                                 @click="doDisconnect" class="btn btn-danger btn-sm">

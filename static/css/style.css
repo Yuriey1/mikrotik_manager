@@ -2258,7 +2258,28 @@ textarea {
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
 /* ===== DEVICE CARD: ПОДКЛЮЧЕНО ===== */
-.device-card.connected { border-color: var(--success); box-shadow: 0 0 12px rgba(115, 191, 105, 0.15); }
+.device-card.connected {
+    border-color: var(--success);
+    background: rgba(115, 191, 105, 0.08);
+    border-left: 4px solid var(--success);
+    position: relative;
+    box-shadow: 0 0 16px rgba(115, 191, 105, 0.2);
+}
+.device-card.connected::after {
+    content: '';
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    color: var(--success);
+    font-weight: bold;
+    font-size: 14px;
+}
+.device-status-label {
+    font-size: 11px;
+    color: var(--success);
+    margin-top: 4px;
+    font-weight: 500;
+}
 
 /* ===== КНОПКИ ===== */
 .btn-sm { padding: 4px 10px; font-size: 12px; }
