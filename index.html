@@ -404,35 +404,78 @@
         </div>
     </template>
 
-    <!-- ====== QUEUE TAB (placeholder) ====== -->
+    <!-- ====== QUEUE TAB ====== -->
     <template id="queue-tab">
         <div class="tab-content active">
-            <div class="section">
-                <h2><i class="fas fa-sitemap"></i> Очереди</h2>
-                <div v-if="!store.connected" class="empty-state" style="padding: 60px 0;">
-                    <i class="fas fa-plug" style="font-size: 48px; color: var(--text-muted);"></i>
-                    <p style="margin-top: 16px; color: var(--text-secondary);">Подключитесь к устройству для загрузки очередей</p>
-                </div>
-                <div v-else class="tree-controls" style="margin-bottom: 16px;">
-                    <button class="tree-control-btn" @click="loadQueueTree">
+            <div v-if="!store.connected" class="empty-state" style="padding: 60px 0; text-align: center;">
+                <i class="fas fa-plug" style="font-size: 48px; color: var(--text-muted);"></i>
+                <p style="margin-top: 16px; color: var(--text-secondary);">Подключитесь к устройству для загрузки очередей</p>
+            </div>
+            <div v-else class="section">
+                <h2><i class="fas fa-sitemap"></i> Дерево очередей</h2>
+                <div class="tree-controls">
+                    <button class="tree-control-btn" @click="loadTree">
                         <i class="fas fa-sync-alt"></i> Обновить
                     </button>
+                    <button class="tree-control-btn" @click="expandAll">
+                        <i class="fas fa-expand-alt"></i> Развернуть все
+                    </button>
+                    <button class="tree-control-btn" @click="collapseAll">
+                        <i class="fas fa-compress-alt"></i> Свернуть все
+                    </button>
+                    <input type="text" class="tree-filter" v-model="treeFilter" placeholder="Фильтр по имени очереди...">
                 </div>
-                <div v-if="store.connected && store.queueTree.length > 0">
-                    <div class="queue-tree-header">
-                        <div class="queue-tree-title">
-                            <i class="fas fa-project-diagram"></i> Иерархия очередей
-                        </div>
-                        <div class="queue-tree-stats">
-                            Всего: {{ store.queueStats?.total_queues || 0 }} |
-                            Активно: {{ store.queueStats?.enabled_queues || 0 }}
-                        </div>
+                <div class="queue-tree-header">
+                    <div class="queue-tree-title">
+                        <i class="fas fa-project-diagram"></i> Иерархия очередей
                     </div>
-                    <div style="padding: 40px 0; text-align: center; color: var(--text-secondary);">
-                        Дерево очередей будет здесь (Фаза 4)
+                    <div class="queue-tree-stats" v-if="store.queueStats">
+                        Всего: {{ store.queueStats.total_queues || 0 }} |
+                        Активно: {{ store.queueStats.enabled_queues || 0 }} |
+                        Отключено: {{ store.queueStats.disabled_queues || 0 }} |
+                        IP в очередях: {{ store.queueStats.total_ips || 0 }}
                     </div>
+                </div>
+                <div v-if="filteredTree.length > 0" class="queue-tree-container">
+                    <queue-node v-for="node in filteredTree" :key="node.id" :node="node" :depth="0" :expanded-nodes="expandedNodes" @toggle="toggleNode"></queue-node>
+                </div>
+                <div v-else class="empty-state" style="padding: 40px 0; text-align: center;">
+                    <i class="fas fa-sitemap" style="font-size: 36px; color: var(--text-muted);"></i>
+                    <p style="margin-top: 12px; color: var(--text-secondary);">{{ store.queueTree.length ? 'Нет совпадений' : 'Дерево очередей пусто' }}</p>
                 </div>
             </div>
+        </div>
+    </template>
+
+    <!-- ====== QUEUE NODE (recursive) ====== -->
+    <template id="queue-node">
+        <div class="queue-tree-node" :style="{ paddingLeft: depth * 20 + 'px' }">
+            <div class="queue-node-row" @click="$emit('toggle', node.id)">
+                <span class="queue-node-expand" v-if="node.children && node.children.length > 0">
+                    <i :class="'fas fa-chevron-' + (expanded ? 'down' : 'right')"></i>
+                </span>
+                <span v-else class="queue-node-expand" style="visibility: hidden;">
+                    <i class="fas fa-chevron-right"></i>
+                </span>
+                <span class="queue-node-name" :class="{ disabled: !node.enabled }">
+                    {{ node.name }}
+                </span>
+                <span class="queue-node-target" :title="(node.target || []).join(', ')">
+                    {{ node.short_target || '—' }}
+                </span>
+                <span class="queue-node-dst" v-if="node.short_dst">
+                    → {{ node.short_dst }}
+                </span>
+                <span class="queue-node-limit" v-if="node.max_limit">
+                    {{ node.max_limit }}
+                </span>
+                <span class="queue-node-priority" v-if="node.priority">
+                    prio: {{ node.priority }}
+                </span>
+            </div>
+            <template v-if="expanded && node.children && node.children.length > 0">
+                <queue-node v-for="child in node.children" :key="child.id" :node="child" :depth="depth + 1" :expanded-nodes="expandedNodes" @toggle="$emit('toggle', $event)"></queue-node>
+            </template>
         </div>
     </template>
 

@@ -434,10 +434,69 @@ app.component('delete-confirm-modal', {
 app.component('queue-tab', {
     template: '#queue-tab',
     setup() {
-        function loadQueueTree() {
-            store.error = 'Загрузка дерева очередей будет реализована в Фазе 4';
+        const treeFilter = Vue.ref('');
+        const expandedNodes = Vue.reactive({});
+
+        const filteredTree = Vue.computed(() => {
+            const q = treeFilter.value.toLowerCase().trim();
+            if (!q) return store.queueTree;
+            function filterTree(nodes) {
+                const result = [];
+                for (const n of nodes) {
+                    const nameMatch = n.name && n.name.toLowerCase().includes(q);
+                    const childMatch = n.children && filterTree(n.children);
+                    if (nameMatch || (childMatch && childMatch.length > 0)) {
+                        const copy = { ...n, children: n.children ? filterTree(n.children) : [] };
+                        if (nameMatch && n.children) copy.children = n.children;
+                        result.push(copy);
+                    }
+                }
+                return result;
+            }
+            return filterTree(store.queueTree);
+        });
+
+        async function loadTree() {
+            await refreshData();
         }
-        return { store, loadQueueTree };
+
+        function expandAll() {
+            function walk(nodes) {
+                for (const n of nodes) {
+                    if (n.children && n.children.length > 0) {
+                        expandedNodes[n.id] = true;
+                        walk(n.children);
+                    }
+                }
+            }
+            walk(store.queueTree);
+        }
+
+        function collapseAll() {
+            for (const key of Object.keys(expandedNodes)) {
+                delete expandedNodes[key];
+            }
+        }
+
+        function toggleNode(nodeId) {
+            if (expandedNodes[nodeId]) {
+                delete expandedNodes[nodeId];
+            } else {
+                expandedNodes[nodeId] = true;
+            }
+        }
+
+        return { store, treeFilter, expandedNodes, filteredTree, loadTree, expandAll, collapseAll, toggleNode };
+    },
+});
+
+app.component('queue-node', {
+    template: '#queue-node',
+    props: { node: Object, depth: Number, expandedNodes: Object },
+    emits: ['toggle'],
+    setup(props) {
+        const expanded = Vue.computed(() => !!props.expandedNodes[props.node.id]);
+        return { expanded };
     },
 });
 

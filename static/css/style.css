@@ -2331,3 +2331,19 @@ textarea {
 .traffic-node:hover { background: rgba(87, 148, 242, 0.2); }
 .traffic-node.has-ip { border-color: var(--success); background: rgba(115, 191, 105, 0.1); }
 .traffic-node .node-speed { font-size: 10px; color: var(--text-muted); display: block; }
+
+/* ===== ДЕРЕВО ОЧЕРЕДЕЙ ===== */
+.queue-tree-node { font-size: 13px; }
+.queue-node-row {
+    display: flex; align-items: center; gap: 10px; padding: 6px 10px;
+    cursor: pointer; border-radius: 4px; transition: background 0.1s;
+}
+.queue-node-row:hover { background: var(--bg-hover); }
+.queue-node-expand { width: 16px; color: var(--text-muted); font-size: 10px; text-align: center; flex-shrink: 0; }
+.queue-node-name { font-weight: 600; color: var(--text-primary); min-width: 180px; flex-shrink: 0; }
+.queue-node-name.disabled { color: var(--text-muted); text-decoration: line-through; }
+.queue-node-target { color: var(--text-secondary); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.queue-node-dst { color: var(--accent-primary); font-size: 12px; white-space: nowrap; }
+.queue-node-limit { color: var(--success); font-size: 12px; white-space: nowrap; font-family: monospace; }
+.queue-node-priority { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
+.queue-tree-container { max-height: calc(100vh - 300px); overflow-y: auto; }
