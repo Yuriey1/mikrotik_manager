@@ -63,20 +63,13 @@
                     </button>
                 </div>
 
-                <!-- DEBUG -->
-                <div style="position:fixed;bottom:10px;left:10px;background:#d44a3a;color:#fff;padding:6px 12px;border-radius:4px;z-index:99999;font-family:monospace;font-size:12px;">
-                    menu={{ store.floatingMenuSub && store.floatingMenuSub.ip || 'null' }}
-                </div>
                 <!-- Floating dropdown menu -->
                 <div v-show="store.floatingMenuSub" class="menu-backdrop" @click="store.floatingMenuSub = null"></div>
                 <div v-show="store.floatingMenuSub" class="floating-menu" @click.stop>
-                    <div style="padding:8px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border-color);">
-                        {{ store.floatingMenuSub ? store.floatingMenuSub.ip : '—' }}
-                    </div>
-                    <div @click="doEdit(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-edit"></i> Редактировать</div>
-                    <div @click="doMacReplace(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-exchange-alt"></i> Заменить MAC</div>
-                    <div @click="doCopy(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-copy"></i> Копировать</div>
-                    <div @click="doDelete(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-trash-alt"></i> Удалить</div>
+                    <div @click="store.menuEdit(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-edit"></i> Редактировать</div>
+                    <div @click="store.menuMacReplace(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-exchange-alt"></i> Заменить MAC</div>
+                    <div @click="store.menuCopy(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-copy"></i> Копировать</div>
+                    <div @click="store.menuDelete(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-trash-alt"></i> Удалить</div>
                 </div>
             </div>
         </div>
