@@ -63,9 +63,16 @@
                     </button>
                 </div>
 
+                <!-- DEBUG -->
+                <div style="position:fixed;bottom:10px;left:10px;background:#d44a3a;color:#fff;padding:6px 12px;border-radius:4px;z-index:99999;font-family:monospace;font-size:12px;">
+                    menuSub={{ menuSub && menuSub.ip || 'null' }}
+                </div>
                 <!-- Floating dropdown menu -->
                 <div v-show="menuSub" class="menu-backdrop" @click="menuSub = null"></div>
                 <div v-show="menuSub" class="floating-menu" @click.stop>
+                    <div style="padding:8px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border-color);">
+                        {{ menuSub ? menuSub.ip : '—' }}
+                    </div>
                     <a href="#" @click.prevent="doEdit(menuSub)"><i class="fas fa-edit"></i> Редактировать</a>
                     <a href="#" @click.prevent="doMacReplace(menuSub)"><i class="fas fa-exchange-alt"></i> Заменить MAC</a>
                     <a href="#" @click.prevent="doCopy(menuSub)"><i class="fas fa-copy"></i> Копировать</a>
