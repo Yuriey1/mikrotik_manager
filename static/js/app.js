@@ -57,9 +57,7 @@ app.component('device-sidebar', {
         async function doConnect(name) {
             try {
                 await connectDevice(name, '', '');
-            } catch (e) {
-                alert(e.message);
-            }
+            } catch (e) {}
         }
 
         async function doDisconnect() {
@@ -181,7 +179,7 @@ app.component('credentials-modal', {
         function submit() {
             store.showCredentialsModal = false;
             connectDevice(store.credentialsDevice, username.value, password.value)
-                .catch(e => alert(e.message));
+                .catch(e => { store.error = e.message; });
         }
 
         function cancel() {
