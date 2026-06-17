@@ -303,7 +303,7 @@ app.component('subscriber-modal', {
                     const result = await addSubscriber(data);
                     if (result.success) {
                         closeModal();
-                        await loadSubscribers();
+                        await refreshData();
                     } else {
                         store.error = result.error || result.message;
                     }
@@ -311,7 +311,7 @@ app.component('subscriber-modal', {
                     const result = await editSubscriber(store.editOldIp, data);
                     if (result.success) {
                         closeModal();
-                        await loadSubscribers();
+                        await refreshData();
                     } else {
                         store.error = result.error || result.message;
                     }
@@ -370,7 +370,7 @@ app.component('mac-replace-modal', {
                 const result = await replaceMac(data);
                 if (result.success) {
                     closeModal();
-                    await loadSubscribers();
+                    await refreshData();
                 } else {
                     store.error = result.error || result.message;
                 }
@@ -407,7 +407,7 @@ app.component('delete-confirm-modal', {
                 if (result.success) {
                     closeModal();
                     store.subscribers = store.subscribers.filter(s => s.ip !== deleteSub.value.ip);
-                } else {
+                    await refreshData();
                     store.error = result.error || result.message;
                 }
             } catch (e) {

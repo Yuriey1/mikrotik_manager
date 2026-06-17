@@ -184,6 +184,24 @@ async function loadSubscribers() {
     }
 }
 
+async function refreshData() {
+    try {
+        const data = await apiGet('/api/sync');
+        if (data.success !== false) {
+            store.queueTree = data.queue_tree || [];
+            store.allQueues = data.all_queues || [];
+            store.queueStats = data.queue_stats || {};
+            store.dhcpPools = data.dhcp_pools || [];
+            store.subscribers = data.subscribers || [];
+            store.internetAccess = data.internet_access || [];
+            store.channelsInfo = data.channels || null;
+            store.interfaces = data.interfaces || [];
+        }
+    } catch (e) {
+        store.error = e.message;
+    }
+}
+
 function buildTrafficChains(channels, queuesData, ip) {
     if (!channels?.channels?.length) return null;
     const chains = channels.channels.map(ch => ({
