@@ -44,6 +44,8 @@ async function loadDevices() {
 }
 
 async function connectDevice(name, username, password) {
+    store.loading = true;
+    store.loadingMessage = 'Подключение к ' + name + '...';
     store.connecting = true;
     store.connectingDevice = name;
     try {
@@ -79,6 +81,8 @@ async function connectDevice(name, username, password) {
         store.error = e.message;
         throw e;
     } finally {
+        store.loading = false;
+        store.loadingMessage = '';
         store.connecting = false;
         store.connectingDevice = null;
     }
@@ -123,23 +127,38 @@ async function saveSettings() {
 }
 
 async function addSubscriber(data) {
-    return apiPost('/api/add_employee', data);
+    store.loading = true;
+    store.loadingMessage = 'Добавление абонента...';
+    try { return await apiPost('/api/add_employee', data); }
+    finally { store.loading = false; store.loadingMessage = ''; }
 }
 
 async function editSubscriber(oldIp, data) {
-    return apiPost('/api/edit_subscriber', { ...data, old_ip: oldIp });
+    store.loading = true;
+    store.loadingMessage = 'Сохранение изменений...';
+    try { return await apiPost('/api/edit_subscriber', { ...data, old_ip: oldIp }); }
+    finally { store.loading = false; store.loadingMessage = ''; }
 }
 
 async function deleteSubscriber(ip) {
-    return apiPost('/api/delete_subscriber', { ip });
+    store.loading = true;
+    store.loadingMessage = 'Удаление абонента...';
+    try { return await apiPost('/api/delete_subscriber', { ip }); }
+    finally { store.loading = false; store.loadingMessage = ''; }
 }
 
 async function replaceMac(data) {
-    return apiPost('/api/replace_mac', data);
+    store.loading = true;
+    store.loadingMessage = 'Замена MAC адреса...';
+    try { return await apiPost('/api/replace_mac', data); }
+    finally { store.loading = false; store.loadingMessage = ''; }
 }
 
 async function toggleInternet(ip, enable, comment) {
-    return apiPost('/api/internet_access/toggle', { ip, enable, comment: comment || '' });
+    store.loading = true;
+    store.loadingMessage = (enable ? 'Включение' : 'Отключение') + ' доступа в интернет...';
+    try { return await apiPost('/api/internet_access/toggle', { ip, enable, comment: comment || '' }); }
+    finally { store.loading = false; store.loadingMessage = ''; }
 }
 
 async function checkMacExists(mac, excludeIp) {
