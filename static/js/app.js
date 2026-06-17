@@ -1,5 +1,15 @@
 const { createApp, onMounted, computed } = Vue;
 
+window.addEventListener('error', function(e) {
+    var el = document.getElementById('app');
+    if (el) {
+        el.setAttribute('style', 'display:block !important; padding:20px; color:#d44a3a; font-family:monospace; background:#0b0c0e;');
+        el.innerHTML = '<h3>Ошибка JS:</h3><pre>' + (e.error ? e.error.stack || e.error.message : e.message) + '</pre>';
+    }
+});
+
+try {
+
 const app = createApp({
     setup() {
         onMounted(async () => {
@@ -523,3 +533,11 @@ app.component('credentials-modal', {
 });
 
 app.mount('#app');
+
+} catch(e) {
+    var el = document.getElementById('app');
+    if (el) {
+        el.setAttribute('style', 'display:block !important; padding:20px; color:#d44a3a; font-family:monospace; background:#0b0c0e;');
+        el.innerHTML = '<h3>Ошибка инициализации Vue:</h3><pre>' + (e.stack || e.message) + '</pre>';
+    }
+}
