@@ -106,8 +106,6 @@ app.component('subscriber-tab', {
         const poolFilter = Vue.ref('');
         const selectedIp = Vue.ref(null);
         const menuSub = Vue.ref(null);
-        const menuX = Vue.ref(0);
-        const menuY = Vue.ref(0);
 
         const filteredSubscribers = Vue.computed(() => {
             const q = searchText.value.toLowerCase().trim();
@@ -159,15 +157,12 @@ app.component('subscriber-tab', {
             selectedIp.value = sub.ip;
         }
 
-        function toggleMenu(event, sub) {
+        function toggleMenu(sub) {
             if (menuSub.value && menuSub.value.ip === sub.ip) {
                 menuSub.value = null;
-            } else {
-                const rect = event.currentTarget.getBoundingClientRect();
-                menuX.value = Math.min(rect.left, window.innerWidth - 200);
-                menuY.value = Math.min(rect.bottom + 4, window.innerHeight - 200);
-                menuSub.value = sub;
+                return;
             }
+            menuSub.value = sub;
         }
 
         function filterByPool() {}
@@ -218,7 +213,7 @@ app.component('subscriber-tab', {
             document.addEventListener('click', () => { menuSub.value = null; });
         });
 
-        return { store, searchText, poolFilter, selectedIp, menuSub, menuX, menuY,
+        return { store, searchText, poolFilter, selectedIp, menuSub,
                  filteredSubscribers, parseName, parsePosition, hasInternet,
                  toggleNet, selectSubscriber, toggleMenu, filterByPool,
                  openAddModal, editSubscriber, openMacReplace, copySubscriber, confirmDelete };

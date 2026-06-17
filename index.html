@@ -64,7 +64,7 @@
                 </div>
 
                 <!-- Floating dropdown menu -->
-                <div v-if="menuSub" class="floating-menu" :style="{ position: 'fixed', top: menuY + 'px', left: menuX + 'px', zIndex: 10000 }"
+                <div v-if="menuSub" class="floating-menu"
                      @click.stop>
                     <a href="#" @click.prevent="editSubscriber(menuSub); menuSub = null"><i class="fas fa-edit"></i> Редактировать</a>
                     <a href="#" @click.prevent="openMacReplace(menuSub); menuSub = null"><i class="fas fa-exchange-alt"></i> Заменить MAC</a>
@@ -225,7 +225,7 @@
                                 <td class="col-position">{{ parsePosition(sub.comment) }}</td>
                                 <td class="col-comment">{{ parseName(sub.comment) }}</td>
                                 <td class="col-actions">
-                                    <button class="btn btn-sm" @click.stop="toggleMenu($event, sub)" style="padding: 2px 8px;">
+                                    <button class="btn btn-sm" @click.stop="toggleMenu(sub)" style="padding: 2px 8px;">
                                         <i class="fas fa-ellipsis-v"></i>
                                     </button>
                                 </td>
