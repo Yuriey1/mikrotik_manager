@@ -220,7 +220,7 @@
                                         <button class="btn btn-sm" @click.stop="toggleMenu(sub)" style="padding: 2px 8px;">
                                             <i class="fas fa-ellipsis-v"></i>
                                         </button>
-                                        <div v-if="openMenuIp === sub.ip" class="dropdown-menu" @click.stop style="right: 0;">
+                                        <div v-if="openMenuIp === sub.ip" class="dropdown-menu" @click.stop style="right: 0; display: block;">
                                             <a href="#" @click.prevent="editSubscriber(sub)"><i class="fas fa-edit"></i> Редактировать</a>
                                             <a href="#" @click.prevent="openMacReplace(sub)"><i class="fas fa-exchange-alt"></i> Заменить MAC</a>
                                             <a href="#" @click.prevent="copySubscriber(sub)"><i class="fas fa-copy"></i> Копировать</a>
