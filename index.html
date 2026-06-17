@@ -65,18 +65,18 @@
 
                 <!-- DEBUG -->
                 <div style="position:fixed;bottom:10px;left:10px;background:#d44a3a;color:#fff;padding:6px 12px;border-radius:4px;z-index:99999;font-family:monospace;font-size:12px;">
-                    menuSub={{ menuSub && menuSub.ip || 'null' }}
+                    menu={{ store.floatingMenuSub && store.floatingMenuSub.ip || 'null' }}
                 </div>
                 <!-- Floating dropdown menu -->
-                <div v-show="menuSub" class="menu-backdrop" @click="menuSub = null"></div>
-                <div v-show="menuSub" class="floating-menu" @click.stop>
+                <div v-show="store.floatingMenuSub" class="menu-backdrop" @click="store.floatingMenuSub = null"></div>
+                <div v-show="store.floatingMenuSub" class="floating-menu" @click.stop>
                     <div style="padding:8px 16px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border-color);">
-                        {{ menuSub ? menuSub.ip : '—' }}
+                        {{ store.floatingMenuSub ? store.floatingMenuSub.ip : '—' }}
                     </div>
-                    <a href="#" @click.prevent="doEdit(menuSub)"><i class="fas fa-edit"></i> Редактировать</a>
-                    <a href="#" @click.prevent="doMacReplace(menuSub)"><i class="fas fa-exchange-alt"></i> Заменить MAC</a>
-                    <a href="#" @click.prevent="doCopy(menuSub)"><i class="fas fa-copy"></i> Копировать</a>
-                    <a href="#" @click.prevent="doDelete(menuSub)"><i class="fas fa-trash-alt"></i> Удалить</a>
+                    <a href="#" @click.prevent="doEdit(store.floatingMenuSub)"><i class="fas fa-edit"></i> Редактировать</a>
+                    <a href="#" @click.prevent="doMacReplace(store.floatingMenuSub)"><i class="fas fa-exchange-alt"></i> Заменить MAC</a>
+                    <a href="#" @click.prevent="doCopy(store.floatingMenuSub)"><i class="fas fa-copy"></i> Копировать</a>
+                    <a href="#" @click.prevent="doDelete(store.floatingMenuSub)"><i class="fas fa-trash-alt"></i> Удалить</a>
                 </div>
             </div>
         </div>
@@ -231,7 +231,7 @@
                                 <td class="col-mac">{{ sub.mac || '—' }}</td>
                                 <td class="col-position">{{ parsePosition(sub.comment) }}</td>
                                 <td class="col-comment">{{ parseName(sub.comment) }}</td>
-                                <td class="col-actions" @click.stop="menuSub = sub" style="cursor:pointer; text-align:center;">
+                                <td class="col-actions" @click.stop="store.floatingMenuSub = sub" style="cursor:pointer; text-align:center;">
                                     <i class="fas fa-ellipsis-v"></i>
                                 </td>
                             </tr>

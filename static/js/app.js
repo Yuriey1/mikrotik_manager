@@ -105,7 +105,6 @@ app.component('subscriber-tab', {
         const searchText = Vue.ref('');
         const poolFilter = Vue.ref('');
         const selectedIp = Vue.ref(null);
-        const menuSub = Vue.ref(null);
 
         const filteredSubscribers = Vue.computed(() => {
             const q = searchText.value.toLowerCase().trim();
@@ -157,14 +156,6 @@ app.component('subscriber-tab', {
             selectedIp.value = sub.ip;
         }
 
-        function toggleMenu(sub) {
-            if (menuSub.value && menuSub.value.ip === sub.ip) {
-                menuSub.value = null;
-                return;
-            }
-            menuSub.value = sub;
-        }
-
         function filterByPool() {}
 
         function openAddModal() {
@@ -209,14 +200,14 @@ app.component('subscriber-tab', {
             store.deleteSub = sub;
         }
 
-        function doEdit(sub) { menuSub.value = null; editSubscriber(sub); }
-        function doMacReplace(sub) { menuSub.value = null; store.showMacReplaceModal = true; store.macReplaceSub = sub; }
-        function doCopy(sub) { menuSub.value = null; copySubscriber(sub); }
-        function doDelete(sub) { menuSub.value = null; confirmDelete(sub); }
+        function doEdit(sub) { store.floatingMenuSub = null; editSubscriber(sub); }
+        function doMacReplace(sub) { store.floatingMenuSub = null; store.showMacReplaceModal = true; store.macReplaceSub = sub; }
+        function doCopy(sub) { store.floatingMenuSub = null; copySubscriber(sub); }
+        function doDelete(sub) { store.floatingMenuSub = null; confirmDelete(sub); }
 
-        return { store, searchText, poolFilter, selectedIp, menuSub,
+        return { store, searchText, poolFilter, selectedIp,
                  filteredSubscribers, parseName, parsePosition, hasInternet,
-                 toggleNet, selectSubscriber, toggleMenu, filterByPool,
+                 toggleNet, selectSubscriber, filterByPool,
                  openAddModal, editSubscriber, openMacReplace, copySubscriber, confirmDelete,
                  doEdit, doMacReplace, doCopy, doDelete };
     },
