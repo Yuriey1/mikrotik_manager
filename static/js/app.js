@@ -232,29 +232,36 @@ app.component('subscriber-modal', {
         }
 
         async function onIpChange() {
-            if (mode.value !== 'add') return;
             if (trafficTimer) clearTimeout(trafficTimer);
             const ip = form.value.ip;
             if (!ip) { store.trafficChains = null; return; }
-            trafficTimer = setTimeout(async () => {
-                store.trafficLoading = true;
-                try {
-                    const [channels, queues] = await Promise.all([
-                        analyzeChannels().catch(() => null),
-                        findQueues(ip).catch(() => null),
-                    ]);
-                    if (channels?.success && queues?.success) {
-                        const data = buildTrafficChains(channels, queues, ip);
-                        store.trafficChains = data;
-                        if (data?.selectedQueues) {
-                            store.trafficQueues = data.selectedQueues;
-                        }
-                    }
-                } catch (e) {} finally {
-                    store.trafficLoading = false;
-                }
-            }, 600);
+            trafficTimer = setTimeout(async () => { await loadTrafficForIp(ip); }, 600);
         }
+
+        async function loadTrafficForIp(ip) {
+            store.trafficLoading = true;
+            try {
+                const [channels, queues] = await Promise.all([
+                    analyzeChannels().catch(() => null),
+                    findQueues(ip).catch(() => null),
+                ]);
+                if (channels?.success && queues?.success) {
+                    const data = buildTrafficChains(channels, queues, ip);
+                    store.trafficChains = data;
+                    if (data?.selectedQueues) {
+                        store.trafficQueues = data.selectedQueues;
+                    }
+                }
+            } catch (e) {} finally {
+                store.trafficLoading = false;
+            }
+        }
+
+        Vue.watch(() => store.showSubscriberModal, async (val) => {
+            if (val && mode.value === 'edit' && form.value.ip) {
+                await loadTrafficForIp(form.value.ip);
+            }
+        });
 
         function openTrafficPopover(event, chain) {
             const rect = event.currentTarget.getBoundingClientRect();
