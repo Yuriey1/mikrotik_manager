@@ -81,6 +81,7 @@ store.menuMacReplace = function(sub) {
     store.floatingMenuSub = null;
     store.showMacReplaceModal = true;
     store.macReplaceSub = sub;
+    store.error = 'MAC replace modal: showMacReplaceModal=' + store.showMacReplaceModal + ' macReplaceSub=' + (sub && sub.ip);
 };
 
 store.menuCopy = function(sub) {
