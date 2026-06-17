@@ -64,7 +64,8 @@
                 </div>
 
                 <!-- Floating dropdown menu -->
-                <div v-if="menuSub" class="floating-menu" @click.stop>
+                <div v-show="menuSub" class="menu-backdrop" @click="menuSub = null"></div>
+                <div v-show="menuSub" class="floating-menu" @click.stop>
                     <a href="#" @click.prevent="doEdit(menuSub)"><i class="fas fa-edit"></i> Редактировать</a>
                     <a href="#" @click.prevent="doMacReplace(menuSub)"><i class="fas fa-exchange-alt"></i> Заменить MAC</a>
                     <a href="#" @click.prevent="doCopy(menuSub)"><i class="fas fa-copy"></i> Копировать</a>

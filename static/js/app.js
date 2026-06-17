@@ -214,11 +214,6 @@ app.component('subscriber-tab', {
         function doCopy(sub) { menuSub.value = null; copySubscriber(sub); }
         function doDelete(sub) { menuSub.value = null; confirmDelete(sub); }
 
-        onMounted(() => {
-            document.addEventListener('click', onDocClick);
-        });
-        function onDocClick() { menuSub.value = null; }
-
         return { store, searchText, poolFilter, selectedIp, menuSub,
                  filteredSubscribers, parseName, parsePosition, hasInternet,
                  toggleNet, selectSubscriber, toggleMenu, filterByPool,

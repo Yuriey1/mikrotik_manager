@@ -2361,6 +2361,11 @@ textarea {
     padding: 4px 0;
     z-index: 10000;
 }
+.menu-backdrop {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 9999;
+}
 .floating-menu a {
     display: block;
     padding: 10px 16px;
