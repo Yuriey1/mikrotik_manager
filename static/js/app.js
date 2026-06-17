@@ -271,13 +271,19 @@ app.component('subscriber-modal', {
             store.trafficPopoverDst = chain.dst;
 
             const allFlat = (store.trafficChains && store.trafficChains.allFlat) || [];
-            const queueDstMap = (store.trafficChains && store.trafficChains.queueDstMap) || new Map();
-            const filtered = allFlat.filter(q => {
-                if (q.name && q.name.toLowerCase().startsWith('paid')) return false;
-                if (!q.parent) return false;
-                if (chain.dst && queueDstMap.has && queueDstMap.has(q.name) && queueDstMap.get(q.name) !== chain.dst) return false;
-                return true;
-            });
+            const seenNames = new Set();
+            const filtered = [];
+            for (const q of allFlat) {
+                if (seenNames.has(q.name)) continue;
+                if (q.name && q.name.toLowerCase().startsWith('paid')) continue;
+                if (!q.parent) continue;
+                const qDst = (store.trafficChains && store.trafficChains.queueDstMap && store.trafficChains.queueDstMap instanceof Map)
+                    ? store.trafficChains.queueDstMap.get(q.name)
+                    : null;
+                if (chain.dst && qDst && qDst !== chain.dst) continue;
+                seenNames.add(q.name);
+                filtered.push(q);
+            }
             popoverQueues.value = filtered;
         }
 
