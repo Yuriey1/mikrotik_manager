@@ -457,7 +457,7 @@ app.component('mac-replace-modal', {
             }
         }
 
-        return { showModal, macReplaceSub, replaceMode, replaceNewIp, replaceNewMac, replaceClientId, replaceRunning,
+        return { store, showModal, macReplaceSub, replaceMode, replaceNewIp, replaceNewMac, replaceClientId, replaceRunning,
                  closeModal, onReplaceModeChange, executeReplace };
     },
 });
