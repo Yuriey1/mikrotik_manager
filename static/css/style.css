@@ -2366,13 +2366,13 @@ textarea {
     top: 0; left: 0; right: 0; bottom: 0;
     z-index: 9999;
 }
-.floating-menu a {
+.floating-menu-item {
     display: block;
     padding: 10px 16px;
     color: var(--text-primary);
-    text-decoration: none;
     font-size: 13px;
+    cursor: pointer;
     transition: background 0.1s;
 }
-.floating-menu a:hover { background: var(--bg-hover); }
-.floating-menu a i { margin-right: 8px; width: 16px; text-align: center; }
+.floating-menu-item:hover { background: var(--bg-hover); }
+.floating-menu-item i { margin-right: 8px; width: 16px; text-align: center; }

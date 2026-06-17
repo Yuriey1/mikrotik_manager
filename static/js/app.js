@@ -200,10 +200,10 @@ app.component('subscriber-tab', {
             store.deleteSub = sub;
         }
 
-        function doEdit(sub) { store.floatingMenuSub = null; editSubscriber(sub); }
-        function doMacReplace(sub) { store.floatingMenuSub = null; store.showMacReplaceModal = true; store.macReplaceSub = sub; }
-        function doCopy(sub) { store.floatingMenuSub = null; copySubscriber(sub); }
-        function doDelete(sub) { store.floatingMenuSub = null; confirmDelete(sub); }
+        function doEdit(sub) { store.floatingMenuSub = null; store.error = 'Редактирование: ' + sub.ip; }
+        function doMacReplace(sub) { store.floatingMenuSub = null; store.error = 'Замена MAC: ' + sub.ip; }
+        function doCopy(sub) { store.floatingMenuSub = null; store.error = 'Копирование: ' + sub.ip; }
+        function doDelete(sub) { store.floatingMenuSub = null; store.error = 'Удаление: ' + sub.ip; }
 
         return { store, searchText, poolFilter, selectedIp,
                  filteredSubscribers, parseName, parsePosition, hasInternet,
