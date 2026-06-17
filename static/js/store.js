@@ -46,13 +46,16 @@ const store = Vue.reactive({
     deleteSub: null,
 
     floatingMenuSub: null,
+
+    autoSavePassword: false,
+    defaultUsername: 'admin',
 };
 
 store.menuEdit = function(sub) {
     store.floatingMenuSub = null;
-    const parts = (sub.comment || '').split(' - ');
-    const position = parts.length > 1 ? parts[0] : '';
-    const name = parts.length > 1 ? parts.slice(1).join(' - ') : (sub.comment || '');
+    var parts = (sub.comment || '').split(' - ');
+    var position = parts.length > 1 ? parts[0] : '';
+    var name = parts.length > 1 ? parts.slice(1).join(' - ') : (sub.comment || '');
     store.showSubscriberModal = true;
     store.subscriberModalMode = 'edit';
     store.editOldIp = sub.ip;
@@ -63,8 +66,8 @@ store.menuEdit = function(sub) {
         mac: sub.mac || '',
         internet_access: false,
     };
-    for (const ip of (store.internetAccess || [])) {
-        if (ip === sub.ip) { store.subscriberForm.internet_access = true; break; }
+    for (var i = 0; i < (store.internetAccess || []).length; i++) {
+        if (store.internetAccess[i] === sub.ip) { store.subscriberForm.internet_access = true; break; }
     }
     store.subscriberQueues = [];
     store.trafficChains = null;
@@ -78,7 +81,7 @@ store.menuMacReplace = function(sub) {
 
 store.menuCopy = function(sub) {
     store.floatingMenuSub = null;
-    const text = 'IP: ' + sub.ip + '\nMAC: ' + sub.mac + '\n' + sub.comment;
+    var text = 'IP: ' + sub.ip + '\nMAC: ' + sub.mac + '\n' + sub.comment;
     navigator.clipboard.writeText(text).catch(function() {});
 };
 
@@ -87,7 +90,3 @@ store.menuDelete = function(sub) {
     store.showDeleteModal = true;
     store.deleteSub = sub;
 };
-
-    autoSavePassword: false,
-    defaultUsername: 'admin',
-});
