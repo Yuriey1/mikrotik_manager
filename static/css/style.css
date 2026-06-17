@@ -2347,3 +2347,23 @@ textarea {
 .queue-node-limit { color: var(--success); font-size: 12px; white-space: nowrap; font-family: monospace; }
 .queue-node-priority { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
 .queue-tree-container { max-height: calc(100vh - 300px); overflow-y: auto; }
+
+/* ===== ПЛАВАЮЩЕЕ МЕНЮ ДЕЙСТВИЙ ===== */
+.floating-menu {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    min-width: 180px;
+    padding: 4px 0;
+}
+.floating-menu a {
+    display: block;
+    padding: 10px 16px;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 13px;
+    transition: background 0.1s;
+}
+.floating-menu a:hover { background: var(--bg-hover); }
+.floating-menu a i { margin-right: 8px; width: 16px; text-align: center; }

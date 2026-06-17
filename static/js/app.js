@@ -105,7 +105,9 @@ app.component('subscriber-tab', {
         const searchText = Vue.ref('');
         const poolFilter = Vue.ref('');
         const selectedIp = Vue.ref(null);
-        const openMenuIp = Vue.ref(null);
+        const menuSub = Vue.ref(null);
+        const menuX = Vue.ref(0);
+        const menuY = Vue.ref(0);
 
         const filteredSubscribers = Vue.computed(() => {
             const q = searchText.value.toLowerCase().trim();
@@ -157,8 +159,15 @@ app.component('subscriber-tab', {
             selectedIp.value = sub.ip;
         }
 
-        function toggleMenu(sub) {
-            openMenuIp.value = openMenuIp.value === sub.ip ? null : sub.ip;
+        function toggleMenu(event, sub) {
+            if (menuSub.value && menuSub.value.ip === sub.ip) {
+                menuSub.value = null;
+            } else {
+                const rect = event.currentTarget.getBoundingClientRect();
+                menuX.value = Math.min(rect.left, window.innerWidth - 200);
+                menuY.value = Math.min(rect.bottom + 4, window.innerHeight - 200);
+                menuSub.value = sub;
+            }
         }
 
         function filterByPool() {}
@@ -173,7 +182,6 @@ app.component('subscriber-tab', {
         }
 
         function editSubscriber(sub) {
-            openMenuIp.value = null;
             const parts = (sub.comment || '').split(' - ');
             const position = parts.length > 1 ? parts[0] : '';
             const name = parts.length > 1 ? parts.slice(1).join(' - ') : (sub.comment || '');
@@ -192,28 +200,25 @@ app.component('subscriber-tab', {
         }
 
         function openMacReplace(sub) {
-            openMenuIp.value = null;
             store.showMacReplaceModal = true;
             store.macReplaceSub = sub;
         }
 
         function copySubscriber(sub) {
-            openMenuIp.value = null;
             const text = `IP: ${sub.ip}\nMAC: ${sub.mac}\n${sub.comment}`;
             navigator.clipboard.writeText(text).catch(() => {});
         }
 
         function confirmDelete(sub) {
-            openMenuIp.value = null;
             store.showDeleteModal = true;
             store.deleteSub = sub;
         }
 
         Vue.onMounted(() => {
-            document.addEventListener('click', () => { openMenuIp.value = null; });
+            document.addEventListener('click', () => { menuSub.value = null; });
         });
 
-        return { store, searchText, poolFilter, selectedIp, openMenuIp,
+        return { store, searchText, poolFilter, selectedIp, menuSub, menuX, menuY,
                  filteredSubscribers, parseName, parsePosition, hasInternet,
                  toggleNet, selectSubscriber, toggleMenu, filterByPool,
                  openAddModal, editSubscriber, openMacReplace, copySubscriber, confirmDelete };
