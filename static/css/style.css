@@ -2351,8 +2351,6 @@ textarea {
 /* ===== ПЛАВАЮЩЕЕ МЕНЮ ДЕЙСТВИЙ ===== */
 .floating-menu {
     position: fixed;
-    top: 30%;
-    right: 30px;
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);

@@ -65,7 +65,8 @@
 
                 <!-- Floating dropdown menu -->
                 <div v-show="store.floatingMenuSub" class="menu-backdrop" @click="store.floatingMenuSub = null"></div>
-                <div v-show="store.floatingMenuSub" class="floating-menu" @click.stop>
+                <div v-show="store.floatingMenuSub" class="floating-menu" @click.stop
+                     :style="{ position: 'fixed', left: (store.menuX || 0) + 'px', top: (store.menuY || 0) + 'px', zIndex: 10000 }">
                     <div @click="store.menuEdit(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-edit"></i> Редактировать</div>
                     <div @click="store.menuMacReplace(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-exchange-alt"></i> Заменить MAC</div>
                     <div @click="store.menuCopy(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-copy"></i> Копировать</div>
@@ -224,7 +225,7 @@
                                 <td class="col-mac">{{ sub.mac || '—' }}</td>
                                 <td class="col-position">{{ parsePosition(sub.comment) }}</td>
                                 <td class="col-comment">{{ parseName(sub.comment) }}</td>
-                                <td class="col-actions" @click.stop="store.floatingMenuSub = sub" style="cursor:pointer; text-align:center;">
+                                <td class="col-actions" @click.stop="store.floatingMenuSub = sub; store.menuX = $event.clientX; store.menuY = $event.clientY" style="cursor:pointer; text-align:center;">
                                     <i class="fas fa-ellipsis-v"></i>
                                 </td>
                             </tr>

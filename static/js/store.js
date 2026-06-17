@@ -46,6 +46,8 @@ const store = Vue.reactive({
     deleteSub: null,
 
     floatingMenuSub: null,
+    menuX: 0,
+    menuY: 0,
 
     autoSavePassword: false,
     defaultUsername: 'admin',
