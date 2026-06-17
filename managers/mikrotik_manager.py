@@ -369,7 +369,7 @@ class MikroTikManager:
             if lease_id and comment:
                 print(f"📝 DHCP: Добавляем комментарий: {comment}")
                 mikrotik_comment = russian_to_mikrotik_comment(comment)
-            
+
                 try:
                     tuple(dhcp_cmd('comment', **{'numbers': lease_id, 'comment': mikrotik_comment}))
                     print(f"✅ DHCP: Комментарий добавлен")
@@ -380,6 +380,16 @@ class MikroTikManager:
                         print(f"✅ DHCP: Комментарий добавлен через set")
                     except Exception as e2:
                         print(f"⚠️ DHCP: Ошибка добавления комментария: {e2}")
+
+            # 5b. Авто-заполнение ClientID при наличии MAC
+            if lease_id and mac:
+                client_id = "1:" + mac.lower()
+                print(f"📝 DHCP: Установка ClientID: {client_id}")
+                try:
+                    tuple(dhcp_cmd('set', **{'.id': lease_id, 'client-id': client_id}))
+                    print(f"✅ DHCP: ClientID установлен")
+                except Exception as e:
+                    print(f"⚠️ DHCP: ошибка установки ClientID: {e}")
         
             # 6. Финальная проверка
             print(f"🔍 DHCP: Финальная проверка...")
@@ -1457,6 +1467,12 @@ class MikroTikManager:
                                 dhcp_cmd = self.api.path('/ip/dhcp-server/lease')
                                 tuple(dhcp_cmd('set', **{'.id': lease_id, 'mac-address': new_mac}))
                                 result['steps'].append("   ✅ MAC обновлён в DHCP")
+                                # Авто-заполнение ClientID
+                                try:
+                                    client_id = "1:" + new_mac.lower()
+                                    tuple(dhcp_cmd('set', **{'.id': lease_id, 'client-id': client_id}))
+                                except Exception:
+                                    pass
                                 result['details']['dhcp'] = True
                             except Exception as e:
                                 result['steps'].append(f"   ⚠️ Ошибка обновления MAC в DHCP: {e}")
