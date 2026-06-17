@@ -28,6 +28,15 @@
         <subscriber-modal></subscriber-modal>
         <mac-replace-modal></mac-replace-modal>
         <delete-confirm-modal></delete-confirm-modal>
+        <!-- Floating menu — в корне DOM, position:fixed работает корректно -->
+        <div v-show="store.floatingMenuSub" class="menu-backdrop" @click="store.floatingMenuSub = null"></div>
+        <div v-show="store.floatingMenuSub" class="floating-menu" @click.stop
+             :style="{ left: Math.min((store.menuX || 0), innerW - 220) + 'px', top: Math.min((store.menuY || 0), innerH - 250) + 'px' }">
+            <div @click="store.menuEdit(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-edit"></i> Редактировать</div>
+            <div @click="store.menuMacReplace(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-exchange-alt"></i> Заменить MAC</div>
+            <div @click="store.menuCopy(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-copy"></i> Копировать</div>
+            <div @click="store.menuDelete(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-trash-alt"></i> Удалить</div>
+        </div>
     </div>
 
     <!-- ====== APP HEADER ====== -->
@@ -61,16 +70,6 @@
                             style="padding: 6px 12px; font-size: 13px;">
                         <i class="fas fa-unlink"></i> Отключиться
                     </button>
-                </div>
-
-                <!-- Floating dropdown menu -->
-                <div v-show="store.floatingMenuSub" class="menu-backdrop" @click="store.floatingMenuSub = null"></div>
-                <div v-show="store.floatingMenuSub" class="floating-menu" @click.stop
-                     :style="{ position: 'fixed', left: Math.min((store.menuX || 0), innerW - 220) + 'px', top: Math.min((store.menuY || 0), innerH - 250) + 'px', zIndex: 10000 }">
-                    <div @click="store.menuEdit(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-edit"></i> Редактировать</div>
-                    <div @click="store.menuMacReplace(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-exchange-alt"></i> Заменить MAC</div>
-                    <div @click="store.menuCopy(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-copy"></i> Копировать</div>
-                    <div @click="store.menuDelete(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-trash-alt"></i> Удалить</div>
                 </div>
             </div>
         </div>

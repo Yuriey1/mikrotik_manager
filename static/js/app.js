@@ -25,7 +25,7 @@ const app = createApp({
             if (saved.default_username) store.defaultUsername = saved.default_username;
         });
 
-        return { store, ...Vue };
+        return { store, ...Vue, innerW: Vue.ref(window.innerWidth), innerH: Vue.ref(window.innerHeight) };
     },
 });
 
