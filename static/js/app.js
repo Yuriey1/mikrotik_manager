@@ -3836,7 +3836,7 @@ function closeQueuePopover() { const popover = document.getElementById('queue-se
 function renderQueuePopoverList(queues) {
     const filtered = queues.filter(q => {
         if (q.name.toLowerCase().startsWith('paid')) return false;
-        if (trafficParentNames.has(q.name)) return false;
+        if (!q.parent) return false;
         if (currentPopoverDst && queueDstMap.has(q.name) && queueDstMap.get(q.name) !== currentPopoverDst) return false;
         return true;
     });
