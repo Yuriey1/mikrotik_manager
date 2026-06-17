@@ -66,7 +66,7 @@
                 <!-- Floating dropdown menu -->
                 <div v-show="store.floatingMenuSub" class="menu-backdrop" @click="store.floatingMenuSub = null"></div>
                 <div v-show="store.floatingMenuSub" class="floating-menu" @click.stop
-                     :style="{ position: 'fixed', left: (store.menuX || 0) + 'px', top: (store.menuY || 0) + 'px', zIndex: 10000 }">
+                     :style="{ position: 'fixed', left: Math.min((store.menuX || 0), window.innerWidth - 220) + 'px', top: Math.min((store.menuY || 0), window.innerHeight - 250) + 'px', zIndex: 10000 }">
                     <div @click="store.menuEdit(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-edit"></i> Редактировать</div>
                     <div @click="store.menuMacReplace(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-exchange-alt"></i> Заменить MAC</div>
                     <div @click="store.menuCopy(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-copy"></i> Копировать</div>
