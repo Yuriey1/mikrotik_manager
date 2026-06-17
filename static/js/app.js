@@ -162,7 +162,6 @@ app.component('subscriber-tab', {
             store.showSubscriberModal = true;
             store.subscriberModalMode = 'add';
             store.subscriberForm = { full_name: '', position: '', ip: '', mac: '', internet_access: false };
-            store.subscriberQueues = [];
             store.trafficChains = null;
             store.editOldIp = null;
         }
@@ -181,7 +180,6 @@ app.component('subscriber-tab', {
                 mac: sub.mac || '',
                 internet_access: hasInternet(sub.ip)
             };
-            store.subscriberQueues = [];
             store.trafficChains = null;
         }
 
@@ -343,31 +341,6 @@ app.component('subscriber-modal', {
             } catch (e) { store.error = e.message; }
         }
 
-        function formatSpeed(maxLimit) {
-            if (!maxLimit) return '';
-            const parts = maxLimit.split('/');
-            const fmt = (v) => {
-                const n = parseInt(v);
-                if (!n) return v;
-                if (n >= 1e6) return (n / 1e6).toFixed(0) + 'M';
-                if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K';
-                return n.toString();
-            };
-            return parts.map(fmt).join('/');
-        }
-
-        function selectQueue(node) {
-            if (!node.name) return;
-            const idx = store.subscriberQueues.indexOf(node.name);
-            if (idx >= 0) {
-                store.subscriberQueues.splice(idx, 1);
-            } else {
-                store.subscriberQueues.push(node.name);
-            }
-        }
-
-        Vue.watch(() => store.subscriberQueues, (val) => {}, { deep: true });
-
         async function saveSubscriber() {
             const f = form.value;
             if (!f.full_name || !f.position || !f.ip) {
@@ -452,16 +425,22 @@ app.component('mac-replace-modal', {
             replaceClientId.value = '';
         }
 
+        Vue.watch(replaceNewMac, (val) => {
+            if (replaceMode.value === 'by-mac' && val && val.includes(':')) {
+                replaceClientId.value = '1:' + val.toLowerCase().replace(/-/g, ':');
+            }
+        });
+
         async function executeReplace() {
             if (!macReplaceSub.value) return;
             replaceRunning.value = true;
             try {
                 let data;
                 if (replaceMode.value === 'by-ip') {
-                    if (!replaceNewIp.value) { store.error = 'Укажите новый IP'; return; }
+                    if (!replaceNewIp.value) { store.error = 'Укажите новый IP'; replaceRunning.value = false; return; }
                     data = { mode: 'by-ip', old_ip: macReplaceSub.value.ip, new_ip: replaceNewIp.value };
                 } else {
-                    if (!replaceNewMac.value) { store.error = 'Укажите новый MAC'; return; }
+                    if (!replaceNewMac.value) { store.error = 'Укажите новый MAC'; replaceRunning.value = false; return; }
                     data = { mode: 'by-mac', ip: macReplaceSub.value.ip, new_mac: replaceNewMac.value, client_id: replaceClientId.value || undefined };
                 }
                 const result = await replaceMac(data);
@@ -506,6 +485,7 @@ app.component('delete-confirm-modal', {
                     closeModal();
                     store.subscribers = store.subscribers.filter(s => s.ip !== ip);
                     await refreshData();
+                } else {
                     store.error = result.error || result.message;
                 }
             } catch (e) {

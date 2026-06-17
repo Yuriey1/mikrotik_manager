@@ -74,7 +74,6 @@ store.menuEdit = function(sub) {
     for (var i = 0; i < (store.internetAccess || []).length; i++) {
         if (store.internetAccess[i] === sub.ip) { store.subscriberForm.internet_access = true; break; }
     }
-    store.subscriberQueues = [];
     store.trafficChains = null;
 };
 
