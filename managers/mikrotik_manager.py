@@ -13,6 +13,8 @@ from config.config_manager import ConfigManager
 from utils.helpers import russian_to_mikrotik_comment
 
 
+DUMMY_IP = "192.168.100.5"
+
 class MikroTikManager:
     """Менеджер работы с MikroTik"""
 
@@ -405,6 +407,44 @@ class MikroTikManager:
             traceback.print_exc()
             return False
 
+    # ========== ПРОВЕРКА MAC ==========
+    def check_mac_exists(self, mac: str, exclude_ip: Optional[str] = None) -> Dict:
+        """Проверить, существует ли MAC в DHCP лизах или ARP таблице"""
+        try:
+            mac_lower = mac.lower()
+            result = {'exists': False, 'lease_ip': None, 'arp_ip': None}
+
+            # Проверяем DHCP leases
+            leases = self.get_dhcp_leases()
+            for lease in leases:
+                lease_mac = (lease.get('mac-address') or '').lower()
+                lease_ip = lease.get('address', '')
+                if lease_mac == mac_lower:
+                    if exclude_ip and lease_ip == exclude_ip:
+                        continue
+                    result['exists'] = True
+                    result['lease_ip'] = lease_ip
+                    break
+
+            # Проверяем ARP таблицу
+            arp_entries = self.get_arp_table()
+            for entry in arp_entries:
+                arp_mac = (entry.get('mac-address') or '').lower()
+                arp_ip = entry.get('address', '')
+                if arp_mac == mac_lower:
+                    if exclude_ip and arp_ip == exclude_ip:
+                        continue
+                    result['exists'] = True
+                    result['arp_ip'] = arp_ip
+                    break
+
+            return result
+
+        except Exception as e:
+            print(f"❌ Ошибка проверки MAC {mac}: {e}")
+            traceback.print_exc()
+            return {'exists': False, 'lease_ip': None, 'arp_ip': None, 'error': str(e)}
+
     # ========== ARP ==========
     def add_static_arp(
         self, ip: str, mac: str, comment: str = "", interface: Optional[str] = None
@@ -604,6 +644,45 @@ class MikroTikManager:
             
         return result
 
+    def remove_from_all_address_lists(self, ip: str) -> List[Dict]:
+        """Удалить IP из всех firewall address-list'ов"""
+        results = []
+        try:
+            print(f"🔧 Firewall: удаление {ip} из всех address-list'ов")
+            fw_cmd = self.api.path("/ip/firewall/address-list")
+            addresses = list(fw_cmd)
+
+            ip_stripped = ip.split("/")[0]
+            for addr in addresses:
+                addr_ip = (addr.get("address") or "").split("/")[0]
+                if addr_ip == ip_stripped:
+                    addr_id = addr.get(".id")
+                    list_name = addr.get("list", "?")
+                    if addr_id:
+                        try:
+                            tuple(fw_cmd("remove", **{".id": addr_id}))
+                            print(f"   ✅ Удалён из списка '{list_name}'")
+                            results.append({
+                                'list_name': list_name,
+                                'success': True
+                            })
+                        except Exception as e:
+                            print(f"   ❌ Ошибка удаления из '{list_name}': {e}")
+                            results.append({
+                                'list_name': list_name,
+                                'success': False,
+                                'error': str(e)
+                            })
+
+            if not results:
+                print(f"   ⚠️ IP {ip} не найден ни в одном address-list'е")
+            return results
+
+        except Exception as e:
+            print(f"❌ Ошибка удаления из address-list'ов: {e}")
+            traceback.print_exc()
+            return results
+
     # ========== QUEUES ==========
     def get_queues(self) -> List[Dict]:
         """Получить все активные очереди"""
@@ -642,61 +721,128 @@ class MikroTikManager:
             traceback.print_exc()
             return []
 
+    def _get_queue_targets(self, queue_id: str) -> List[str]:
+        """Получить список target'ов очереди"""
+        queue_cmd = self.api.path("/queue/simple")
+        queues = list(queue_cmd)
+        for queue in queues:
+            if queue.get(".id") == queue_id:
+                target_str = queue.get("target", "")
+                if not target_str or not target_str.strip():
+                    return []
+                return [t.strip() for t in target_str.split(",") if t.strip()]
+        return []
+
+    def _set_queue_targets(self, queue_id: str, targets: List[str]) -> bool:
+        """Записать список target'ов в очередь"""
+        queue_cmd = self.api.path("/queue/simple")
+        new_target = ",".join(targets)
+        try:
+            tuple(queue_cmd("set", **{".id": queue_id, "target": new_target}))
+            return True
+        except Exception as e:
+            print(f"❌ Queue: ошибка set: {e}")
+            try:
+                self.api("/queue/simple/set", **{".id": queue_id, "target": new_target})
+                return True
+            except Exception as e2:
+                print(f"❌ Queue: ошибка alt set: {e2}")
+                return False
+
     def add_ip_to_queue(self, queue_id: str, ip: str) -> bool:
-        """Добавить IP в очередь"""
+        """Добавить IP в очередь. Если в target есть DUMMY_IP — убрать его"""
         try:
             print(f"\n🔧 Queue: Добавление IP {ip} в очередь ID: {queue_id}")
 
-            queue_cmd = self.api.path("/queue/simple")
+            targets = self._get_queue_targets(queue_id)
+            print(f"   Текущие target'ы: {targets}")
 
-            # Получаем текущую очередь
-            print(f"🔍 Queue: Получаем данные очереди")
-            queues = list(queue_cmd)
-            current_target = ""
-
-            for queue in queues:
-                if queue.get(".id") == queue_id:
-                    current_target = queue.get("target", "")
-                    print(f"✅ Queue: Найдена очередь, target: {current_target}")
-                    break
-
-            if not current_target:
-                print(f"⚠️ Queue: Очередь не найдена или пустая")
-                current_target = ""
-
-            # Формируем новый target
             if "/" in ip:
                 ip_with_mask = ip
             else:
                 ip_with_mask = f"{ip}/32"
 
-            if current_target:
-                new_target = f"{current_target},{ip_with_mask}"
+            # Убираем dummy-IP если он есть
+            if DUMMY_IP in targets:
+                targets.remove(DUMMY_IP)
+                print(f"   🧹 Убран dummy-IP {DUMMY_IP}")
+
+            # Добавляем настоящий IP если его ещё нет
+            if ip_with_mask not in targets:
+                targets.append(ip_with_mask)
+                print(f"   ➕ Добавлен {ip_with_mask}")
             else:
-                new_target = ip_with_mask
+                print(f"   ⚠️ {ip_with_mask} уже в target")
 
-            print(f"🔄 Queue: Новый target: {new_target}")
-
-            # Обновляем очередь
-            try:
-                tuple(queue_cmd("set", **{".id": queue_id, "target": new_target}))
-                print(f"✅ Queue: Очередь успешно обновлена")
+            if self._set_queue_targets(queue_id, targets):
+                print(f"✅ Queue: очередь обновлена")
                 return True
-
-            except Exception as e:
-                print(f"❌ Queue: Ошибка обновления: {e}")
-                try:
-                    self.api("/queue/simple/set", **{".id": queue_id, "target": new_target})
-                    print(f"✅ Queue: Очередь обновлена (альтернативным методом)")
-                    return True
-                except Exception as e2:
-                    print(f"❌ Queue: Ошибка альтернативного метода: {e2}")
-                    return False
+            return False
 
         except Exception as e:
             print(f"❌ Queue: Критическая ошибка: {e}")
             traceback.print_exc()
             return False
+
+    def remove_ip_from_queue(self, queue_id: str, ip: str) -> bool:
+        """Убрать IP из очереди. Если очередь опустеет — вставить DUMMY_IP"""
+        try:
+            print(f"\n🔧 Queue: Удаление IP {ip} из очереди ID: {queue_id}")
+
+            targets = self._get_queue_targets(queue_id)
+            print(f"   Текущие target'ы: {targets}")
+
+            if "/" in ip:
+                ip_with_mask = ip
+            else:
+                ip_with_mask = f"{ip}/32"
+
+            if ip_with_mask in targets:
+                targets.remove(ip_with_mask)
+                print(f"   ➖ Убран {ip_with_mask}")
+            else:
+                print(f"   ⚠️ {ip_with_mask} не найден в target")
+
+            # Если опустела — вставляем dummy
+            if not targets:
+                targets.append(DUMMY_IP)
+                print(f"   🧹 Очередь опустела, добавлен dummy-IP {DUMMY_IP}")
+
+            if self._set_queue_targets(queue_id, targets):
+                print(f"✅ Queue: очередь обновлена")
+                return True
+            return False
+
+        except Exception as e:
+            print(f"❌ Queue: ошибка удаления IP из очереди: {e}")
+            traceback.print_exc()
+            return False
+
+    def remove_ip_from_all_queues(self, ip: str) -> List[Dict]:
+        """Убрать IP из всех очередей, где он присутствует"""
+        results = []
+        try:
+            queues = self.get_queues()
+            for queue in queues:
+                target_str = queue.get("target", "")
+                ip_with_mask = f"{ip}/32"
+                # Проверяем: IP/32 или просто IP в списке target
+                targets = [t.strip() for t in target_str.split(",") if t.strip()]
+                if ip_with_mask in targets or ip in targets:
+                    queue_id = queue.get(".id")
+                    queue_name = queue.get("name", queue_id)
+                    print(f"🔍 Найден IP {ip} в очереди '{queue_name}'")
+                    success = self.remove_ip_from_queue(queue_id, ip)
+                    results.append({
+                        'queue_name': queue_name,
+                        'queue_id': queue_id,
+                        'success': success
+                    })
+            return results
+        except Exception as e:
+            print(f"❌ Ошибка удаления IP из всех очередей: {e}")
+            traceback.print_exc()
+            return results
 
     # ========== DHCP POOLS ==========
     def get_dhcp_pools(self) -> List[Dict]:
@@ -926,6 +1072,29 @@ class MikroTikManager:
             
         except Exception as e:
             print(f"❌ Ошибка добавления ARP записи: {e}")
+            traceback.print_exc()
+            return False
+
+    def delete_arp_entry(self, ip: str) -> bool:
+        """Удалить ARP запись по IP"""
+        try:
+            print(f"🔧 ARP: удаление записи для {ip}")
+            arp_cmd = self.api.path('/ip/arp')
+            entries = list(arp_cmd)
+
+            for entry in entries:
+                if entry.get('address') == ip:
+                    arp_id = entry.get('.id')
+                    if arp_id:
+                        tuple(arp_cmd('remove', **{'.id': arp_id}))
+                        print(f"✅ ARP запись для {ip} удалена")
+                        return True
+
+            print(f"⚠️ ARP запись для {ip} не найдена")
+            return True
+
+        except Exception as e:
+            print(f"❌ Ошибка удаления ARP записи: {e}")
             traceback.print_exc()
             return False
 
@@ -1213,6 +1382,172 @@ class MikroTikManager:
             print(f"❌ Ошибка ручной замены MAC: {e}")
             traceback.print_exc()
             return result
+
+    # ========== ОБНОВЛЕНИЕ АБОНЕНТА ==========
+    def update_subscriber(self, old_ip: str, data: Dict) -> Dict:
+        """Обновить данные абонента: comment, IP, MAC, очереди, интернет"""
+        result = {
+            'success': False,
+            'steps': [],
+            'error': None,
+            'details': {'dhcp': False, 'arp': False, 'queues': [], 'firewall': False}
+        }
+
+        try:
+            new_ip = data.get('ip', old_ip)
+            new_mac = data.get('mac', '').strip()
+            comment = data.get('comment', '')
+            queues = data.get('queues', [])
+            internet_access = data.get('internet_access', False)
+
+            # --- DHCP: обновление комментария ---
+            result['steps'].append("📝 DHCP: обновление комментария...")
+            if comment:
+                lease = self.find_dhcp_lease(ip=old_ip)
+                if lease:
+                    lease_id = lease.get('.id')
+                    if lease_id:
+                        try:
+                            dhcp_cmd = self.api.path('/ip/dhcp-server/lease')
+                            mikrotik_comment = russian_to_mikrotik_comment(comment)
+                            tuple(dhcp_cmd('set', **{'.id': lease_id, 'comment': mikrotik_comment}))
+                            result['steps'].append("   ✅ Комментарий обновлён")
+                            result['details']['dhcp'] = True
+                        except Exception as e:
+                            result['steps'].append(f"   ⚠️ Ошибка обновления комментария: {e}")
+                else:
+                    result['steps'].append("   ⚠️ DHCP lease не найден")
+            else:
+                result['details']['dhcp'] = True
+
+            # --- DHCP: обновление IP если изменился ---
+            if new_ip != old_ip:
+                result['steps'].append(f"📝 DHCP: смена IP {old_ip} → {new_ip}")
+                lease = self.find_dhcp_lease(ip=old_ip)
+                if lease:
+                    lease_id = lease.get('.id')
+                    if lease_id:
+                        try:
+                            dhcp_cmd = self.api.path('/ip/dhcp-server/lease')
+                            tuple(dhcp_cmd('set', **{'.id': lease_id, 'address': new_ip}))
+                            result['steps'].append("   ✅ IP обновлён")
+                            result['details']['dhcp'] = True
+                            # После смены IP обновляем old_ip для остальных операций
+                            old_ip_for_rest = new_ip
+                        except Exception as e:
+                            result['steps'].append(f"   ❌ Ошибка смены IP: {e}")
+                    else:
+                        result['steps'].append("   ⚠️ Не найден ID lease")
+                else:
+                    result['steps'].append("   ⚠️ DHCP lease не найден для старого IP")
+                    old_ip_for_rest = new_ip
+            else:
+                old_ip_for_rest = old_ip
+
+            # --- DHCP: обновление MAC если изменился ---
+            if new_mac:
+                lease = self.find_dhcp_lease(ip=old_ip_for_rest)
+                if lease:
+                    current_mac = (lease.get('mac-address') or '').lower()
+                    if current_mac != new_mac.lower():
+                        result['steps'].append(f"📝 DHCP: обновление MAC {current_mac} → {new_mac}")
+                        lease_id = lease.get('.id')
+                        if lease_id:
+                            try:
+                                dhcp_cmd = self.api.path('/ip/dhcp-server/lease')
+                                tuple(dhcp_cmd('set', **{'.id': lease_id, 'mac-address': new_mac}))
+                                result['steps'].append("   ✅ MAC обновлён в DHCP")
+                                result['details']['dhcp'] = True
+                            except Exception as e:
+                                result['steps'].append(f"   ⚠️ Ошибка обновления MAC в DHCP: {e}")
+
+            # --- ARP: обновление MAC ---
+            if new_mac:
+                result['steps'].append("📝 ARP: обновление...")
+                arp_entries = self.get_arp_table()
+                arp_id = None
+                for entry in arp_entries:
+                    if entry.get('address') == old_ip_for_rest:
+                        arp_id = entry.get('.id')
+                        break
+
+                if arp_id:
+                    try:
+                        arp_cmd = self.api.path('/ip/arp')
+                        tuple(arp_cmd('set', **{'.id': arp_id, 'mac-address': new_mac}))
+                        result['steps'].append("   ✅ ARP обновлён")
+                        result['details']['arp'] = True
+                    except Exception as e:
+                        result['steps'].append(f"   ⚠️ Ошибка обновления ARP: {e}")
+                else:
+                    # Нет ARP записи — пробуем добавить
+                    try:
+                        self.add_arp_entry(old_ip_for_rest, new_mac, comment=comment)
+                        result['steps'].append("   ✅ ARP запись добавлена")
+                        result['details']['arp'] = True
+                    except Exception as e:
+                        result['steps'].append(f"   ⚠️ Ошибка добавления ARP: {e}")
+            else:
+                result['details']['arp'] = True
+
+            # --- Очереди: удалить из старых, добавить в новые ---
+            if queues:
+                result['steps'].append("📝 Очереди: обновление...")
+                # Удаляем IP из всех очередей где он есть
+                self.remove_ip_from_all_queues(old_ip_for_rest)
+
+                # Получаем все очереди для поиска по имени
+                all_queues = self.get_queues()
+
+                # Добавляем в указанные очереди
+                for queue_name in queues:
+                    queue_id = None
+                    for q in all_queues:
+                        if q.get('name') == queue_name:
+                            queue_id = q.get('.id')
+                            break
+
+                    if queue_id:
+                        success = self.add_ip_to_queue(queue_id, old_ip_for_rest)
+                        result['details']['queues'].append({
+                            'name': queue_name,
+                            'success': success
+                        })
+                        if success:
+                            result['steps'].append(f"   ✅ Добавлен в '{queue_name}'")
+                        else:
+                            result['steps'].append(f"   ❌ Ошибка добавления в '{queue_name}'")
+                    else:
+                        result['steps'].append(f"   ⚠️ Очередь '{queue_name}' не найдена")
+                        result['details']['queues'].append({
+                            'name': queue_name,
+                            'success': False,
+                            'error': 'Очередь не найдена'
+                        })
+
+            # --- Firewall: интернет доступ ---
+            if internet_access:
+                result['steps'].append("📝 Firewall: включение интернета...")
+                fw_result = self.add_internet_access(old_ip_for_rest, comment)
+                result['details']['firewall'] = fw_result
+                result['steps'].append("   ✅ Доступ включён" if fw_result else "   ❌ Ошибка")
+            else:
+                result['steps'].append("📝 Firewall: отключение интернета...")
+                fw_result = self.remove_internet_access(old_ip_for_rest)
+                result['details']['firewall'] = fw_result
+                result['steps'].append("   ✅ Доступ отключён" if fw_result else "   ⚠️ Ошибка")
+
+            result['success'] = True
+            result['message'] = f"Абонент {old_ip} обновлён"
+            print(f"✅ Обновление абонента завершено")
+
+        except Exception as e:
+            result['error'] = str(e)
+            result['steps'].append(f"❌ Ошибка: {str(e)}")
+            print(f"❌ Ошибка обновления абонента: {e}")
+            traceback.print_exc()
+
+        return result
 
     # ========== АНАЛИЗ КАНАЛОВ ==========
     def get_interfaces(self) -> List[Dict]:

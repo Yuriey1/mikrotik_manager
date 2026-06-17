@@ -209,6 +209,9 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             # ===== ANALYZE CHANNELS =====
             elif path == '/api/analyze_channels':
                 self._analyze_channels()
+            # ===== НОВЫЙ ENDPOINT: ПРОВЕРКА MAC =====
+            elif path == '/api/check_mac':
+                self._check_mac(parsed)
             # ===== ОБРАБОТКА FAVICON =====
             elif path == '/favicon.ico':
                 try:
@@ -404,6 +407,36 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             print(f"❌ Ошибка проверки IP: {e}")
             self._send_json({'success': False, 'error': str(e)}, 500)
 
+    def _check_mac(self, parsed):
+        """Проверить, занят ли MAC адрес"""
+        global mikrotik_manager
+
+        query = parse_qs(parsed.query)
+        mac = query.get('mac', [''])[0].strip()
+        exclude_ip = query.get('exclude_ip', [''])[0].strip() or None
+
+        if not mac:
+            self._send_json({'success': False, 'error': 'Не указан MAC адрес'}, 400)
+            return
+
+        if not mikrotik_manager or not mikrotik_manager.connected:
+            self._send_json({'success': False, 'error': 'Не подключено к устройству'}, 400)
+            return
+
+        try:
+            result = mikrotik_manager.check_mac_exists(mac, exclude_ip)
+            self._send_json({
+                'success': True,
+                'exists': result['exists'],
+                'lease_ip': result.get('lease_ip'),
+                'arp_ip': result.get('arp_ip'),
+                'message': f"MAC уже используется на IP {result['lease_ip']}" if result['exists'] else 'MAC свободен'
+            })
+        except Exception as e:
+            print(f"❌ Ошибка проверки MAC: {e}")
+            traceback.print_exc()
+            self._send_json({'success': False, 'error': str(e)}, 500)
+
     def _disconnect_api(self):
         """API метод для отключения"""
         global current_device_name
@@ -447,6 +480,10 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 self._replace_mac(data)
             elif path == '/api/internet_access/toggle':  # Управление доступом в интернет
                 self._toggle_internet_access(data)
+            elif path == '/api/delete_subscriber':  # Удаление абонента
+                self._delete_subscriber(data)
+            elif path == '/api/edit_subscriber':  # Редактирование абонента
+                self._edit_subscriber(data)
             else:
                 self.send_error(404, "Not Found")
                 
@@ -942,6 +979,22 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                     self._send_json({'error': error_msg}, 400)
                     return
                 print(f"✅ MAC адрес валиден: {mac}")
+
+                # ПРОВЕРКА: не занят ли MAC другим абонентом
+                print(f"🔍 Проверка: не занят ли MAC {mac} другим абонентом...")
+                mac_check = mikrotik_manager.check_mac_exists(mac, exclude_ip=ip)
+                if mac_check['exists']:
+                    conflict_ip = mac_check.get('lease_ip') or mac_check.get('arp_ip')
+                    error_msg = f"MAC {mac} уже используется! Занят на IP {conflict_ip}"
+                    print(f"❌ {error_msg}")
+                    self._send_json({
+                        'success': False,
+                        'error': error_msg,
+                        'mac_conflict': True,
+                        'conflict_ip': conflict_ip
+                    }, 409)
+                    return
+                print(f"✅ MAC {mac} свободен")
             else:
                 print(f"⚠️  MAC адрес не указан и не найден в DHCP")
 
@@ -1164,6 +1217,123 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             print(f"❌ КРИТИЧЕСКАЯ Ошибка добавления сотрудника: {e}")
             traceback.print_exc()
             self._send_json({'error': f'Внутренняя ошибка сервера: {str(e)}'}, 500)
+
+    def _delete_subscriber(self, data):
+        """Полное удаление абонента: DHCP + ARP + Queues + Firewall + все address-list'ы"""
+        global mikrotik_manager, tree_builder
+
+        ip = data.get('ip', '').strip()
+        if not ip:
+            self._send_json({'error': 'Не указан IP адрес'}, 400)
+            return
+
+        if not mikrotik_manager or not mikrotik_manager.connected:
+            self._send_json({'error': 'Не подключено к устройству'}, 400)
+            return
+
+        print(f"\n🗑️ ПОЛНОЕ УДАЛЕНИЕ АБОНЕНТА: {ip}")
+        steps = []
+        details = {'dhcp': False, 'arp': False, 'queues': [], 'firewall': []}
+
+        try:
+            # 1. DHCP lease
+            print("   Шаг 1: DHCP lease...")
+            dhcp_ok = mikrotik_manager.delete_dhcp_lease(ip)
+            details['dhcp'] = dhcp_ok
+            steps.append(f"{'✅' if dhcp_ok else '⚠️'} DHCP: {'удалён' if dhcp_ok else 'не найден'}")
+
+            # 2. ARP
+            print("   Шаг 2: ARP...")
+            arp_ok = mikrotik_manager.delete_arp_entry(ip)
+            details['arp'] = arp_ok
+            steps.append(f"{'✅' if arp_ok else '⚠️'} ARP: {'удалён' if arp_ok else 'не найден'}")
+
+            # 3. Queues
+            print("   Шаг 3: Очереди...")
+            queue_results = mikrotik_manager.remove_ip_from_all_queues(ip)
+            details['queues'] = queue_results
+            if queue_results:
+                for qr in queue_results:
+                    icon = '✅' if qr.get('success') else '❌'
+                    steps.append(f"{icon} Очередь '{qr['queue_name']}': {'убран' if qr.get('success') else 'ошибка'}")
+            else:
+                steps.append("ℹ️ Очереди: IP не найден в очередях")
+
+            # 4. Firewall address-lists
+            print("   Шаг 4: Firewall address-list'ы...")
+            fw_results = mikrotik_manager.remove_from_all_address_lists(ip)
+            details['firewall'] = fw_results
+            if fw_results:
+                for fr in fw_results:
+                    icon = '✅' if fr.get('success') else '❌'
+                    steps.append(f"{icon} Address-list '{fr['list_name']}': {'убран' if fr.get('success') else 'ошибка'}")
+            else:
+                steps.append("ℹ️ Firewall: IP не найден в address-list'ах")
+
+            # Обновляем дерево очередей
+            if tree_builder and mikrotik_manager.connected:
+                try:
+                    tree_builder.build_tree()
+                except Exception:
+                    pass
+
+            print(f"✅ Удаление завершено")
+            self._send_json({
+                'success': True,
+                'ip': ip,
+                'message': f'Абонент {ip} полностью удалён',
+                'steps': steps,
+                'details': details
+            })
+
+        except Exception as e:
+            print(f"❌ Ошибка удаления абонента: {e}")
+            traceback.print_exc()
+            self._send_json({'success': False, 'error': str(e), 'steps': steps}, 500)
+
+    def _edit_subscriber(self, data):
+        """Редактирование абонента: comment, IP, MAC, очереди, интернет"""
+        global mikrotik_manager, tree_builder
+
+        old_ip = data.get('old_ip', '').strip()
+        if not old_ip:
+            self._send_json({'error': 'Не указан IP абонента'}, 400)
+            return
+
+        if not mikrotik_manager or not mikrotik_manager.connected:
+            self._send_json({'error': 'Не подключено к устройству'}, 400)
+            return
+
+        print(f"\n✏️ РЕДАКТИРОВАНИЕ АБОНЕНТА: {old_ip}")
+
+        try:
+            result = mikrotik_manager.update_subscriber(old_ip, data)
+
+            # Обновляем дерево очередей
+            if tree_builder and mikrotik_manager.connected:
+                try:
+                    tree_builder.build_tree()
+                except Exception:
+                    pass
+
+            if result['success']:
+                self._send_json({
+                    'success': True,
+                    'message': result.get('message', f'Абонент {old_ip} обновлён'),
+                    'steps': result.get('steps', []),
+                    'details': result.get('details', {})
+                })
+            else:
+                self._send_json({
+                    'success': False,
+                    'error': result.get('error', 'Ошибка обновления'),
+                    'steps': result.get('steps', [])
+                })
+
+        except Exception as e:
+            print(f"❌ Ошибка редактирования абонента: {e}")
+            traceback.print_exc()
+            self._send_json({'success': False, 'error': str(e)}, 500)
 
     # ===== НОВЫЕ МЕТОДЫ ДЛЯ ЗАМЕНЫ MAC =====
     
