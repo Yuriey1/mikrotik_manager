@@ -142,7 +142,7 @@ app.component('subscriber-tab', {
         async function toggleNet(sub) {
             const enable = !hasInternet(sub.ip);
             try {
-                await toggleInternet(sub.ip, enable);
+                await toggleInternet(sub.ip, enable, sub.comment);
                 if (enable) {
                     if (!store.internetAccess.includes(sub.ip)) store.internetAccess.push(sub.ip);
                 } else {

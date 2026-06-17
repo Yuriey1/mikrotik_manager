@@ -138,8 +138,8 @@ async function replaceMac(data) {
     return apiPost('/api/replace_mac', data);
 }
 
-async function toggleInternet(ip, enable) {
-    return apiPost('/api/internet_access/toggle', { ip, enable });
+async function toggleInternet(ip, enable, comment) {
+    return apiPost('/api/internet_access/toggle', { ip, enable, comment: comment || '' });
 }
 
 async function checkMacExists(mac, excludeIp) {

@@ -200,8 +200,8 @@
                                 <th class="col-inet">🌐</th>
                                 <th class="col-ip">IP адрес</th>
                                 <th class="col-mac">MAC адрес</th>
-                                <th class="col-comment">ФИО</th>
                                 <th class="col-position">Должность</th>
+                                <th class="col-comment">ФИО</th>
                                 <th class="col-actions" style="width: 50px;"></th>
                             </tr>
                         </thead>
@@ -213,8 +213,8 @@
                                 </td>
                                 <td class="col-ip"><code>{{ sub.ip }}</code></td>
                                 <td class="col-mac">{{ sub.mac || '—' }}</td>
-                                <td class="col-comment">{{ parseName(sub.comment) }}</td>
                                 <td class="col-position">{{ parsePosition(sub.comment) }}</td>
+                                <td class="col-comment">{{ parseName(sub.comment) }}</td>
                                 <td class="col-actions">
                                     <div class="action-dropdown" style="position: relative;">
                                         <button class="btn btn-sm" @click.stop="toggleMenu(sub)" style="padding: 2px 8px;">
