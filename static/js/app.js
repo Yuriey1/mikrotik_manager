@@ -214,8 +214,12 @@ app.component('subscriber-modal', {
         const showModal = Vue.computed(() => store.showSubscriberModal);
         const mode = Vue.computed(() => store.subscriberModalMode || 'add');
         const form = Vue.computed(() => store.subscriberForm || { full_name: '', position: '', ip: '', mac: '', internet_access: false });
-        const showTraffic = Vue.computed(() => !!store.trafficChains || !!store.trafficLoading);
+        const showTraffic = Vue.computed(() => !!trafficData.value || !!store.trafficLoading);
         const trafficLoading = Vue.computed(() => store.trafficLoading);
+        const trafficData = Vue.computed(() => store.trafficChains);
+        const popoverTop = Vue.ref(0);
+        const popoverLeft = Vue.ref(0);
+        const popoverQueues = Vue.ref([]);
         const saving = Vue.ref(false);
         let trafficTimer = null;
 
@@ -223,6 +227,7 @@ app.component('subscriber-modal', {
             store.showSubscriberModal = false;
             store.trafficChains = null;
             store.trafficLoading = false;
+            store.trafficPopover = null;
             if (trafficTimer) clearTimeout(trafficTimer);
         }
 
@@ -239,12 +244,86 @@ app.component('subscriber-modal', {
                         findQueues(ip).catch(() => null),
                     ]);
                     if (channels?.success && queues?.success) {
-                        store.trafficChains = buildTrafficChains(channels, queues, ip);
+                        const data = buildTrafficChains(channels, queues, ip);
+                        store.trafficChains = data;
+                        if (data?.selectedQueues) {
+                            store.trafficQueues = data.selectedQueues;
+                        }
                     }
                 } catch (e) {} finally {
                     store.trafficLoading = false;
                 }
             }, 600);
+        }
+
+        function openTrafficPopover(event, chain) {
+            const rect = event.currentTarget.getBoundingClientRect();
+            popoverTop.value = rect.bottom + 5;
+            popoverLeft.value = Math.max(10, rect.left - 100);
+            store.trafficPopover = chain;
+            store.trafficPopoverDst = chain.dst;
+
+            const allFlat = (store.trafficChains && store.trafficChains.allFlat) || [];
+            const queueDstMap = (store.trafficChains && store.trafficChains.queueDstMap) || new Map();
+            const filtered = allFlat.filter(q => {
+                if (q.name && q.name.toLowerCase().startsWith('paid')) return false;
+                if (!q.parent) return false;
+                if (chain.dst && queueDstMap.has && queueDstMap.has(q.name) && queueDstMap.get(q.name) !== chain.dst) return false;
+                return true;
+            });
+            popoverQueues.value = filtered;
+        }
+
+        function closePopover() { store.trafficPopover = null; }
+
+        function isPopoverSelected(q) {
+            const sel = store.trafficQueues && store.trafficQueues[store.trafficPopoverDst];
+            return sel && sel.name === q.name;
+        }
+
+        function selectQueueFromPopover(q) {
+            if (store.trafficPopoverDst) {
+                store.trafficQueues[store.trafficPopoverDst] = q;
+                const data = store.trafficChains;
+                if (data) {
+                    data.selectedQueues = { ...store.trafficQueues };
+                    const chains = data.chains.map(c => ({
+                        ...c,
+                        dstQueue: store.trafficQueues[c.dst] || c.dstQueue
+                    }));
+                    store.trafficChains = { ...data, chains };
+                }
+            }
+            closePopover();
+        }
+
+        function formatBandwidth(maxLimit) {
+            if (!maxLimit || maxLimit === '0/0') return '';
+            const parts = maxLimit.split('/');
+            if (parts.length !== 2) return maxLimit;
+            function fmtOne(v) {
+                v = v.trim();
+                if (!v || v === '0') return null;
+                const m = v.match(/^(\d+(?:\.\d+)?)\s*(k|M|G)?$/i);
+                if (m) {
+                    const num = parseFloat(m[1]);
+                    const unit = (m[2] || '').toUpperCase();
+                    if (unit === 'G') return num + ' Gbit/s';
+                    if (unit === 'M') return num + ' Mbit/s';
+                    if (unit === 'k' || unit === 'K') return num + ' Kbit/s';
+                    if (num >= 1e9) return (num / 1e9).toFixed(1).replace(/\.0$/, '') + ' Gbit/s';
+                    if (num >= 1e6) return (num / 1e6).toFixed(1).replace(/\.0$/, '') + ' Mbit/s';
+                    if (num >= 1e3) return (num / 1e3).toFixed(1).replace(/\.0$/, '') + ' Kbit/s';
+                    return num + ' bit/s';
+                }
+                return v;
+            }
+            const up = fmtOne(parts[0]);
+            const down = fmtOne(parts[1]);
+            if (up && down) return up + ' / ' + down;
+            if (up) return up;
+            if (down) return down;
+            return '';
         }
 
         async function showFreeIps() {
@@ -286,18 +365,27 @@ app.component('subscriber-modal', {
                 store.error = 'Заполните ФИО, должность и IP';
                 return;
             }
+            const selQueues = [];
+            const data = store.trafficChains;
+            if (data && data.chains) {
+                for (const chain of data.chains) {
+                    if (chain.dstQueue && chain.dstQueue.name) {
+                        selQueues.push(chain.dstQueue.name);
+                    }
+                }
+            }
             saving.value = true;
             try {
-                const data = {
+                const reqData = {
                     full_name: f.full_name,
                     position: f.position,
                     ip: f.ip,
                     mac: f.mac,
                     internet_access: f.internet_access,
-                    queues: store.subscriberQueues || [],
+                    queues: selQueues,
                 };
                 if (mode.value === 'add') {
-                    const result = await addSubscriber(data);
+                    const result = await addSubscriber(reqData);
                     if (result.success) {
                         closeModal();
                         await refreshData();
@@ -305,7 +393,7 @@ app.component('subscriber-modal', {
                         store.error = result.error || result.message;
                     }
                 } else {
-                    const result = await editSubscriber(store.editOldIp, data);
+                    const result = await editSubscriber(store.editOldIp, reqData);
                     if (result.success) {
                         closeModal();
                         await refreshData();
@@ -320,8 +408,11 @@ app.component('subscriber-modal', {
             }
         }
 
-        return { store, showModal, mode, form, showTraffic, trafficLoading, saving,
-                 closeModal, onIpChange, showFreeIps, formatSpeed, selectQueue, saveSubscriber };
+        return { store, showModal, mode, form, showTraffic, trafficLoading, trafficData, saving,
+                 popoverTop, popoverLeft, popoverQueues,
+                 closeModal, onIpChange, showFreeIps, formatBandwidth,
+                 openTrafficPopover, closePopover, isPopoverSelected, selectQueueFromPopover,
+                 saveSubscriber };
     },
 });
 

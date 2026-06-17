@@ -278,22 +278,70 @@
                             <i class="fas fa-route"></i> Маршрут трафика
                             <span v-if="trafficLoading" style="margin-left: 8px;"><i class="fas fa-spinner fa-spin"></i></span>
                         </div>
-                        <div v-if="store.trafficChains && store.trafficChains.length > 0" class="traffic-chains">
-                            <div v-for="(chain, ci) in store.trafficChains" :key="ci"
-                                 class="traffic-chain" :class="{ backup: chain.type === 'backup' }">
-                                <div class="traffic-chain-label">{{ chain.name || 'Канал ' + (ci + 1) }}</div>
-                                <div class="traffic-chain-nodes">
-                                    <div v-for="(node, ni) in chain.nodes" :key="ni"
-                                         class="traffic-node" :class="{ 'has-ip': node.hasIp }"
-                                         @click="selectQueue(node)" :title="node.dst || ''">
-                                        {{ node.name }}
-                                        <span v-if="node.max_limit" class="node-speed">{{ formatSpeed(node.max_limit) }}</span>
+                        <div v-if="trafficData && trafficData.chains && trafficData.chains.length > 0" class="traffic-chains-wrapper">
+                            <div class="shared-ip-node">
+                                <div class="chain-node ip-node">
+                                    <div class="node-icon"><i class="fas fa-laptop"></i></div>
+                                    <div class="node-content"><div class="node-value">{{ trafficData.ip }}</div></div>
+                                </div>
+                            </div>
+                            <div v-if="trafficData.chains.length > 1" class="split-arrow">
+                                <svg viewBox="0 0 100 40"><path d="M50 0 L50 20 L10 40" class="arrow-line arrow-primary"/><path d="M50 20 L90 40" class="arrow-line arrow-backup"/></svg>
+                            </div>
+                            <div class="parallel-chains">
+                                <div v-for="(chain, ci) in trafficData.chains" :key="ci" class="traffic-chain-row" :class="chain.chainClass" :data-dst="chain.dst">
+                                    <div class="chain-label" :class="chain.labelClass">
+                                        <i :class="'fas ' + chain.iconClass"></i> {{ chain.label }}
+                                    </div>
+                                    <div class="chain-node queue-node clickable" @click="openTrafficPopover($event, chain)">
+                                        <div class="node-icon"><i class="fas fa-sitemap"></i></div>
+                                        <div class="node-content">
+                                            <div class="node-value">{{ chain.dstQueue ? chain.dstQueue.name : '—' }}</div>
+                                            <div v-if="chain.dstQueue && chain.dstQueue.max_limit && chain.dstQueue.max_limit !== '0/0'" class="node-bandwidth">{{ formatBandwidth(chain.dstQueue.max_limit) }}</div>
+                                        </div>
+                                    </div>
+                                    <div v-if="chain.ancestorParent" class="chain-connector">
+                                        <div class="connector-line"></div><i class="fas fa-chevron-down"></i><div class="connector-line"></div>
+                                    </div>
+                                    <div v-if="chain.ancestorParent" class="chain-node parent-node">
+                                        <div class="node-icon"><i class="fas fa-folder-tree"></i></div>
+                                        <div class="node-content">
+                                            <div class="node-value">{{ chain.ancestorParent.name }}</div>
+                                            <div v-if="chain.ancestorParent.max_limit && chain.ancestorParent.max_limit !== '0/0'" class="node-bandwidth">{{ formatBandwidth(chain.ancestorParent.max_limit) }}</div>
+                                        </div>
+                                    </div>
+                                    <div class="chain-connector">
+                                        <div class="connector-line"></div><i class="fas fa-chevron-down"></i><div class="connector-line"></div>
+                                    </div>
+                                    <div class="chain-node channel-node" :class="chain.labelClass">
+                                        <div class="node-icon"><i class="fas fa-satellite-dish"></i></div>
+                                        <div class="node-content"><div class="node-value">{{ chain.dst }}</div></div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        <div v-else-if="store.trafficChains" style="color: var(--text-muted); font-size: 12px; padding: 12px;">
+                        <div v-else-if="trafficData" style="color: var(--text-muted); font-size: 12px; padding: 12px;">
                             Очереди не найдены для этого IP
+                        </div>
+
+                        <!-- Queue popover -->
+                        <div v-if="store.trafficPopover" class="queue-selector-popover"
+                             :style="{ position: 'fixed', top: (popoverTop || 0) + 'px', left: (popoverLeft || 0) + 'px', display: 'block' }">
+                            <div class="popover-header">
+                                <span>Выберите очередь</span>
+                                <button class="popover-close" @click="closePopover"><i class="fas fa-times"></i></button>
+                            </div>
+                            <div class="popover-list">
+                                <div v-for="q in popoverQueues" :key="q.name" class="popover-item"
+                                     :class="{ selected: isPopoverSelected(q) }"
+                                     @click="selectQueueFromPopover(q)">
+                                    <div class="popover-item-name">{{ q.name }}</div>
+                                    <i v-if="isPopoverSelected(q)" class="fas fa-check check-icon"></i>
+                                </div>
+                                <div v-if="!popoverQueues.length" class="popover-item" style="color: var(--text-muted); cursor: default;">
+                                    Нет доступных очередей
+                                </div>
+                            </div>
                         </div>
                     </div>
 

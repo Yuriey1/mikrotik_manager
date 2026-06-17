@@ -37,6 +37,9 @@ const store = Vue.reactive({
     editOldIp: null,
     trafficChains: null,
     trafficLoading: false,
+    trafficQueues: {},
+    trafficPopover: null,
+    trafficPopoverDst: null,
     freeIpsData: null,
 
     showMacReplaceModal: false,

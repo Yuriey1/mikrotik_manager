@@ -204,33 +204,165 @@ async function refreshData() {
 
 function buildTrafficChains(channels, queuesData, ip) {
     if (!channels?.channels?.length) return null;
-    const chains = channels.channels.map(ch => ({
-        name: ch.interface || ch.gateway || ch.name,
-        type: ch.type || 'primary',
-        ip: ch.ip_address || '',
-        gateway: ch.gateway || '',
-        nodes: [],
-    }));
-    if (queuesData?.queues) {
-        const ipStripped = ip.split('/')[0];
-        for (const chain of chains) {
-            for (const q of queuesData.queues) {
-                const dstMatch = q.dst && (
-                    q.dst.includes(chain.gateway) || q.dst.includes(chain.ip.split('/')[0])
-                );
-                const targetMatch = q.target && q.target.some(t => t.split('/')[0] === ipStripped);
-                if (dstMatch || targetMatch) {
-                    chain.nodes.push({
-                        id: q.id,
-                        name: q.name,
-                        target: q.target || [],
-                        dst: q.dst || '',
-                        max_limit: q.max_limit || '',
-                        hasIp: targetMatch,
-                    });
+
+    const allFlat = [];
+    function flatten(nodes) {
+        for (const n of nodes) {
+            allFlat.push(n);
+            if (n.children && n.children.length) flatten(n.children);
+        }
+    }
+    flatten(queuesData?.queues || []);
+
+    const dstMap = {};
+    const queueDstMap = new Map();
+
+    allFlat.forEach(q => {
+        if (!q.dst || q.dst.trim() === '') return;
+        const dst = q.dst.trim();
+        if (!dstMap[dst]) dstMap[dst] = { parentQueues: [], children: new Set() };
+        if (!q.parent) dstMap[dst].parentQueues.push(q);
+    });
+
+    allFlat.forEach(q => {
+        if (!q.parent && q.dst && q.dst.trim() !== '') {
+            const dst = q.dst.trim();
+            queueDstMap.set(q.name, dst);
+            const stack = [...(q.children || [])];
+            while (stack.length) {
+                const c = stack.pop();
+                if (!queueDstMap.has(c.name)) queueDstMap.set(c.name, dst);
+                if (c.children) stack.push(...c.children);
+            }
+        }
+    });
+
+    const trafficParentNames = new Set();
+    Object.values(dstMap).forEach(info => {
+        info.parentQueues.forEach(pq => trafficParentNames.add(pq.name));
+    });
+
+    function isAncestorOf(parent, child) {
+        if (!parent || !child || !parent.children) return false;
+        const stack = [...parent.children];
+        while (stack.length) {
+            const c = stack.pop();
+            if (c.name === child.name) return true;
+            if (c.children) stack.push(...c.children);
+        }
+        return false;
+    }
+
+    function getQueueDepth(q) {
+        let depth = 0;
+        let cur = q;
+        while (cur && cur.parent) {
+            depth++;
+            cur = allFlat.find(p => p.name === cur.parent);
+        }
+        return depth;
+    }
+
+    function isInterfaceOnlyTarget(targetList) {
+        if (!targetList || !targetList.length) return false;
+        for (const t of targetList) {
+            if (/^\d+\.\d+\.\d+\.\d+/.test(t.trim())) return false;
+        }
+        return true;
+    }
+
+    const selectedQueues = {};
+    const existing = queuesData?.existing || [];
+    const ipData = queuesData;
+
+    Object.keys(dstMap).forEach(dst => {
+        const isPaid = q => q.name && q.name.toLowerCase().startsWith('paid');
+        const isMarked = q => !!(q.packet_marks && q.packet_marks.trim());
+
+        let queue = null;
+        if (existing && existing.length > 0) {
+            for (const name of existing) {
+                if (queueDstMap.get(name) === dst) {
+                    const q = allFlat.find(q => q.name === name);
+                    if (q && !isPaid(q)) { queue = q; break; }
                 }
             }
         }
+        if (!queue) {
+            const dstQueues = allFlat.filter(q => queueDstMap.get(q.name) === dst && !isPaid(q) && !isMarked(q));
+            const ifaceQueues = dstQueues.filter(q => isInterfaceOnlyTarget(q.target));
+            ifaceQueues.sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
+            queue = ifaceQueues.length > 0 ? ifaceQueues[0] : null;
+        }
+        if (!queue) {
+            const dstQueues = allFlat.filter(q => queueDstMap.get(q.name) === dst && !isPaid(q) && !isMarked(q));
+            queue = dstQueues.find(q => !trafficParentNames.has(q.name));
+        }
+        if (queue) selectedQueues[dst] = queue;
+    });
+
+    const chains = [];
+    const dstEntries = Object.entries(dstMap).sort((a, b) => b[1].parentQueues.length - a[1].parentQueues.length);
+
+    const primaryDst = channels.primary_channel?.interface;
+    const backupDst = channels.backup_channel?.interface;
+
+    dstEntries.forEach(([dst, info]) => {
+        const dstQueue = selectedQueues[dst];
+        const isPrimary = primaryDst === dst;
+        const isBackup = backupDst === dst;
+
+        let ancestorParent = null;
+        if (dstQueue) {
+            for (const pq of info.parentQueues) {
+                if (isAncestorOf(pq, dstQueue)) {
+                    ancestorParent = pq;
+                    break;
+                }
+            }
+        }
+
+        chains.push({
+            dst,
+            dstQueue,
+            ancestorParent,
+            isPrimary,
+            isBackup,
+            label: isPrimary ? 'Основной' : (isBackup ? 'Резервный' : dst),
+            iconClass: isPrimary ? 'fa-bolt' : (isBackup ? 'fa-shield-alt' : 'fa-ethernet'),
+            chainClass: isPrimary ? 'primary-chain' : (isBackup ? 'backup-chain' : ''),
+            labelClass: isPrimary ? 'primary' : (isBackup ? 'backup' : ''),
+        });
+    });
+
+    return { ip, chains, allFlat, queueDstMap, selectedQueues };
+}
+
+function formatBandwidth(maxLimit) {
+    if (!maxLimit || maxLimit === '0/0') return '';
+    const parts = maxLimit.split('/');
+    if (parts.length !== 2) return maxLimit;
+    function fmtOne(v) {
+        v = v.trim();
+        if (!v || v === '0') return null;
+        const m = v.match(/^(\d+(?:\.\d+)?)\s*(k|M|G)?$/i);
+        if (m) {
+            const num = parseFloat(m[1]);
+            const unit = (m[2] || '').toUpperCase();
+            if (unit === 'G') return num + ' Gbit/s';
+            if (unit === 'M') return num + ' Mbit/s';
+            if (unit === 'k' || unit === 'K') return num + ' Kbit/s';
+            if (num >= 1000000000) return (num / 1000000000).toFixed(1).replace(/\.0$/, '') + ' Gbit/s';
+            if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + ' Mbit/s';
+            if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + ' Kbit/s';
+            return num + ' bit/s';
+        }
+        return v;
     }
-    return chains.filter(c => c.nodes.length > 0);
+    const up = fmtOne(parts[0]);
+    const down = fmtOne(parts[1]);
+    if (up && down) return up + ' / ' + down;
+    if (up) return up;
+    if (down) return down;
+    return '';
 }
