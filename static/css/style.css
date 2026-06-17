@@ -1904,9 +1904,16 @@ textarea {
 }
 
 /* Колонки таблицы */
-.subscribers-table .col-internet {
+.subscribers-table .col-internet,
+.subscribers-table .col-inet {
     width: 40px;
     text-align: center;
+}
+
+.subscribers-table .col-position {
+    width: 120px;
+    color: var(--text-secondary);
+    font-size: 12px;
 }
 
 .subscribers-table .col-ip {
@@ -2288,3 +2295,39 @@ textarea {
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 10000; animation: fadeIn 0.15s ease; }
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ===== ТАБЛИЦА АБОНЕНТОВ ===== */
+.subscribers-section { padding: 0; }
+.subscribers-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 12px; }
+.subscribers-search { position: relative; flex: 1; }
+.subscribers-search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+.subscribers-search input { width: 100%; padding: 8px 8px 8px 36px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); font-size: 13px; }
+.subscribers-filters { display: flex; gap: 8px; align-items: center; }
+.subscribers-filters select { padding: 8px 12px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); font-size: 13px; }
+.subscribers-table-container { overflow-x: auto; max-height: calc(100vh - 340px); overflow-y: auto; }
+.subscribers-table tbody tr { cursor: pointer; }
+.subscribers-table tbody tr:hover { background: var(--bg-hover); }
+.subscribers-table tbody tr.selected { background: rgba(87, 148, 242, 0.1); }
+.clickable { cursor: pointer; }
+
+/* ===== SUBSCRIBER MODAL ===== */
+.subscriber-modal-content { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; width: 90%; max-width: 750px; max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+.modal-header { padding: 16px 24px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 10px; }
+.modal-header h2 { font-size: 18px; color: var(--text-primary); margin: 0; }
+.modal-body { padding: 20px 24px; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 10px; }
+.form-row { display: flex; gap: 16px; margin-bottom: 16px; }
+.form-row .form-group { margin-bottom: 0; }
+
+/* ===== TRAFFIC VISUALIZATION IN MODAL ===== */
+.traffic-visualization { margin-top: 16px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; }
+.traffic-header { color: var(--text-secondary); font-size: 13px; font-weight: 600; margin-bottom: 12px; }
+.traffic-chains { display: flex; flex-direction: column; gap: 12px; }
+.traffic-chain { display: flex; align-items: center; gap: 12px; padding: 10px; background: var(--bg-input); border-radius: 8px; border-left: 3px solid var(--accent-primary); }
+.traffic-chain.backup { border-left-color: var(--info); opacity: 0.7; }
+.traffic-chain-label { font-size: 12px; color: var(--text-muted); min-width: 70px; }
+.traffic-chain-nodes { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.traffic-node { padding: 6px 12px; background: rgba(87, 148, 242, 0.1); border: 1px solid rgba(87, 148, 242, 0.3); border-radius: 6px; font-size: 12px; color: var(--text-primary); cursor: pointer; position: relative; }
+.traffic-node:hover { background: rgba(87, 148, 242, 0.2); }
+.traffic-node.has-ip { border-color: var(--success); background: rgba(115, 191, 105, 0.1); }
+.traffic-node .node-speed { font-size: 10px; color: var(--text-muted); display: block; }

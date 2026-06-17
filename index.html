@@ -25,6 +25,9 @@
         <netbox-config-modal></netbox-config-modal>
         <ip-selector-modal></ip-selector-modal>
         <credentials-modal></credentials-modal>
+        <subscriber-modal></subscriber-modal>
+        <mac-replace-modal></mac-replace-modal>
+        <delete-confirm-modal></delete-confirm-modal>
     </div>
 
     <!-- ====== APP HEADER ====== -->
@@ -158,18 +161,244 @@
         </div>
     </template>
 
-    <!-- ====== SUBSCRIBER TAB (placeholder) ====== -->
+    <!-- ====== SUBSCRIBER TAB ====== -->
     <template id="subscriber-tab">
         <div class="tab-content active">
-            <div class="section">
-                <h2><i class="fas fa-users"></i> Абоненты</h2>
-                <div v-if="!store.connected" class="empty-state" style="padding: 60px 0;">
-                    <i class="fas fa-plug" style="font-size: 48px; color: var(--text-muted);"></i>
-                    <p style="margin-top: 16px; color: var(--text-secondary);">Подключитесь к устройству для загрузки абонентов</p>
+            <div v-if="!store.connected" class="empty-state" style="padding: 60px 0; text-align: center;">
+                <i class="fas fa-plug" style="font-size: 48px; color: var(--text-muted);"></i>
+                <p style="margin-top: 16px; color: var(--text-secondary);">Подключитесь к устройству для загрузки абонентов</p>
+            </div>
+            <div v-else class="subscribers-section">
+                <!-- Toolbar -->
+                <div class="subscribers-toolbar">
+                    <div class="subscribers-search">
+                        <i class="fas fa-search"></i>
+                        <input type="text" v-model="searchText" placeholder="Поиск абонента (IP или ФИО)...">
+                    </div>
+                    <div class="subscribers-filters">
+                        <select v-model="poolFilter" @change="filterByPool">
+                            <option value="">Все пулы</option>
+                            <option v-for="p in store.dhcpPools" :key="p.name" :value="p.name">{{ p.name }}</option>
+                        </select>
+                        <button class="btn btn-primary" @click="openAddModal">
+                            <i class="fas fa-plus"></i> Добавить абонента
+                        </button>
+                    </div>
                 </div>
-                <div v-else style="padding: 40px 0; text-align: center; color: var(--text-secondary);">
-                    <i class="fas fa-tools" style="font-size: 36px; display: block; margin-bottom: 12px;"></i>
-                    Таблица абонентов будет здесь (Фаза 4)
+
+                <!-- Stats -->
+                <div class="subscribers-stats">
+                    <span class="stat-item"><i class="fas fa-users"></i> Абонентов: <strong>{{ store.subscribers.length }}</strong></span>
+                    <span class="stat-item"><i class="fas fa-filter"></i> Показано: <strong>{{ filteredSubscribers.length }}</strong></span>
+                </div>
+
+                <!-- Table -->
+                <div class="subscribers-table-container">
+                    <table class="subscribers-table">
+                        <thead>
+                            <tr>
+                                <th class="col-inet">🌐</th>
+                                <th class="col-ip">IP адрес</th>
+                                <th class="col-mac">MAC адрес</th>
+                                <th class="col-comment">ФИО</th>
+                                <th class="col-position">Должность</th>
+                                <th class="col-actions" style="width: 50px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="sub in filteredSubscribers" :key="sub.ip" @click="selectSubscriber(sub)" :class="{ selected: selectedIp === sub.ip }">
+                                <td class="col-inet clickable" @click.stop="toggleNet(sub)">
+                                    <i :class="'fas ' + (hasInternet(sub.ip) ? 'fa-globe' : 'fa-globe')"
+                                       :style="{ color: hasInternet(sub.ip) ? 'var(--success)' : 'var(--text-muted)', fontSize: '16px' }"></i>
+                                </td>
+                                <td class="col-ip"><code>{{ sub.ip }}</code></td>
+                                <td class="col-mac">{{ sub.mac || '—' }}</td>
+                                <td class="col-comment">{{ parseName(sub.comment) }}</td>
+                                <td class="col-position">{{ parsePosition(sub.comment) }}</td>
+                                <td class="col-actions">
+                                    <div class="action-dropdown" style="position: relative;">
+                                        <button class="btn btn-sm" @click.stop="toggleMenu(sub)" style="padding: 2px 8px;">
+                                            <i class="fas fa-ellipsis-v"></i>
+                                        </button>
+                                        <div v-if="openMenuIp === sub.ip" class="dropdown-menu" @click.stop style="right: 0;">
+                                            <a href="#" @click.prevent="editSubscriber(sub)"><i class="fas fa-edit"></i> Редактировать</a>
+                                            <a href="#" @click.prevent="openMacReplace(sub)"><i class="fas fa-exchange-alt"></i> Заменить MAC</a>
+                                            <a href="#" @click.prevent="copySubscriber(sub)"><i class="fas fa-copy"></i> Копировать</a>
+                                            <a href="#" @click.prevent="confirmDelete(sub)"><i class="fas fa-trash-alt"></i> Удалить</a>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr v-if="filteredSubscribers.length === 0 && store.subscribers.length > 0">
+                                <td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted);">Ничего не найдено</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- ====== SUBSCRIBER MODAL (add/edit) ====== -->
+    <template id="subscriber-modal">
+        <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
+            <div class="subscriber-modal-content">
+                <div class="modal-header">
+                    <h2><i :class="'fas ' + (mode === 'add' ? 'fa-user-plus' : 'fa-edit')"></i>
+                        {{ mode === 'add' ? 'Добавить абонента' : 'Редактировать абонента' }}</h2>
+                </div>
+                <div class="modal-body">
+                    <div class="form-row">
+                        <div class="form-group flex-1">
+                            <label>ФИО *</label>
+                            <input type="text" v-model="form.full_name" placeholder="Иванов Иван Иванович">
+                        </div>
+                        <div class="form-group flex-1">
+                            <label>Должность *</label>
+                            <input type="text" v-model="form.position" placeholder="Инженер">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group flex-1">
+                            <label>IP адрес *</label>
+                            <div class="flex gap-10">
+                                <input type="text" v-model="form.ip" placeholder="192.168.1.100" class="flex-1"
+                                       @input="onIpChange" :disabled="mode === 'edit'">
+                                <button v-if="mode === 'add'" class="btn btn-info btn-sm" @click="showFreeIps">Свободные IP</button>
+                            </div>
+                        </div>
+                        <div class="form-group flex-1">
+                            <label>MAC адрес</label>
+                            <input type="text" v-model="form.mac" placeholder="00:11:22:33:44:55">
+                        </div>
+                    </div>
+
+                    <!-- Traffic visualization -->
+                    <div v-if="showTraffic" class="traffic-visualization">
+                        <div class="traffic-header">
+                            <i class="fas fa-route"></i> Маршрут трафика
+                            <span v-if="trafficLoading" style="margin-left: 8px;"><i class="fas fa-spinner fa-spin"></i></span>
+                        </div>
+                        <div v-if="store.trafficChains && store.trafficChains.length > 0" class="traffic-chains">
+                            <div v-for="(chain, ci) in store.trafficChains" :key="ci"
+                                 class="traffic-chain" :class="{ backup: chain.type === 'backup' }">
+                                <div class="traffic-chain-label">{{ chain.name || 'Канал ' + (ci + 1) }}</div>
+                                <div class="traffic-chain-nodes">
+                                    <div v-for="(node, ni) in chain.nodes" :key="ni"
+                                         class="traffic-node" :class="{ 'has-ip': node.hasIp }"
+                                         @click="selectQueue(node)" :title="node.dst || ''">
+                                        {{ node.name }}
+                                        <span v-if="node.max_limit" class="node-speed">{{ formatSpeed(node.max_limit) }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-else-if="store.trafficChains" style="color: var(--text-muted); font-size: 12px; padding: 12px;">
+                            Очереди не найдены для этого IP
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-group">
+                            <input type="checkbox" v-model="form.internet_access">
+                            <span>Доступ в интернет</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="closeModal">
+                        <i class="fas fa-times"></i> Отмена
+                    </button>
+                    <button class="btn btn-success" @click="saveSubscriber" :disabled="saving">
+                        <i v-if="saving" class="fas fa-spinner fa-spin"></i>
+                        <i v-else class="fas fa-check"></i>
+                        {{ mode === 'add' ? 'Добавить' : 'Сохранить' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- ====== MAC REPLACE MODAL ====== -->
+    <template id="mac-replace-modal">
+        <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
+            <div class="subscriber-modal-content" style="max-width: 560px;">
+                <div class="modal-header">
+                    <h2><i class="fas fa-exchange-alt"></i> Замена MAC адреса</h2>
+                </div>
+                <div class="modal-body">
+                    <div class="dialog-current-info" style="background: rgba(87, 148, 242, 0.1); padding: 12px; border-radius: 6px; margin-bottom: 16px;">
+                        <div><span style="color: var(--text-muted);">Текущий IP:</span> <strong>{{ macReplaceSub?.ip }}</strong></div>
+                        <div><span style="color: var(--text-muted);">Текущий MAC:</span> <strong>{{ macReplaceSub?.mac || '—' }}</strong></div>
+                    </div>
+
+                    <div class="mode-switcher" style="margin-bottom: 16px; display: flex; gap: 16px;">
+                        <label><input type="radio" v-model="replaceMode" value="by-ip" @change="onReplaceModeChange"> По IP устройства</label>
+                        <label><input type="radio" v-model="replaceMode" value="by-mac" @change="onReplaceModeChange"> Ввести MAC вручную</label>
+                    </div>
+
+                    <div v-if="replaceMode === 'by-ip'">
+                        <div class="form-group">
+                            <label>Новый IP (устройство с новым MAC):</label>
+                            <div class="flex gap-10">
+                                <input type="text" v-model="replaceNewIp" placeholder="192.168.1.100" class="flex-1">
+                                <select v-model="replaceNewIp" style="min-width: 140px;">
+                                    <option value="">Из списка</option>
+                                    <option v-for="s in store.subscribers" :key="s.ip" :value="s.ip">{{ s.ip }} — {{ s.comment || s.mac }}</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="replaceMode === 'by-mac'">
+                        <div class="form-group">
+                            <label>Новый MAC адрес:</label>
+                            <input type="text" v-model="replaceNewMac" placeholder="AA:BB:CC:DD:EE:FF" style="text-transform:uppercase;">
+                        </div>
+                        <div class="form-group">
+                            <label>Client ID (опционально):</label>
+                            <input type="text" v-model="replaceClientId" placeholder="1:aa:bb:cc:dd:ee:ff">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="closeModal"><i class="fas fa-times"></i> Отмена</button>
+                    <button class="btn btn-warning" @click="executeReplace" :disabled="replaceRunning">
+                        <i v-if="replaceRunning" class="fas fa-spinner fa-spin"></i>
+                        <i v-else class="fas fa-exchange-alt"></i> Выполнить замену
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- ====== DELETE CONFIRM MODAL ====== -->
+    <template id="delete-confirm-modal">
+        <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
+            <div class="modal-content" style="max-width: 420px;">
+                <div class="modal-header" style="background: rgba(212, 74, 58, 0.15);">
+                    <h2><i class="fas fa-trash-alt" style="color: var(--error);"></i> Удалить абонента?</h2>
+                </div>
+                <div class="modal-body">
+                    <p style="color: var(--text-secondary);">
+                        Абонент <strong>{{ deleteSub?.ip }}</strong> будет удалён из:
+                    </p>
+                    <ul style="color: var(--text-secondary); margin: 12px 0; padding-left: 20px;">
+                        <li>DHCP лизингов</li>
+                        <li>ARP таблицы</li>
+                        <li>Очередей</li>
+                        <li>Address-list'ов файрволла</li>
+                    </ul>
+                    <p style="color: var(--warning); font-size: 13px;">
+                        <i class="fas fa-exclamation-triangle"></i> Это действие необратимо
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="closeModal"><i class="fas fa-times"></i> Отмена</button>
+                    <button class="btn btn-danger" @click="executeDelete" :disabled="deleteRunning">
+                        <i v-if="deleteRunning" class="fas fa-spinner fa-spin"></i>
+                        <i v-else class="fas fa-trash-alt"></i> Удалить
+                    </button>
                 </div>
             </div>
         </div>
@@ -269,7 +498,7 @@
         </div>
     </template>
 
-    <!-- ====== IP SELECTOR MODAL (placeholder) ====== -->
+    <!-- ====== IP SELECTOR MODAL ====== -->
     <template id="ip-selector-modal">
         <div v-if="store.showIpModal" class="modal-overlay" @click.self="store.showIpModal = false">
             <div class="ip-modal-content">
@@ -277,9 +506,21 @@
                     <h3><i class="fas fa-search"></i> Выберите свободный IP адрес</h3>
                 </div>
                 <div class="ip-modal-body">
-                    <p style="color: var(--text-secondary); text-align: center; padding: 40px;">
-                        Выбор IP будет реализован в Фазе 4
-                    </p>
+                    <div v-if="!store.freeIpsData" style="text-align:center;padding:40px;color:var(--text-muted);">
+                        <i class="fas fa-spinner fa-spin"></i> Загрузка...
+                    </div>
+                    <div v-else v-for="(pool, poolName) in store.freeIpsData.free_ips" :key="poolName" style="margin-bottom: 20px;">
+                        <h4 style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;">{{ poolName }} (свободно: {{ pool.free_ips }})</h4>
+                        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                            <span v-for="ip in pool.free_list" :key="ip"
+                                  @click="selectIp(ip)"
+                                  style="padding:4px 10px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:4px;font-size:12px;cursor:pointer;color:var(--text-primary);font-family:monospace;"
+                                  @mouseenter="$event.target.style.borderColor='var(--accent-primary)'"
+                                  @mouseleave="$event.target.style.borderColor='var(--border-color)'">
+                                {{ ip }}
+                            </span>
+                        </div>
+                    </div>
                 </div>
                 <div class="ip-modal-footer">
                     <button class="btn btn-secondary" @click="store.showIpModal = false">

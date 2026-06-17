@@ -92,7 +92,332 @@ app.component('tab-bar', {
 app.component('subscriber-tab', {
     template: '#subscriber-tab',
     setup() {
-        return { store };
+        const searchText = Vue.ref('');
+        const poolFilter = Vue.ref('');
+        const selectedIp = Vue.ref(null);
+        const openMenuIp = Vue.ref(null);
+
+        const filteredSubscribers = Vue.computed(() => {
+            const q = searchText.value.toLowerCase().trim();
+            let list = store.subscribers;
+            if (poolFilter.value) {
+                list = list.filter(s => {
+                    if (!q) return true;
+                    return (s.ip && s.ip.toLowerCase().includes(q)) ||
+                           (s.comment && s.comment.toLowerCase().includes(q)) ||
+                           (s.mac && s.mac.toLowerCase().includes(q));
+                });
+            }
+            return q ? list.filter(s =>
+                (s.ip && s.ip.toLowerCase().includes(q)) ||
+                (s.comment && s.comment.toLowerCase().includes(q)) ||
+                (s.mac && s.mac.toLowerCase().includes(q))
+            ) : list;
+        });
+
+        function parseName(comment) {
+            if (!comment) return '—';
+            const parts = comment.split(' - ');
+            return parts.length > 1 ? parts.slice(1).join(' - ') : comment;
+        }
+        function parsePosition(comment) {
+            if (!comment) return '—';
+            const parts = comment.split(' - ');
+            return parts.length > 1 ? parts[0] : '';
+        }
+        function hasInternet(ip) {
+            return store.internetAccess.includes(ip);
+        }
+
+        async function toggleNet(sub) {
+            const enable = !hasInternet(sub.ip);
+            try {
+                await toggleInternet(sub.ip, enable);
+                if (enable) {
+                    if (!store.internetAccess.includes(sub.ip)) store.internetAccess.push(sub.ip);
+                } else {
+                    store.internetAccess = store.internetAccess.filter(i => i !== sub.ip);
+                }
+            } catch (e) {
+                store.error = e.message;
+            }
+        }
+
+        function selectSubscriber(sub) {
+            selectedIp.value = sub.ip;
+        }
+
+        function toggleMenu(sub) {
+            openMenuIp.value = openMenuIp.value === sub.ip ? null : sub.ip;
+        }
+
+        function filterByPool() {}
+
+        function openAddModal() {
+            store.showSubscriberModal = true;
+            store.subscriberModalMode = 'add';
+            store.subscriberForm = { full_name: '', position: '', ip: '', mac: '', internet_access: false };
+            store.subscriberQueues = [];
+            store.trafficChains = null;
+            store.editOldIp = null;
+        }
+
+        function editSubscriber(sub) {
+            openMenuIp.value = null;
+            const parts = (sub.comment || '').split(' - ');
+            const position = parts.length > 1 ? parts[0] : '';
+            const name = parts.length > 1 ? parts.slice(1).join(' - ') : (sub.comment || '');
+            store.showSubscriberModal = true;
+            store.subscriberModalMode = 'edit';
+            store.editOldIp = sub.ip;
+            store.subscriberForm = {
+                full_name: name,
+                position: position,
+                ip: sub.ip,
+                mac: sub.mac || '',
+                internet_access: hasInternet(sub.ip)
+            };
+            store.subscriberQueues = [];
+            store.trafficChains = null;
+        }
+
+        function openMacReplace(sub) {
+            openMenuIp.value = null;
+            store.showMacReplaceModal = true;
+            store.macReplaceSub = sub;
+        }
+
+        function copySubscriber(sub) {
+            openMenuIp.value = null;
+            const text = `IP: ${sub.ip}\nMAC: ${sub.mac}\n${sub.comment}`;
+            navigator.clipboard.writeText(text).catch(() => {});
+        }
+
+        function confirmDelete(sub) {
+            openMenuIp.value = null;
+            store.showDeleteModal = true;
+            store.deleteSub = sub;
+        }
+
+        Vue.onMounted(() => {
+            document.addEventListener('click', () => { openMenuIp.value = null; });
+        });
+
+        return { store, searchText, poolFilter, selectedIp, openMenuIp,
+                 filteredSubscribers, parseName, parsePosition, hasInternet,
+                 toggleNet, selectSubscriber, toggleMenu, filterByPool,
+                 openAddModal, editSubscriber, openMacReplace, copySubscriber, confirmDelete };
+    },
+});
+
+// ===== SUBSCRIBER MODAL (add/edit) =====
+app.component('subscriber-modal', {
+    template: '#subscriber-modal',
+    setup() {
+        const showModal = Vue.computed(() => store.showSubscriberModal);
+        const mode = Vue.computed(() => store.subscriberModalMode || 'add');
+        const form = Vue.computed(() => store.subscriberForm || { full_name: '', position: '', ip: '', mac: '', internet_access: false });
+        const showTraffic = Vue.computed(() => !!store.trafficChains || !!store.trafficLoading);
+        const trafficLoading = Vue.computed(() => store.trafficLoading);
+        const saving = Vue.ref(false);
+        let trafficTimer = null;
+
+        function closeModal() {
+            store.showSubscriberModal = false;
+            store.trafficChains = null;
+            store.trafficLoading = false;
+            if (trafficTimer) clearTimeout(trafficTimer);
+        }
+
+        async function onIpChange() {
+            if (mode.value !== 'add') return;
+            if (trafficTimer) clearTimeout(trafficTimer);
+            const ip = form.value.ip;
+            if (!ip) { store.trafficChains = null; return; }
+            trafficTimer = setTimeout(async () => {
+                store.trafficLoading = true;
+                try {
+                    const [channels, queues] = await Promise.all([
+                        analyzeChannels().catch(() => null),
+                        findQueues(ip).catch(() => null),
+                    ]);
+                    if (channels?.success && queues?.success) {
+                        store.trafficChains = buildTrafficChains(channels, queues, ip);
+                    }
+                } catch (e) {} finally {
+                    store.trafficLoading = false;
+                }
+            }, 600);
+        }
+
+        async function showFreeIps() {
+            try {
+                const data = await getFreeIps();
+                store.freeIpsData = data;
+                store.showIpModal = true;
+            } catch (e) { store.error = e.message; }
+        }
+
+        function formatSpeed(maxLimit) {
+            if (!maxLimit) return '';
+            const parts = maxLimit.split('/');
+            const fmt = (v) => {
+                const n = parseInt(v);
+                if (!n) return v;
+                if (n >= 1e6) return (n / 1e6).toFixed(0) + 'M';
+                if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K';
+                return n.toString();
+            };
+            return parts.map(fmt).join('/');
+        }
+
+        function selectQueue(node) {
+            if (!node.name) return;
+            const idx = store.subscriberQueues.indexOf(node.name);
+            if (idx >= 0) {
+                store.subscriberQueues.splice(idx, 1);
+            } else {
+                store.subscriberQueues.push(node.name);
+            }
+        }
+
+        Vue.watch(() => store.subscriberQueues, (val) => {}, { deep: true });
+
+        async function saveSubscriber() {
+            const f = form.value;
+            if (!f.full_name || !f.position || !f.ip) {
+                store.error = 'Заполните ФИО, должность и IP';
+                return;
+            }
+            saving.value = true;
+            try {
+                const data = {
+                    full_name: f.full_name,
+                    position: f.position,
+                    ip: f.ip,
+                    mac: f.mac,
+                    internet_access: f.internet_access,
+                    queues: store.subscriberQueues || [],
+                };
+                if (mode.value === 'add') {
+                    const result = await addSubscriber(data);
+                    if (result.success) {
+                        closeModal();
+                        await loadSubscribers();
+                    } else {
+                        store.error = result.error || result.message;
+                    }
+                } else {
+                    const result = await editSubscriber(store.editOldIp, data);
+                    if (result.success) {
+                        closeModal();
+                        await loadSubscribers();
+                    } else {
+                        store.error = result.error || result.message;
+                    }
+                }
+            } catch (e) {
+                store.error = e.message;
+            } finally {
+                saving.value = false;
+            }
+        }
+
+        return { store, showModal, mode, form, showTraffic, trafficLoading, saving,
+                 closeModal, onIpChange, showFreeIps, formatSpeed, selectQueue, saveSubscriber };
+    },
+});
+
+// ===== MAC REPLACE MODAL =====
+app.component('mac-replace-modal', {
+    template: '#mac-replace-modal',
+    setup() {
+        const showModal = Vue.computed(() => store.showMacReplaceModal);
+        const macReplaceSub = Vue.computed(() => store.macReplaceSub);
+        const replaceMode = Vue.ref('by-ip');
+        const replaceNewIp = Vue.ref('');
+        const replaceNewMac = Vue.ref('');
+        const replaceClientId = Vue.ref('');
+        const replaceRunning = Vue.ref(false);
+
+        function closeModal() {
+            store.showMacReplaceModal = false;
+            store.macReplaceSub = null;
+            replaceMode.value = 'by-ip';
+            replaceNewIp.value = '';
+            replaceNewMac.value = '';
+            replaceClientId.value = '';
+        }
+
+        function onReplaceModeChange() {
+            replaceNewIp.value = '';
+            replaceNewMac.value = '';
+            replaceClientId.value = '';
+        }
+
+        async function executeReplace() {
+            if (!macReplaceSub.value) return;
+            replaceRunning.value = true;
+            try {
+                let data;
+                if (replaceMode.value === 'by-ip') {
+                    if (!replaceNewIp.value) { store.error = 'Укажите новый IP'; return; }
+                    data = { mode: 'by-ip', old_ip: macReplaceSub.value.ip, new_ip: replaceNewIp.value };
+                } else {
+                    if (!replaceNewMac.value) { store.error = 'Укажите новый MAC'; return; }
+                    data = { mode: 'by-mac', ip: macReplaceSub.value.ip, new_mac: replaceNewMac.value, client_id: replaceClientId.value || undefined };
+                }
+                const result = await replaceMac(data);
+                if (result.success) {
+                    closeModal();
+                    await loadSubscribers();
+                } else {
+                    store.error = result.error || result.message;
+                }
+            } catch (e) {
+                store.error = e.message;
+            } finally {
+                replaceRunning.value = false;
+            }
+        }
+
+        return { showModal, macReplaceSub, replaceMode, replaceNewIp, replaceNewMac, replaceClientId, replaceRunning,
+                 closeModal, onReplaceModeChange, executeReplace };
+    },
+});
+
+// ===== DELETE CONFIRM MODAL =====
+app.component('delete-confirm-modal', {
+    template: '#delete-confirm-modal',
+    setup() {
+        const showModal = Vue.computed(() => store.showDeleteModal);
+        const deleteSub = Vue.computed(() => store.deleteSub);
+        const deleteRunning = Vue.ref(false);
+
+        function closeModal() {
+            store.showDeleteModal = false;
+            store.deleteSub = null;
+        }
+
+        async function executeDelete() {
+            if (!deleteSub.value) return;
+            deleteRunning.value = true;
+            try {
+                const result = await deleteSubscriber(deleteSub.value.ip);
+                if (result.success) {
+                    closeModal();
+                    store.subscribers = store.subscribers.filter(s => s.ip !== deleteSub.value.ip);
+                } else {
+                    store.error = result.error || result.message;
+                }
+            } catch (e) {
+                store.error = e.message;
+            } finally {
+                deleteRunning.value = false;
+            }
+        }
+
+        return { showModal, deleteSub, deleteRunning, closeModal, executeDelete };
     },
 });
 
@@ -165,7 +490,13 @@ app.component('netbox-config-modal', {
 app.component('ip-selector-modal', {
     template: '#ip-selector-modal',
     setup() {
-        return { store };
+        function selectIp(ip) {
+            if (store.subscriberForm) {
+                store.subscriberForm.ip = ip;
+            }
+            store.showIpModal = false;
+        }
+        return { store, selectIp };
     },
 });
 

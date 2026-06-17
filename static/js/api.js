@@ -172,3 +172,47 @@ async function findQueues(ip) {
 async function forgetCredentials(device) {
     return apiDelete(`/api/forget_credentials?device=${encodeURIComponent(device)}`);
 }
+
+async function loadSubscribers() {
+    try {
+        const data = await apiGet('/api/dhcp_subscribers?all=true');
+        if (data.success) {
+            store.subscribers = data.subscribers || [];
+        }
+    } catch (e) {
+        store.error = e.message;
+    }
+}
+
+function buildTrafficChains(channels, queuesData, ip) {
+    if (!channels?.channels?.length) return null;
+    const chains = channels.channels.map(ch => ({
+        name: ch.interface || ch.gateway || ch.name,
+        type: ch.type || 'primary',
+        ip: ch.ip_address || '',
+        gateway: ch.gateway || '',
+        nodes: [],
+    }));
+    if (queuesData?.queues) {
+        const ipStripped = ip.split('/')[0];
+        for (const chain of chains) {
+            for (const q of queuesData.queues) {
+                const dstMatch = q.dst && (
+                    q.dst.includes(chain.gateway) || q.dst.includes(chain.ip.split('/')[0])
+                );
+                const targetMatch = q.target && q.target.some(t => t.split('/')[0] === ipStripped);
+                if (dstMatch || targetMatch) {
+                    chain.nodes.push({
+                        id: q.id,
+                        name: q.name,
+                        target: q.target || [],
+                        dst: q.dst || '',
+                        max_limit: q.max_limit || '',
+                        hasIp: targetMatch,
+                    });
+                }
+            }
+        }
+    }
+    return chains.filter(c => c.nodes.length > 0);
+}

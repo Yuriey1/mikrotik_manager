@@ -30,6 +30,21 @@ const store = Vue.reactive({
     credentialsDevice: null,
     credentialsCallback: null,
 
+    showSubscriberModal: false,
+    subscriberModalMode: 'add',
+    subscriberForm: null,
+    subscriberQueues: [],
+    editOldIp: null,
+    trafficChains: null,
+    trafficLoading: false,
+    freeIpsData: null,
+
+    showMacReplaceModal: false,
+    macReplaceSub: null,
+
+    showDeleteModal: false,
+    deleteSub: null,
+
     autoSavePassword: false,
     defaultUsername: 'admin',
 });
