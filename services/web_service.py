@@ -212,6 +212,9 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             # ===== НОВЫЙ ENDPOINT: ПРОВЕРКА MAC =====
             elif path == '/api/check_mac':
                 self._check_mac(parsed)
+            # ===== НОВЫЙ ENDPOINT: BULK СИНХРОНИЗАЦИЯ =====
+            elif path == '/api/sync':
+                self._sync_data()
             # ===== ОБРАБОТКА FAVICON =====
             elif path == '/favicon.ico':
                 try:
@@ -434,6 +437,80 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             })
         except Exception as e:
             print(f"❌ Ошибка проверки MAC: {e}")
+            traceback.print_exc()
+            self._send_json({'success': False, 'error': str(e)}, 500)
+
+    def _sync_data(self):
+        """Bulk-эндпоинт: возвращает все данные с устройства одним запросом"""
+        global mikrotik_manager, tree_builder
+
+        if not mikrotik_manager or not mikrotik_manager.connected:
+            self._send_json({'error': 'Не подключено к устройству'}, 400)
+            return
+
+        try:
+            response = {'success': True}
+
+            # 1. Дерево очередей + статистика
+            if tree_builder:
+                response['queue_tree'] = tree_builder.get_tree_json()
+                response['queue_stats'] = tree_builder.get_stats()
+                response['all_queues'] = [node.to_dict() for node in tree_builder.nodes.values()]
+            else:
+                response['queue_tree'] = []
+                response['queue_stats'] = {}
+                response['all_queues'] = []
+
+            # 2. DHCP пулы
+            response['dhcp_pools'] = []
+            try:
+                pools = mikrotik_manager.get_dhcp_pools()
+                response['dhcp_pools'] = [{
+                    'name': p.get('name', ''),
+                    'ranges': p.get('ranges', ''),
+                    'id': p.get('.id', '')
+                } for p in pools]
+            except Exception as e:
+                print(f"⚠️ Ошибка получения DHCP пулов: {e}")
+
+            # 3. Абоненты (все DHCP лизинги с комментариями)
+            response['subscribers'] = []
+            try:
+                response['subscribers'] = mikrotik_manager.get_dhcp_subscribers(
+                    include_all=True
+                )
+            except Exception as e:
+                print(f"⚠️ Ошибка получения абонентов: {e}")
+
+            # 4. Список интернет-доступа
+            response['internet_access'] = []
+            try:
+                response['internet_access'] = mikrotik_manager.get_internet_access_list()
+            except Exception as e:
+                print(f"⚠️ Ошибка получения internet_access: {e}")
+
+            # 5. Анализ каналов (маршрутизация)
+            response['channels'] = None
+            try:
+                response['channels'] = mikrotik_manager.analyze_channels()
+            except Exception as e:
+                print(f"⚠️ Ошибка анализа каналов: {e}")
+
+            # 6. Интерфейсы
+            response['interfaces'] = []
+            try:
+                response['interfaces'] = mikrotik_manager.get_interfaces()
+            except Exception as e:
+                print(f"⚠️ Ошибка получения интерфейсов: {e}")
+
+            print(f"📦 Sync: очередь={len(response.get('queue_tree',[]))}, "
+                  f"абонентов={len(response.get('subscribers',[]))}, "
+                  f"каналов={len(response.get('channels',{}).get('channels',[])) if response.get('channels') else 0}")
+
+            self._send_json(response)
+
+        except Exception as e:
+            print(f"❌ Ошибка sync: {e}")
             traceback.print_exc()
             self._send_json({'success': False, 'error': str(e)}, 500)
 
