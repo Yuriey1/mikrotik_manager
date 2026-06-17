@@ -7,664 +7,325 @@
     <link rel="icon" href="/favicon.ico">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/static/css/style.css">
+    <style>[v-cloak]{display:none}</style>
 </head>
 <body>
-    <!-- ОВЕРЛЕЙ ЗАГРУЗКИ -->
-    <div id="loading-overlay" class="loading-overlay" style="display: none;">
-        <div class="loading-spinner">
-            <div class="spinner-circle"></div>
-            <div class="loading-text" id="loading-text">Загрузка...</div>
-        </div>
-    </div>
-
-    <!-- МОДАЛЬНОЕ ОКНО ОШИБОК -->
-    <div id="error-modal" class="error-modal" style="display: none;">
-        <div class="error-modal-content">
-            <div class="error-modal-header">
-                <i class="fas fa-exclamation-triangle"></i>
-                <span>Ошибка</span>
-            </div>
-            <div class="error-modal-body" id="error-modal-text">
-                Текст ошибки
-            </div>
-            <div class="error-modal-footer">
-                <button class="btn btn-danger" onclick="hideErrorModal()">
-                    <i class="fas fa-times"></i> Закрыть
-                </button>
+    <div id="app" v-cloak>
+        <app-header></app-header>
+        <div class="main-layout">
+            <device-sidebar></device-sidebar>
+            <div class="content">
+                <tab-bar></tab-bar>
+                <subscriber-tab v-if="store.activeTab === 'subscribers'"></subscriber-tab>
+                <queue-tab v-if="store.activeTab === 'queues'"></queue-tab>
             </div>
         </div>
+        <loading-overlay></loading-overlay>
+        <error-modal></error-modal>
+        <netbox-config-modal></netbox-config-modal>
+        <ip-selector-modal></ip-selector-modal>
+        <credentials-modal></credentials-modal>
     </div>
 
-    <div class="container">
-        <!-- ШАПКА -->
+    <!-- ====== APP HEADER ====== -->
+    <template id="app-header">
         <header>
             <h1><i class="fas fa-router"></i> MikroTik Device Manager</h1>
-            
-<!-- В шапке добавьте статус NetBox -->
-<div class="status-bar">
-    <div class="status-item">
-        <span class="status-dot" id="connection-status"></span>
-        <span id="connection-text">Не подключено</span>
-    </div>
-    <div class="status-item">
-        <i class="fas fa-server"></i>
-        <span id="device-name">Нет устройства</span>
-    </div>
-    <div class="status-item">
-        <i class="fas fa-sitemap"></i>
-        <span id="queue-stats">Очередей: 0</span>
-    </div>
-    <div class="status-item">
-        <span class="status-dot" id="netbox-status"></span>
-        <span id="netbox-status-text">NetBox: не настроен</span>
-    </div>
-    <div class="status-item">
-        <button class="btn btn-primary" onclick="loadDevices()" style="padding: 6px 12px; font-size: 13px;">
-            <i class="fas fa-sync-alt"></i> Обновить
-        </button>
-    </div>
-    <div class="status-item">
-        <button class="btn btn-danger" onclick="disconnectDevice()" 
-                id="disconnect-btn" style="display: none !important; padding: 6px 12px; font-size: 13px;">
-            <i class="fas fa-unlink"></i> Отключиться
-        </button>
-    </div>
-</div>
-        </header>
-        
-        <!-- ОСНОВНОЙ КОНТЕНТ -->
-        <div class="main-layout">
-            <!-- БОКОВАЯ ПАНЕЛЬ -->
-            <div class="sidebar">
-
-    <!-- РАЗДЕЛ: УСТРОЙСТВА -->
-    <div class="device-section">
-        <h2>
-            <i class="fas fa-server"></i> Устройства
-            <button class="btn btn-secondary" onclick="showNetBoxConfig()"
-                    style="margin-left: auto; padding: 4px 8px; font-size: 12px;"
-                    title="Настройки NetBox">
-                <i class="fas fa-cog"></i>
-            </button>
-        </h2>
-
-        <!-- ПОЛЕ ПОИСКА УСТРОЙСТВ -->
-        <div class="device-search-container">
-            <i class="fas fa-search device-search-icon"></i>
-            <input type="text"
-                   id="device-search"
-                   class="device-search-input"
-                   placeholder="Быстрый поиск устройства..."
-                   oninput="searchDevices(this.value)"
-                   autocomplete="off">
-            <button class="device-search-clear" onclick="clearDeviceSearch()" id="search-clear-btn" style="display: none;">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-
-        <div class="device-list-container">
-            <!-- Заголовок с количеством -->
-            <div class="device-list-header">
-                <span>Список устройств</span>
-                <span class="device-count" id="device-count">0</span>
-            </div>
-            
-            <!-- Прокручиваемая область -->
-            <div class="device-list-scroll">
-                <!-- Список устройств -->
-                <ul class="device-list" id="device-list">
-                    <li class="device-item">
-                        <div class="device-card">
-                            <div class="device-name" style="text-align: center;">
-                                <i class="fas fa-spinner fa-spin"></i> Загрузка...
-                            </div>
-                        </div>
-                    </li>
-                </ul>
-            </div>
-        </div>
-        
-        <!-- Кнопка обновления -->
-        <button class="btn btn-primary w-full" onclick="loadDevices()" 
-                style="margin-top: 10px; padding: 8px;">
-            <i class="fas fa-sync-alt"></i> Обновить список
-        </button>
-    </div>
-
-                <div class="section">
-                    <h2><i class="fas fa-cog"></i> Настройки</h2>
-                    <div class="form-group">
-                        <label class="checkbox-group">
-                            <input type="checkbox" id="auto-save-password">
-                            <span>Сохранять пароли</span>
-                        </label>
-                    </div>
-                    <div class="form-group">
-                        <label>Имя пользователя по умолчанию</label>
-                        <input type="text" id="default-username" value="admin">
-                    </div>
-                    <button class="btn btn-success w-full" onclick="saveSettings()">
-                        <i class="fas fa-save"></i> Сохранить настройки
-                    </button>
+            <div class="status-bar">
+                <div class="status-item">
+                    <span class="status-dot" :class="{ connected: store.connected, connecting: store.connecting }"></span>
+                    <span>{{ store.connecting ? 'Подключение...' : (store.connected ? 'Подключено' : 'Не подключено') }}</span>
                 </div>
-            </div>
-
-            <!-- ОСНОВНАЯ ОБЛАСТЬ -->
-            <div class="content">
-                <!-- ВКЛАДКИ -->
-                <div class="tab-container">
-                    <div class="tab active" onclick="switchTab('employee')">
-                        <i class="fas fa-user-plus"></i> Добавить сотрудника
-                    </div>
-                    <div class="tab" onclick="switchTab('queues')">
-                        <i class="fas fa-sitemap"></i> Дерево очередей
-                    </div>
-                    <div class="tab" onclick="switchTab('mac-replace')">
-                        <i class="fas fa-exchange-alt"></i> Замена MAC
-                    </div>
-                    <div class="tab" onclick="switchTab('tools')">
-                        <i class="fas fa-tools"></i> Инструменты
-                    </div>
-                    <div class="tab" onclick="switchTab('visualization')">
-                        <i class="fas fa-route"></i> Маршрут
-                    </div>
+                <div class="status-item">
+                    <i class="fas fa-server"></i>
+                    <span>{{ deviceTitle }}</span>
                 </div>
-
-<!-- ВКЛАДКА: ДОБАВЛЕНИЕ СОТРУДНИКА -->
-<div id="employee-tab" class="tab-content active">
-    <div class="section">
-        <h2><i class="fas fa-user-plus"></i> Добавить сотрудника</h2>
-        
-        <div class="form-group">
-            <label>ФИО *</label>
-            <input type="text" id="full-name" placeholder="Иванов Иван Иванович">
-        </div>
-        
-        <div class="form-group">
-            <label>Должность *</label>
-            <input type="text" id="position" placeholder="Инженер">
-        </div>
-        
-<div class="form-group">
-    <label>IP адрес *</label>
-    <div class="flex gap-10">
-        <input type="text" id="ip-address" placeholder="192.168.1.100" class="flex-1">
-        <button class="btn btn-info" onclick="showFreeIPs()" type="button">
-            <i class="fas fa-list"></i> Выбрать свободный IP
-        </button>
-    </div>
-</div>
-        
-        <div class="form-group">
-            <label>MAC адрес</label>
-            <input type="text" id="mac-address" placeholder="00:11:22:33:44:55">
-        </div>
-        
-        <div class="form-group">
-            <label class="checkbox-group">
-                <input type="checkbox" id="internet-access">
-                <span>Доступ в интернет</span>
-            </label>
-        </div>
-        
-
-<div class="form-group">
-    <label>Очереди (опционально)</label>
-    <div class="help-text" style="font-size: 12px; color: #7f8c8d; margin-bottom: 8px;">
-        <i class="fas fa-info-circle"></i> Если не выбрать очередь, сотрудник будет работать без ограничений очередей
-    </div>
-    <div class="flex gap-10 align-start">
-        <div class="queue-select-container flex-1">
-            <select id="queue-select" multiple size="8" class="queue-select-multiple">
-                <option value="">-- Очереди не требуются, но доступны для выбора --</option>
-            </select>
-            <div class="queue-select-info">
-                <small>Удерживайте Ctrl/Cmd для выбора нескольких очередей</small>
-                <div id="selected-queues-count">Выбрано: 0</div>
-            </div>
-        </div>
-        <div class="queue-controls">
-            <button class="btn btn-warning" onclick="findQueues()">
-                <i class="fas fa-search"></i> Найти подходящие очереди
-            </button>
-            <button class="btn btn-secondary mt-10" onclick="clearQueueSelection()">
-                <i class="fas fa-times"></i> Очистить выбор
-            </button>
-            <button class="btn btn-info mt-10" onclick="showQueuePreview()">
-                <i class="fas fa-eye"></i> Показать выбранные
-            </button>
-        </div>
-    </div>
-</div>
-        
-        <div style="display: flex; gap: 10px;">
-            <button class="btn btn-success flex-1" onclick="addEmployee()">
-                <i class="fas fa-check"></i> Добавить сотрудника
-            </button>
-            <button class="btn btn-secondary flex-1" onclick="resetEmployeeForm()">
-                <i class="fas fa-times"></i> Очистить форму
-            </button>
-        </div>
-        
-        <div id="employee-results" class="results"></div>
-    </div>
-</div>
-
-<!-- ВКЛАДКА: ДЕРЕВО ОЧЕРЕДЕЙ -->
-<div id="queues-tab" class="tab-content">
-    <div class="section">
-        <h2><i class="fas fa-sitemap"></i> Дерево очередей</h2>
-        
-        <!-- Панель управления -->
-        <div class="tree-controls">
-            <button class="tree-control-btn" onclick="loadQueueTree()">
-                <i class="fas fa-sync-alt"></i> Обновить
-            </button>
-            <button class="tree-control-btn" onclick="expandAllQueues()">
-                <i class="fas fa-expand-alt"></i> Развернуть все
-            </button>
-            <button class="tree-control-btn" onclick="collapseAllQueues()">
-                <i class="fas fa-compress-alt"></i> Свернуть все
-            </button>
-            <input type="text" class="tree-filter" placeholder="Фильтр по имени очереди..." 
-                   oninput="filterQueueTree(this.value)">
-        </div>
-        
-        <!-- Заголовок дерева -->
-        <div class="queue-tree-header">
-            <div class="queue-tree-title">
-                <i class="fas fa-project-diagram"></i> Иерархия очередей
-            </div>
-            <div class="queue-tree-stats" id="queue-tree-stats">
-                Загружаем статистику...
-            </div>
-        </div>
-        
-        <!-- Контейнер для дерева -->
-        <div id="queue-tree-container" class="queue-tree-container">
-            <div id="queue-tree-v2" class="queue-tree-v2">
-                <!-- Дерево будет отрисовано здесь -->
-                <div class="queue-tree-empty">
+                <div class="status-item">
                     <i class="fas fa-sitemap"></i>
-                    <p>Подключитесь к устройству для загрузки дерева очередей</p>
-                    <button class="btn btn-primary mt-10" onclick="loadQueueTree()">
-                        <i class="fas fa-sync-alt"></i> Загрузить дерево
+                    <span>Очередей: {{ queueCount }}</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-dot" :class="{ connected: store.netboxConfigured }"></span>
+                    <span>{{ netboxLabel }}</span>
+                </div>
+                <div class="status-item">
+                    <button class="btn btn-primary" @click="refreshDevices" style="padding: 6px 12px; font-size: 13px;">
+                        <i class="fas fa-sync-alt"></i> Обновить
+                    </button>
+                </div>
+                <div class="status-item">
+                    <button v-if="store.connected" class="btn btn-danger" @click="doDisconnect"
+                            style="padding: 6px 12px; font-size: 13px;">
+                        <i class="fas fa-unlink"></i> Отключиться
+                    </button>
+                </div>
+            </div>
+        </header>
+    </template>
+
+    <!-- ====== DEVICE SIDEBAR ====== -->
+    <template id="device-sidebar">
+        <div class="sidebar">
+            <div class="device-section">
+                <h2>
+                    <i class="fas fa-server"></i> Устройства
+                    <button class="btn btn-secondary" @click="openNetBoxConfig"
+                            style="margin-left: auto; padding: 4px 8px; font-size: 12px;" title="Настройки NetBox">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </h2>
+                <div class="device-search-container">
+                    <i class="fas fa-search device-search-icon"></i>
+                    <input type="text" v-model="searchQuery" class="device-search-input"
+                           placeholder="Быстрый поиск устройства..." autocomplete="off">
+                    <button v-if="searchQuery" class="device-search-clear" @click="searchQuery = ''">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="device-list-container">
+                    <div class="device-list-header">
+                        <span>Список устройств</span>
+                        <span class="device-count">{{ filteredDevices.length }}</span>
+                    </div>
+                    <div class="device-list-scroll">
+                        <ul class="device-list">
+                            <li v-if="store.devicesLoading" class="device-item">
+                                <div class="device-card">
+                                    <div class="device-name" style="text-align:center;">
+                                        <i class="fas fa-spinner fa-spin"></i> Загрузка...
+                                    </div>
+                                </div>
+                            </li>
+                            <li v-else-if="filteredDevices.length === 0" class="device-item">
+                                <div class="device-card">
+                                    <div class="device-name" style="text-align:center;">Нет устройств</div>
+                                </div>
+                            </li>
+                            <li v-for="d in filteredDevices" :key="d.name" class="device-item">
+                                <div class="device-card" :class="{ connected: store.currentDevice === d.name && store.connected }">
+                                    <div class="device-name">{{ d.name }}</div>
+                                    <div class="device-ip">{{ d.ip }}</div>
+                                    <div class="device-type" v-if="d.device_type">{{ d.device_type }}</div>
+                                    <div class="device-actions">
+                                        <button v-if="store.currentDevice === d.name && store.connected"
+                                                @click="doDisconnect" class="btn btn-danger btn-sm">
+                                            <i class="fas fa-unlink"></i>
+                                        </button>
+                                        <button v-else @click="doConnect(d.name)" class="btn btn-primary btn-sm"
+                                                :disabled="store.connecting">
+                                            <i v-if="store.connecting && store.connectingDevice === d.name" class="fas fa-spinner fa-spin"></i>
+                                            <i v-else class="fas fa-plug"></i>
+                                            {{ store.connecting && store.connectingDevice === d.name ? 'Подключение...' : 'Подключиться' }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <button class="btn btn-primary w-full" @click="loadDevices" style="margin-top: 10px; padding: 8px;">
+                    <i class="fas fa-sync-alt"></i> Обновить список
+                </button>
+            </div>
+            <div class="section">
+                <h2><i class="fas fa-cog"></i> Настройки</h2>
+                <div class="form-group">
+                    <label class="checkbox-group">
+                        <input type="checkbox" v-model="store.autoSavePassword">
+                        <span>Сохранять пароли</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>Имя пользователя по умолчанию</label>
+                    <input type="text" v-model="store.defaultUsername">
+                </div>
+                <button class="btn btn-success w-full" @click="doSaveSettings">
+                    <i class="fas fa-save"></i> Сохранить настройки
+                </button>
+            </div>
+        </div>
+    </template>
+
+    <!-- ====== TAB BAR ====== -->
+    <template id="tab-bar">
+        <div class="tab-container">
+            <div v-for="t in tabs" :key="t.key" class="tab"
+                 :class="{ active: store.activeTab === t.key }"
+                 @click="store.activeTab = t.key">
+                <i :class="'fas ' + t.icon"></i> {{ t.label }}
+            </div>
+        </div>
+    </template>
+
+    <!-- ====== SUBSCRIBER TAB (placeholder) ====== -->
+    <template id="subscriber-tab">
+        <div class="tab-content active">
+            <div class="section">
+                <h2><i class="fas fa-users"></i> Абоненты</h2>
+                <div v-if="!store.connected" class="empty-state" style="padding: 60px 0;">
+                    <i class="fas fa-plug" style="font-size: 48px; color: var(--text-muted);"></i>
+                    <p style="margin-top: 16px; color: var(--text-secondary);">Подключитесь к устройству для загрузки абонентов</p>
+                </div>
+                <div v-else style="padding: 40px 0; text-align: center; color: var(--text-secondary);">
+                    <i class="fas fa-tools" style="font-size: 36px; display: block; margin-bottom: 12px;"></i>
+                    Таблица абонентов будет здесь (Фаза 4)
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- ====== QUEUE TAB (placeholder) ====== -->
+    <template id="queue-tab">
+        <div class="tab-content active">
+            <div class="section">
+                <h2><i class="fas fa-sitemap"></i> Очереди</h2>
+                <div v-if="!store.connected" class="empty-state" style="padding: 60px 0;">
+                    <i class="fas fa-plug" style="font-size: 48px; color: var(--text-muted);"></i>
+                    <p style="margin-top: 16px; color: var(--text-secondary);">Подключитесь к устройству для загрузки очередей</p>
+                </div>
+                <div v-else class="tree-controls" style="margin-bottom: 16px;">
+                    <button class="tree-control-btn" @click="loadQueueTree">
+                        <i class="fas fa-sync-alt"></i> Обновить
+                    </button>
+                </div>
+                <div v-if="store.connected && store.queueTree.length > 0">
+                    <div class="queue-tree-header">
+                        <div class="queue-tree-title">
+                            <i class="fas fa-project-diagram"></i> Иерархия очередей
+                        </div>
+                        <div class="queue-tree-stats">
+                            Всего: {{ store.queueStats?.total_queues || 0 }} |
+                            Активно: {{ store.queueStats?.enabled_queues || 0 }}
+                        </div>
+                    </div>
+                    <div style="padding: 40px 0; text-align: center; color: var(--text-secondary);">
+                        Дерево очередей будет здесь (Фаза 4)
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- ====== LOADING OVERLAY ====== -->
+    <template id="loading-overlay">
+        <div v-if="store.loading" class="loading-overlay">
+            <div class="loading-spinner">
+                <div class="spinner-circle"></div>
+                <div class="loading-text">{{ store.loadingMessage || 'Загрузка...' }}</div>
+            </div>
+        </div>
+    </template>
+
+    <!-- ====== ERROR MODAL ====== -->
+    <template id="error-modal">
+        <div v-if="store.error" class="error-modal">
+            <div class="error-modal-content">
+                <div class="error-modal-header">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>Ошибка</span>
+                </div>
+                <div class="error-modal-body">{{ store.error }}</div>
+                <div class="error-modal-footer">
+                    <button class="btn btn-danger" @click="close">
+                        <i class="fas fa-times"></i> Закрыть
                     </button>
                 </div>
             </div>
         </div>
-    </div>
-</div>
+    </template>
 
-                <!-- ВКЛАДКА: ИНСТРУМЕНТЫ -->
-                <div id="tools-tab" class="tab-content">
-                    <div class="section">
-                        <h2><i class="fas fa-tools"></i> Инструменты</h2>
-                        
-                        <div class="form-group">
-                            <label>IP для проверки</label>
-                            <div class="flex gap-10">
-                                <input type="text" id="check-ip" placeholder="192.168.1.100" class="flex-1">
-                                <button class="btn btn-primary" onclick="checkIP()">
-                                    <i class="fas fa-search"></i> Проверить IP
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <div id="tools-results" class="results"></div>
-                    </div>
+    <!-- ====== NETBOX CONFIG MODAL ====== -->
+    <template id="netbox-config-modal">
+        <div v-if="store.showNetBoxModal" class="modal-overlay" @click.self="close">
+            <div class="modal-content" style="max-width: 500px;">
+                <h2><i class="fas fa-server"></i> Настройки NetBox</h2>
+                <div class="form-group">
+                    <label>URL NetBox *</label>
+                    <input type="text" v-model="url" placeholder="http://localhost:8000" class="form-control">
                 </div>
-
-                <!-- ВКЛАДКА: ЗАМЕНА MAC -->
-                <div id="mac-replace-tab" class="tab-content">
-                    <div class="section mac-replace-section">
-                        <h2><i class="fas fa-exchange-alt"></i> Замена MAC адреса</h2>
-                        
-                        <!-- Панель инструментов -->
-                        <div class="subscribers-toolbar">
-                            <div class="subscribers-search">
-                                <i class="fas fa-search"></i>
-                                <input type="text" 
-                                       id="subscriber-search" 
-                                       placeholder="Поиск абонента (IP или ФИО)..." 
-                                       oninput="filterSubscribers(this.value)">
-                            </div>
-                            <div class="subscribers-filters">
-                                <select id="mac-pool-filter" onchange="filterSubscribersByPool(this.value)">
-                                    <option value="">Все пулы</option>
-                                </select>
-                                <button class="btn btn-secondary" onclick="refreshSubscribers()" title="Обновить список">
-                                    <i class="fas fa-sync-alt"></i>
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <!-- Статистика -->
-                        <div class="subscribers-stats" id="subscribers-stats">
-                            <span class="stat-item">
-                                <i class="fas fa-users"></i> 
-                                Абонентов: <strong id="subscribers-count">0</strong>
-                            </span>
-                            <span class="stat-item">
-                                <i class="fas fa-filter"></i> 
-                                Показано: <strong id="subscribers-shown">0</strong>
-                            </span>
-                        </div>
-                        
-                        <!-- Таблица абонентов -->
-                        <div class="subscribers-table-container">
-                            <table class="subscribers-table" id="subscribers-table">
-                                <thead>
-                                    <tr>
-                                        <th class="col-inet" title="Доступ в интернет">🌐</th>
-                                        <th class="col-ip">IP адрес</th>
-                                        <th class="col-mac">MAC адрес</th>
-                                        <th class="col-comment">Комментарий / ФИО</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="subscribers-tbody">
-                                    <tr class="empty-row">
-                                        <td colspan="4">
-                                            <div class="empty-state">
-                                                <i class="fas fa-plug"></i>
-                                                <p>Подключитесь к устройству для загрузки абонентов</p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        
-                        <!-- Панель действий (появляется при выборе) -->
-                        <div class="action-panel" id="subscriber-action-panel" style="display: none;">
-                            <div class="action-panel-header">
-                                <div class="selected-info">
-                                    <span class="selected-label">📌 Выбрано:</span>
-                                    <span class="selected-ip" id="selected-ip">-</span>
-                                    <span class="selected-mac" id="selected-mac">-</span>
-                                    <span class="selected-comment" id="selected-comment">-</span>
-                                </div>
-                                <button class="btn btn-secondary btn-sm" onclick="clearSubscriberSelection()">
-                                    <i class="fas fa-times"></i> Отменить
-                                </button>
-                            </div>
-                            
-                            <div class="action-panel-body">
-                                <div class="action-buttons">
-                                    <button class="action-btn action-btn-primary" onclick="showMacReplaceDialog()">
-                                        <i class="fas fa-exchange-alt"></i>
-                                        <span>Замена MAC</span>
-                                    </button>
-                                    <button class="action-btn action-btn-secondary" onclick="editSubscriberComment()" disabled title="Скоро">
-                                        <i class="fas fa-edit"></i>
-                                        <span>Редактировать</span>
-                                    </button>
-                                    <button class="action-btn action-btn-secondary" onclick="copySubscriberData()">
-                                        <i class="fas fa-copy"></i>
-                                        <span>Копировать</span>
-                                    </button>
-                                    <div class="action-dropdown">
-                                        <button class="action-btn action-btn-secondary dropdown-toggle" onclick="toggleActionDropdown()">
-                                            <i class="fas fa-ellipsis-h"></i>
-                                            <span>Ещё</span>
-                                        </button>
-                                        <div class="dropdown-menu" id="action-dropdown-menu">
-                                            <a href="#" onclick="deleteSubscriberLease(event)" title="Удалить lease из DHCP">
-                                                <i class="fas fa-trash-alt"></i> Удалить lease
-                                            </a>
-                                            <a href="#" onclick="blockSubscriber(event)" title="Заблокировать абонента" disabled>
-                                                <i class="fas fa-ban"></i> Заблокировать
-                                            </a>
-                                            <a href="#" onclick="showSubscriberStats(event)" title="Показать статистику" disabled>
-                                                <i class="fas fa-chart-bar"></i> Статистика
-                                            </a>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Диалог замены MAC -->
-                            <div class="mac-replace-dialog" id="mac-replace-dialog" style="display: none;">
-                                <div class="dialog-header">
-                                    <i class="fas fa-exchange-alt"></i>
-                                    <span>Замена MAC адреса</span>
-                                </div>
-                                <div class="dialog-body">
-                                    <!-- Текущие данные -->
-                                    <div class="dialog-current-info" style="background: rgba(87, 148, 242, 0.1); padding: 10px; border-radius: 6px; margin-bottom: 16px;">
-                                        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                                            <div>
-                                                <span style="color: #7f8c8d; font-size: 12px;">Текущий IP:</span>
-                                                <strong id="dialog-old-ip" style="margin-left: 6px;">-</strong>
-                                            </div>
-                                            <div>
-                                                <span style="color: #7f8c8d; font-size: 12px;">Текущий MAC:</span>
-                                                <strong id="dialog-old-mac" style="margin-left: 6px;">-</strong>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Переключатель режимов -->
-                                    <div class="mode-switcher" style="margin-bottom: 16px;">
-                                        <label class="mode-option" id="mode-ip-label">
-                                            <input type="radio" name="replace-mode" value="by-ip" checked onchange="switchReplaceMode('by-ip')">
-                                            <span class="mode-label">
-                                                <i class="fas fa-network-wired"></i> По IP устройства
-                                            </span>
-                                        </label>
-                                        <label class="mode-option" id="mode-mac-label">
-                                            <input type="radio" name="replace-mode" value="by-mac" onchange="switchReplaceMode('by-mac')">
-                                            <span class="mode-label">
-                                                <i class="fas fa-keyboard"></i> Ввести MAC вручную
-                                            </span>
-                                        </label>
-                                    </div>
-                                    
-                                    <!-- Режим 1: По IP устройства -->
-                                    <div id="mode-by-ip" class="mode-content">
-                                        <div class="dialog-field">
-                                            <label>Новый IP адрес (устройство с новым MAC):</label>
-                                            <div class="dialog-input-wrapper" style="display: flex; gap: 8px;">
-                                                <input type="text" id="mac-target-input" placeholder="192.168.1.100" style="flex: 1;">
-                                                <select id="mac-target-select" style="width: auto; min-width: 120px;">
-                                                    <option value="">Из списка</option>
-                                                </select>
-                                            </div>
-                                            <div class="help-text" style="margin-top: 6px;">
-                                                <i class="fas fa-info-circle"></i> MAC и ClientID будут взяты с нового устройства
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Режим 2: Ввести MAC вручную -->
-                                    <div id="mode-by-mac" class="mode-content" style="display: none;">
-                                        <div class="dialog-field">
-                                            <label>Новый MAC адрес:</label>
-                                            <input type="text" id="new-mac-input" placeholder="AA:BB:CC:DD:EE:FF" 
-                                                   oninput="updateClientIdFromMac(this.value)"
-                                                   style="text-transform: uppercase;">
-                                        </div>
-                                        <div class="dialog-field" style="margin-top: 12px;">
-                                            <label>Client ID:</label>
-                                            <div style="display: flex; gap: 8px; align-items: center;">
-                                                <input type="text" id="new-clientid-input" placeholder="1:aa:bb:cc:dd:ee:ff" style="flex: 1;">
-                                                <button type="button" class="btn btn-secondary btn-sm" onclick="autoFillClientId()" title="Автозаполнение">
-                                                    <i class="fas fa-magic"></i>
-                                                </button>
-                                            </div>
-                                            <div class="help-text" style="margin-top: 6px;">
-                                                <i class="fas fa-info-circle"></i> Формат: <code>1:</code> + MAC в нижнем регистре (автозаполнение)
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="dialog-result" id="mac-replace-results"></div>
-                                </div>
-                                <div class="dialog-footer">
-                                    <button class="btn btn-secondary" onclick="hideMacReplaceDialog()">
-                                        <i class="fas fa-times"></i> Отмена
-                                    </button>
-                                    <button class="btn btn-warning" onclick="executeMacReplace()">
-                                        <i class="fas fa-exchange-alt"></i> Выполнить замену
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                <div class="form-group">
+                    <label>API Token *</label>
+                    <input type="password" v-model="token" placeholder="Ваш токен NetBox" class="form-control">
                 </div>
-
-                <!-- ВКЛАДКА: МАРШРУТ ТРАФИКА -->
-                <div id="visualization-tab" class="tab-content">
-                    <div class="section">
-                        <h2><i class="fas fa-route"></i> Маршрут трафика</h2>
-                        <div class="traffic-input-row">
-                            <div class="traffic-input-group">
-                                <label><i class="fas fa-map-marker-alt"></i> IP адрес:</label>
-                                <input type="text" id="traffic-ip" placeholder="192.168.1.100" class="traffic-input" onkeyup="if(event.key==='Enter')analyzeTrafficPath()">
-                            </div>
-                            <button class="btn btn-primary" onclick="analyzeTrafficPath()"><i class="fas fa-search"></i> Показать маршрут</button>
-                        </div>
-                        <div id="traffic-route-container" class="traffic-route-container">
-                            <div class="traffic-route-placeholder"><i class="fas fa-route"></i><p>Введите IP адрес для отображения маршрута трафика</p></div>
-                        </div>
-                        <div id="queue-selector-popover" class="queue-selector-popover" style="display: none;">
-                            <div class="popover-header"><span>Выберите очередь</span><button class="popover-close" onclick="closeQueuePopover()"><i class="fas fa-times"></i></button></div>
-                            <div id="queue-popover-list" class="popover-list"></div>
-                        </div>
-                    </div>
+                <div class="form-group">
+                    <label class="checkbox-group">
+                        <input type="checkbox" v-model="verifySsl">
+                        <span>Проверять SSL сертификат</span>
+                    </label>
+                </div>
+                <div class="flex gap-10" style="margin-top: 25px;">
+                    <button class="btn btn-info flex-1" @click="doTest">
+                        <i class="fas fa-plug"></i> Проверить
+                    </button>
+                    <button class="btn btn-success flex-1" @click="doSave">
+                        <i class="fas fa-save"></i> Сохранить
+                    </button>
+                    <button class="btn btn-secondary flex-1" @click="close">
+                        <i class="fas fa-times"></i> Отмена
+                    </button>
                 </div>
             </div>
         </div>
-    </div>
+    </template>
 
-    <!-- МОДАЛЬНОЕ ОКНО ДЛЯ ДОБАВЛЕНИЯ УСТРОЙСТВА -->
-    <div id="device-modal">
-        <div class="modal-content">
-            <h2><i class="fas fa-plus"></i> Добавить устройство</h2>
-            
-            <div class="form-group">
-                <label>Имя устройства *</label>
-                <input type="text" id="device-name-input" placeholder="Роутер офиса">
-            </div>
-            
-            <div class="form-group">
-                <label>IP адрес *</label>
-                <input type="text" id="device-ip" placeholder="192.168.88.1">
-            </div>
-            
-            <div class="form-group">
-                <label>Порт</label>
-                <input type="number" id="device-port" value="8728">
-            </div>
-            
-            <div class="form-group">
-                <label>Имя пользователя</label>
-                <input type="text" id="device-username" value="admin">
-            </div>
-            
-            <div class="form-group">
-                <label>Пароль</label>
-                <input type="password" id="device-password">
-            </div>
-            
-            <div class="form-group">
-                <label>Описание</label>
-                <textarea id="device-description" rows="3" placeholder="Дополнительная информация о устройстве"></textarea>
-            </div>
-            
-            <div class="form-group">
-                <label class="checkbox-group">
-                    <input type="checkbox" id="save-password">
-                    <span>Сохранить пароль</span>
-                </label>
-            </div>
-            
-            <div class="flex gap-10">
-                <button class="btn btn-success flex-1" onclick="saveDevice()">
-                    <i class="fas fa-save"></i> Сохранить
-                </button>
-                <button class="btn btn-danger flex-1" onclick="hideAddDeviceForm()">
-                    <i class="fas fa-times"></i> Отмена
-                </button>
+    <!-- ====== IP SELECTOR MODAL (placeholder) ====== -->
+    <template id="ip-selector-modal">
+        <div v-if="store.showIpModal" class="modal-overlay" @click.self="store.showIpModal = false">
+            <div class="ip-modal-content">
+                <div class="ip-modal-header">
+                    <h3><i class="fas fa-search"></i> Выберите свободный IP адрес</h3>
+                </div>
+                <div class="ip-modal-body">
+                    <p style="color: var(--text-secondary); text-align: center; padding: 40px;">
+                        Выбор IP будет реализован в Фазе 4
+                    </p>
+                </div>
+                <div class="ip-modal-footer">
+                    <button class="btn btn-secondary" @click="store.showIpModal = false">
+                        <i class="fas fa-times"></i> Отмена
+                    </button>
+                </div>
             </div>
         </div>
-    </div>
+    </template>
 
-<!-- Модальное окно выбора IP в стиле Grafana -->
-<div id="ip-selector-modal">
-    <div class="ip-modal-content">
-        <div class="ip-modal-header">
-            <h3>
-                <i class="fas fa-search"></i> Выберите свободный IP адрес
-            </h3>
-        </div>
-        
-        <div class="ip-modal-body">
-            <div id="free-ips-loading">
-                <i class="fas fa-spinner fa-spin"></i>
-                <p>Загружаем список свободных IP адресов...</p>
+    <!-- ====== CREDENTIALS MODAL ====== -->
+    <template id="credentials-modal">
+        <div v-if="store.showCredentialsModal" class="modal-overlay" style="z-index: 10001;">
+            <div class="modal-content" style="max-width: 400px;">
+                <h2><i class="fas fa-key"></i> Учётные данные</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                    Устройство: <strong>{{ store.credentialsDevice }}</strong>
+                </p>
+                <div class="form-group">
+                    <label>Имя пользователя</label>
+                    <input type="text" v-model="username" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Пароль</label>
+                    <input type="password" v-model="password" class="form-control" @keyup.enter="submit">
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-group">
+                        <input type="checkbox" v-model="savePassword">
+                        <span>Сохранить пароль</span>
+                    </label>
+                </div>
+                <div class="flex gap-10" style="margin-top: 20px;">
+                    <button class="btn btn-success flex-1" @click="submit">
+                        <i class="fas fa-check"></i> Подключиться
+                    </button>
+                    <button class="btn btn-secondary flex-1" @click="cancel">
+                        <i class="fas fa-times"></i> Отмена
+                    </button>
+                </div>
             </div>
-            
-            <div id="free-ips-content">
-                <!-- Контент будет загружен здесь -->
-            </div>
-            
-            <div id="free-ips-error">
-                <i class="fas fa-exclamation-triangle"></i>
-                <p id="free-ips-error-text"></p>
-            </div>
         </div>
-        
-        <div class="ip-modal-footer">
-            <button class="btn btn-secondary" onclick="cancelIPSelection()">
-                <i class="fas fa-times"></i> Отмена
-            </button>
-            <button class="btn btn-primary" onclick="saveSelectedIP()" id="use-ip-btn">
-                <i class="fas fa-check-circle"></i> Сохранить
-            </button>
-        </div>
-    </div>
-</div>
+    </template>
 
-<!-- Модальное окно настроек NetBox -->
-<div id="netbox-config-modal">
-    <div class="modal-content" style="max-width: 500px;">
-        <h2><i class="fas fa-server"></i> Настройки NetBox</h2>
-        
-        <div class="form-group">
-            <label>URL NetBox *</label>
-            <input type="text" id="netbox-url" placeholder="http://localhost:8000" class="form-control">
-        </div>
-        
-        <div class="form-group">
-            <label>API Token *</label>
-            <input type="password" id="netbox-token" placeholder="Ваш токен NetBox" class="form-control">
-        </div>
-        
-        <div class="form-group">
-            <label class="checkbox-group">
-                <input type="checkbox" id="netbox-verify-ssl" checked>
-                <span>Проверять SSL сертификат</span>
-            </label>
-        </div>
-        
-        <div class="flex gap-10" style="margin-top: 25px;">
-            <button class="btn btn-info flex-1" onclick="testNetBoxConnection()">
-                <i class="fas fa-plug"></i> Проверить
-            </button>
-            <button class="btn btn-success flex-1" onclick="saveNetBoxConfig()">
-                <i class="fas fa-save"></i> Сохранить
-            </button>
-            <button class="btn btn-secondary flex-1" onclick="hideNetBoxConfig()">
-                <i class="fas fa-times"></i> Отмена
-            </button>
-        </div>
-    </div>
-</div>
-
-    </div>
-</div>
-    <!-- JavaScript -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="/static/js/store.js"></script>
+    <script src="/static/js/api.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>
