@@ -411,12 +411,13 @@ app.component('delete-confirm-modal', {
 
         async function executeDelete() {
             if (!deleteSub.value) return;
+            const ip = deleteSub.value.ip;
             deleteRunning.value = true;
             try {
-                const result = await deleteSubscriber(deleteSub.value.ip);
+                const result = await deleteSubscriber(ip);
                 if (result.success) {
                     closeModal();
-                    store.subscribers = store.subscribers.filter(s => s.ip !== deleteSub.value.ip);
+                    store.subscribers = store.subscribers.filter(s => s.ip !== ip);
                     await refreshData();
                     store.error = result.error || result.message;
                 }

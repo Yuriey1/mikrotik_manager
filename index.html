@@ -328,8 +328,8 @@
                 </div>
                 <div class="modal-body">
                     <div class="dialog-current-info" style="background: rgba(87, 148, 242, 0.1); padding: 12px; border-radius: 6px; margin-bottom: 16px;">
-                        <div><span style="color: var(--text-muted);">Текущий IP:</span> <strong>{{ macReplaceSub?.ip }}</strong></div>
-                        <div><span style="color: var(--text-muted);">Текущий MAC:</span> <strong>{{ macReplaceSub?.mac || '—' }}</strong></div>
+                        <div><span style="color: var(--text-muted);">Текущий IP:</span> <strong>{{ macReplaceSub && macReplaceSub.ip }}</strong></div>
+                        <div><span style="color: var(--text-muted);">Текущий MAC:</span> <strong>{{ (macReplaceSub && macReplaceSub.mac) || '—' }}</strong></div>
                     </div>
 
                     <div class="mode-switcher" style="margin-bottom: 16px; display: flex; gap: 16px;">
@@ -381,7 +381,7 @@
                 </div>
                 <div class="modal-body">
                     <p style="color: var(--text-secondary);">
-                        Абонент <strong>{{ deleteSub?.ip }}</strong> будет удалён из:
+                        Абонент <strong>{{ deleteSub && deleteSub.ip }}</strong> будет удалён из:
                     </p>
                     <ul style="color: var(--text-secondary); margin: 12px 0; padding-left: 20px;">
                         <li>DHCP лизингов</li>
