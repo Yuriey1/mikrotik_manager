@@ -206,13 +206,10 @@ function buildTrafficChains(channels, queuesData, ip) {
     if (!channels?.channels?.length) return null;
 
     const allFlat = [];
-    function flatten(nodes) {
-        for (const n of nodes) {
-            allFlat.push(n);
-            if (n.children && n.children.length) flatten(n.children);
-        }
+    const srcQueues = queuesData?.queues || [];
+    for (const n of srcQueues) {
+        allFlat.push(n);
     }
-    flatten(queuesData?.queues || []);
 
     const dstMap = {};
     const queueDstMap = new Map();
