@@ -231,10 +231,8 @@
                                 <td class="col-mac">{{ sub.mac || '—' }}</td>
                                 <td class="col-position">{{ parsePosition(sub.comment) }}</td>
                                 <td class="col-comment">{{ parseName(sub.comment) }}</td>
-                                <td class="col-actions">
-                                    <button class="btn btn-sm" @click.stop="menuSub = sub" style="padding: 2px 8px;">
-                                        <i class="fas fa-ellipsis-v"></i>
-                                    </button>
+                                <td class="col-actions" @click.stop="menuSub = sub" style="cursor:pointer; text-align:center;">
+                                    <i class="fas fa-ellipsis-v"></i>
                                 </td>
                             </tr>
                             <tr v-if="filteredSubscribers.length === 0 && store.subscribers.length > 0">
