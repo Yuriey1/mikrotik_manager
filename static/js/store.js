@@ -49,7 +49,7 @@ const store = Vue.reactive({
 
     autoSavePassword: false,
     defaultUsername: 'admin',
-};
+});
 
 store.menuEdit = function(sub) {
     store.floatingMenuSub = null;
