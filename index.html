@@ -64,12 +64,11 @@
                 </div>
 
                 <!-- Floating dropdown menu -->
-                <div v-if="menuSub" class="floating-menu"
-                     @click.stop>
-                    <a href="#" @click.prevent="editSubscriber(menuSub); menuSub = null"><i class="fas fa-edit"></i> Редактировать</a>
-                    <a href="#" @click.prevent="openMacReplace(menuSub); menuSub = null"><i class="fas fa-exchange-alt"></i> Заменить MAC</a>
-                    <a href="#" @click.prevent="copySubscriber(menuSub); menuSub = null"><i class="fas fa-copy"></i> Копировать</a>
-                    <a href="#" @click.prevent="confirmDelete(menuSub); menuSub = null"><i class="fas fa-trash-alt"></i> Удалить</a>
+                <div v-if="menuSub" class="floating-menu" @click.stop>
+                    <a href="#" @click.prevent="doEdit(menuSub)"><i class="fas fa-edit"></i> Редактировать</a>
+                    <a href="#" @click.prevent="doMacReplace(menuSub)"><i class="fas fa-exchange-alt"></i> Заменить MAC</a>
+                    <a href="#" @click.prevent="doCopy(menuSub)"><i class="fas fa-copy"></i> Копировать</a>
+                    <a href="#" @click.prevent="doDelete(menuSub)"><i class="fas fa-trash-alt"></i> Удалить</a>
                 </div>
             </div>
         </div>

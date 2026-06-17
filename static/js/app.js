@@ -209,14 +209,21 @@ app.component('subscriber-tab', {
             store.deleteSub = sub;
         }
 
-        Vue.onMounted(() => {
-            document.addEventListener('click', () => { menuSub.value = null; });
+        function doEdit(sub) { menuSub.value = null; editSubscriber(sub); }
+        function doMacReplace(sub) { menuSub.value = null; store.showMacReplaceModal = true; store.macReplaceSub = sub; }
+        function doCopy(sub) { menuSub.value = null; copySubscriber(sub); }
+        function doDelete(sub) { menuSub.value = null; confirmDelete(sub); }
+
+        onMounted(() => {
+            document.addEventListener('click', onDocClick);
         });
+        function onDocClick() { menuSub.value = null; }
 
         return { store, searchText, poolFilter, selectedIp, menuSub,
                  filteredSubscribers, parseName, parsePosition, hasInternet,
                  toggleNet, selectSubscriber, toggleMenu, filterByPool,
-                 openAddModal, editSubscriber, openMacReplace, copySubscriber, confirmDelete };
+                 openAddModal, editSubscriber, openMacReplace, copySubscriber, confirmDelete,
+                 doEdit, doMacReplace, doCopy, doDelete };
     },
 });
 
