@@ -105,8 +105,6 @@ app.component('subscriber-tab', {
         const searchText = Vue.ref('');
         const poolFilter = Vue.ref('');
         const selectedIp = Vue.ref(null);
-        const innerW = Vue.ref(window.innerWidth);
-        const innerH = Vue.ref(window.innerHeight);
 
         const filteredSubscribers = Vue.computed(() => {
             const q = searchText.value.toLowerCase().trim();
@@ -202,7 +200,7 @@ app.component('subscriber-tab', {
             store.deleteSub = sub;
         }
 
-        return { store, searchText, poolFilter, selectedIp, innerW, innerH,
+        return { store, searchText, poolFilter, selectedIp,
                  filteredSubscribers, parseName, parsePosition, hasInternet,
                  toggleNet, selectSubscriber, filterByPool,
                  openAddModal, editSubscriber, openMacReplace, copySubscriber, confirmDelete };
