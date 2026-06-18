@@ -74,17 +74,9 @@ app.component('device-sidebar', {
             await disconnectDevice();
         }
 
-        async function doSaveSettings() {
-            localStorage.setItem('mikrotik_settings', JSON.stringify({
-                auto_save_password: store.autoSavePassword,
-                default_username: store.defaultUsername,
-            }));
-            try { await saveSettings(); } catch (e) {}
-        }
-
         function openNetBoxConfig() { store.showNetBoxModal = true; }
 
-        return { store, searchQuery, filteredDevices, doConnect, doDisconnect, doSaveSettings, openNetBoxConfig };
+        return { store, searchQuery, filteredDevices, doConnect, doDisconnect, openNetBoxConfig };
     },
 });
 
