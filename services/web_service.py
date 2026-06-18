@@ -1207,6 +1207,12 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 print(f"\nℹ️  ШАГ 3: Очереди не указаны, сотрудник будет работать без ограничений очередей")
                 results['queues'] = []
 
+            if tree_builder and mikrotik_manager.connected:
+                try:
+                    tree_builder.build_tree()
+                except Exception:
+                    pass
+
             # 4. Firewall Address List (интернет доступ)
             print(f"\n🔧 ШАГ 4: Работа с Firewall...")
             if internet_access:
