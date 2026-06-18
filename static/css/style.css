@@ -257,13 +257,13 @@ h2 i {
 }
 
 .device-section {
-    margin-bottom: 25px;
+    margin-bottom: 20px;
 }
 
 .device-section h2 {
     color: var(--text-primary);
     font-size: 16px;
-    margin-bottom: 15px;
+    margin-bottom: 10px;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -535,13 +535,13 @@ textarea {
 }
 
 .device-item {
-    padding: 14px;
+    padding: 8px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
     cursor: pointer;
     transition: var(--transition);
-    margin-bottom: 8px;
+    margin-bottom: 4px;
 }
 
 .device-item:hover {
@@ -563,8 +563,8 @@ textarea {
 .device-name {
     font-weight: 600;
     color: var(--text-primary);
-    font-size: 14px;
-    margin-bottom: 4px;
+    font-size: 13px;
+    margin-bottom: 2px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -575,7 +575,7 @@ textarea {
 }
 
 .device-ip {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-muted);
     display: flex;
     align-items: center;
@@ -596,12 +596,21 @@ textarea {
 }
 
 .device-card {
-    padding: 12px;
+    padding: 6px;
 }
 
 .device-actions {
     text-align: center;
-    margin-top: 10px;
+    margin-top: 6px;
+}
+
+.device-type {
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 1px;
 }
 
 .connect-btn {
