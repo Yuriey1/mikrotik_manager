@@ -307,10 +307,22 @@ function buildTrafficChains(channels, queuesData, ip) {
         if (!queue) {
             const dstQueues = allFlat.filter(q => queueDstMap.get(q.name) === dst && !isPaid(q) && !isMarked(q));
             const nonParents = dstQueues.filter(q => !trafficParentNames.has(q.name));
-            const iface = nonParents.filter(q => isInterfaceOnlyTarget(q.target));
-            iface.sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
-            nonParents.sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
-            queue = iface.length > 0 ? iface[0] : (nonParents.length > 0 ? nonParents[0] : null);
+            const parents = dstQueues.filter(q => trafficParentNames.has(q.name));
+
+            const ifaceNonParents = nonParents.filter(q => isInterfaceOnlyTarget(q.target));
+            ifaceNonParents.sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
+            if (ifaceNonParents.length > 0) {
+                queue = ifaceNonParents[0];
+            } else {
+                const deepestNonParent = [...nonParents].sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
+                const catchAll = deepestNonParent.find(q => q.target && q.target.some(t => t.trim().startsWith('0.0.0.0')));
+                if (catchAll) {
+                    queue = catchAll;
+                } else if (parents.length > 0) {
+                    parents.sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
+                    queue = parents[0];
+                }
+            }
         }
         if (queue) selectedQueues[dst] = queue;
     });
