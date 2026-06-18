@@ -314,19 +314,27 @@ function buildTrafficChains(channels, queuesData, ip) {
                 queue = ifaceNonParents[0];
             } else {
                 const allSorted = [...dstQueues].sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
+                const hasAllAddr = function(t) {
+                    t = (t || '').trim();
+                    return t === '0.0.0.0/0' || t === '0.0.0.0';
+                };
+                console.warn('dst=' + dst + ' candidates:', allSorted.map(function(q){ return q.name + ' depth=' + getQueueDepth(q) + ' targets=' + JSON.stringify(q.target); }));
                 const catchAll = allSorted.find(q =>
-                    q.target && q.target.some(t => t.trim().startsWith('0.0.0.0'))
+                    q.target && q.target.some(hasAllAddr)
                 );
+                console.warn('catchAll=' + (catchAll ? catchAll.name : 'none'));
                 if (catchAll) {
                     queue = catchAll;
                 } else {
                     const parents = dstQueues.filter(q => trafficParentNames.has(q.name));
                     parents.sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
+                    console.warn('fallback parents:', parents.map(function(q){ return q.name; }));
                     queue = parents.length > 0 ? parents[0] : null;
                 }
             }
         }
         if (queue) selectedQueues[dst] = queue;
+        console.warn('selected for ' + dst + ': ' + (queue ? queue.name : 'none'));
     });
 
     const chains = [];
