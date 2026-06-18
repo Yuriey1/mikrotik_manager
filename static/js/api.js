@@ -306,21 +306,23 @@ function buildTrafficChains(channels, queuesData, ip) {
         }
         if (!queue) {
             const dstQueues = allFlat.filter(q => queueDstMap.get(q.name) === dst && !isPaid(q) && !isMarked(q));
-            const nonParents = dstQueues.filter(q => !trafficParentNames.has(q.name));
-            const parents = dstQueues.filter(q => trafficParentNames.has(q.name));
 
+            const nonParents = dstQueues.filter(q => !trafficParentNames.has(q.name));
             const ifaceNonParents = nonParents.filter(q => isInterfaceOnlyTarget(q.target));
             ifaceNonParents.sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
             if (ifaceNonParents.length > 0) {
                 queue = ifaceNonParents[0];
             } else {
-                const deepestNonParent = [...nonParents].sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
-                const catchAll = deepestNonParent.find(q => q.target && q.target.some(t => t.trim().startsWith('0.0.0.0')));
+                const allSorted = [...dstQueues].sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
+                const catchAll = allSorted.find(q =>
+                    q.target && q.target.some(t => t.trim().startsWith('0.0.0.0'))
+                );
                 if (catchAll) {
                     queue = catchAll;
-                } else if (parents.length > 0) {
+                } else {
+                    const parents = dstQueues.filter(q => trafficParentNames.has(q.name));
                     parents.sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
-                    queue = parents[0];
+                    queue = parents.length > 0 ? parents[0] : null;
                 }
             }
         }
