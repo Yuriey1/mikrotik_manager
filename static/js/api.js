@@ -250,11 +250,17 @@ function buildTrafficChains(channels, queuesData, ip) {
     });
 
     console.warn('queueDstMap size=' + queueDstMap.size + ' dsts=' + JSON.stringify(Object.keys(dstMap)));
+    console.warn('queueDstMap mts-vip=' + queueDstMap.get('mts-vip') + ' MTS=' + queueDstMap.get('MTS'));
+    console.warn('existing=' + JSON.stringify(existing) + ' first qdm get=' + queueDstMap.get(existing ? existing[0] : 'none'));
 
     const trafficParentNames = new Set();
     Object.values(dstMap).forEach(info => {
         info.parentQueues.forEach(pq => trafficParentNames.add(pq.name));
     });
+
+    console.warn('trafficParentNames=' + JSON.stringify([...trafficParentNames]));
+    var mtsNode = allFlat.find(function(q) { return q.name === 'MTS'; });
+    if (mtsNode) console.warn('MTS children=' + JSON.stringify((mtsNode.children || []).map(function(c) { return c.name; })));
 
     function isAncestorOf(parent, child) {
         if (!parent || !child || !parent.children) return false;
