@@ -760,12 +760,20 @@ class MikroTikManager:
                 return False
 
     def add_ip_to_queue(self, queue_id: str, ip: str) -> bool:
-        """Добавить IP в очередь. Если в target есть DUMMY_IP — убрать его"""
+        """Добавить IP в очередь. Если в target уже есть интерфейс — не добавлять IP"""
         try:
             print(f"\n🔧 Queue: Добавление IP {ip} в очередь ID: {queue_id}")
 
             targets = self._get_queue_targets(queue_id)
             print(f"   Текущие target'ы: {targets}")
+
+            # Если в target уже есть интерфейс (не IP-адрес) — не трогаем
+            import re
+            ip_pattern = re.compile(r'^\d+\.\d+\.\d+\.\d+')
+            for t in targets:
+                if t and not ip_pattern.match(t.strip()):
+                    print(f"   ℹ️  В target уже есть интерфейс '{t}', IP добавлять не нужно")
+                    return True
 
             if "/" in ip:
                 ip_with_mask = ip
