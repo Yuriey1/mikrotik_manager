@@ -306,7 +306,11 @@ function buildTrafficChains(channels, queuesData, ip) {
         }
         if (!queue) {
             const dstQueues = allFlat.filter(q => queueDstMap.get(q.name) === dst && !isPaid(q) && !isMarked(q));
-            queue = dstQueues.find(q => !trafficParentNames.has(q.name));
+            const nonParents = dstQueues.filter(q => !trafficParentNames.has(q.name));
+            const iface = nonParents.filter(q => isInterfaceOnlyTarget(q.target));
+            iface.sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
+            nonParents.sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
+            queue = iface.length > 0 ? iface[0] : (nonParents.length > 0 ? nonParents[0] : null);
         }
         if (queue) selectedQueues[dst] = queue;
     });
