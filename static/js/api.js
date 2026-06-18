@@ -217,6 +217,8 @@ async function refreshData() {
 function buildTrafficChains(channels, queuesData, ip) {
     if (!channels?.channels?.length) return null;
 
+    console.warn('buildTrafficChains: ip=' + ip + ' existing=' + JSON.stringify(queuesData?.existing) + ' queuesCount=' + ((queuesData?.queues) || []).length);
+
     const allFlat = [];
     const srcQueues = queuesData?.queues || [];
     for (const n of srcQueues) {
@@ -246,6 +248,8 @@ function buildTrafficChains(channels, queuesData, ip) {
             }
         }
     });
+
+    console.warn('queueDstMap size=' + queueDstMap.size + ' dsts=' + JSON.stringify(Object.keys(dstMap)));
 
     const trafficParentNames = new Set();
     Object.values(dstMap).forEach(info => {
@@ -294,7 +298,7 @@ function buildTrafficChains(channels, queuesData, ip) {
             for (const name of existing) {
                 if (queueDstMap.get(name) === dst) {
                     const q = allFlat.find(q => q.name === name);
-                    if (q && !isPaid(q)) { queue = q; break; }
+                    if (q && !isPaid(q)) { queue = q; console.warn('  step1 dst=' + dst + ' picked ' + name); break; }
                 }
             }
         }
@@ -336,6 +340,7 @@ function buildTrafficChains(channels, queuesData, ip) {
             if (!queue) queue = pick(parent);
         }
         if (queue) selectedQueues[dst] = queue;
+        else console.warn('  NO QUEUE for dst=' + dst + ' existing=' + JSON.stringify(existing) + ' qdm-size=' + queueDstMap.size);
     });
 
     const chains = [];
