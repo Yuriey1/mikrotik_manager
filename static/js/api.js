@@ -227,6 +227,7 @@ function buildTrafficChains(channels, queuesData, ip) {
     const allFlat = [];
     const srcQueues = queuesData?.queues || [];
     for (const n of srcQueues) {
+        if (n.parent === 'none') n.parent = null;
         allFlat.push(n);
     }
 
