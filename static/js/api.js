@@ -119,13 +119,6 @@ async function saveNetBoxConfig(config) {
     return apiPost('/api/netbox/save_config', config);
 }
 
-async function saveSettings() {
-    return apiPost('/api/save_config', {
-        auto_save_password: store.autoSavePassword,
-        default_username: store.defaultUsername,
-    });
-}
-
 async function addSubscriber(data) {
     store.loading = true;
     store.loadingMessage = 'Добавление абонента...';

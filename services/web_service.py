@@ -551,8 +551,6 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
                 self._add_device(data)
             elif path == '/api/add_employee':
                 self._add_employee(data)
-            elif path == '/api/save_config':
-                self._save_config(data)
             elif path == '/api/replace_mac':  # Замена MAC адреса
                 self._replace_mac(data)
             elif path == '/api/internet_access/toggle':  # Управление доступом в интернет
