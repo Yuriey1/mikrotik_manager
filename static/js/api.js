@@ -217,8 +217,6 @@ async function refreshData() {
 function buildTrafficChains(channels, fullQueues, ipQueuesData, ip) {
     if (!channels?.channels?.length) return null;
 
-    console.warn('buildTrafficChains: ip=' + ip + ' existing=' + JSON.stringify(ipQueuesData?.existing) + ' fullQueues=' + (fullQueues || []).length);
-
     const allFlat = [];
     const srcQueues = fullQueues || [];
     for (const n of srcQueues) {
@@ -249,20 +247,10 @@ function buildTrafficChains(channels, fullQueues, ipQueuesData, ip) {
         }
     });
 
-    console.warn('queueDstMap size=' + queueDstMap.size + ' dsts=' + JSON.stringify(Object.keys(dstMap)));
-    console.warn('queueDstMap mts-vip=' + queueDstMap.get('mts-vip') + ' MTS=' + queueDstMap.get('MTS'));
-    console.warn('existing=' + JSON.stringify(existing) + ' first qdm get=' + queueDstMap.get(existing ? existing[0] : 'none'));
-
     const trafficParentNames = new Set();
     Object.values(dstMap).forEach(info => {
         info.parentQueues.forEach(pq => trafficParentNames.add(pq.name));
     });
-
-    console.warn('trafficParentNames=' + JSON.stringify([...trafficParentNames]));
-    console.warn('root queues in allFlat: ' + JSON.stringify(allFlat.filter(function(q) { return !q.parent; }).map(function(q) { return q.name + ' dst=' + q.dst; })));
-    var mtsNode = allFlat.find(function(q) { return q.name === 'MTS'; });
-    if (mtsNode) console.warn('MTS found: parent=' + JSON.stringify(mtsNode.parent) + ' dst=' + JSON.stringify(mtsNode.dst) + ' children=' + JSON.stringify((mtsNode.children || []).map(function(c) { return c.name; })));
-    else console.warn('MTS NOT FOUND in allFlat! all queues: ' + JSON.stringify(allFlat.map(function(q) { return q.name; })));
 
     function isAncestorOf(parent, child) {
         if (!parent || !child || !parent.children) return false;
@@ -306,7 +294,7 @@ function buildTrafficChains(channels, fullQueues, ipQueuesData, ip) {
             for (const name of existing) {
                 if (queueDstMap.get(name) === dst) {
                     const q = allFlat.find(q => q.name === name);
-                    if (q && !isPaid(q)) { queue = q; console.warn('  step1 dst=' + dst + ' picked ' + name); break; }
+                    if (q && !isPaid(q)) { queue = q; break; }
                 }
             }
         }
@@ -348,7 +336,6 @@ function buildTrafficChains(channels, fullQueues, ipQueuesData, ip) {
             if (!queue) queue = pick(parent);
         }
         if (queue) selectedQueues[dst] = queue;
-        else console.warn('  NO QUEUE for dst=' + dst + ' existing=' + JSON.stringify(existing) + ' qdm-size=' + queueDstMap.size);
     });
 
     const chains = [];
