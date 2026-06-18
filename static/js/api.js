@@ -300,39 +300,40 @@ function buildTrafficChains(channels, queuesData, ip) {
         }
         if (!queue) {
             const dstQueues = allFlat.filter(q => queueDstMap.get(q.name) === dst && !isPaid(q) && !isMarked(q));
-            const ifaceQueues = dstQueues.filter(q => isInterfaceOnlyTarget(q.target));
-            ifaceQueues.sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
-            queue = ifaceQueues.length > 0 ? ifaceQueues[0] : null;
-        }
-        if (!queue) {
-            const dstQueues = allFlat.filter(q => queueDstMap.get(q.name) === dst && !isPaid(q) && !isMarked(q));
+            const sorted = [...dstQueues].sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
 
-            const nonParents = dstQueues.filter(q => !trafficParentNames.has(q.name));
-            const ifaceNonParents = nonParents.filter(q => isInterfaceOnlyTarget(q.target));
-            ifaceNonParents.sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
-            if (ifaceNonParents.length > 0) {
-                queue = ifaceNonParents[0];
-            } else {
-                const allSorted = [...dstQueues].sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
-                const hasAllAddr = function(t) {
+            function hasIpTarget(qq) {
+                return qq.target && qq.target.length > 0 && /^\d+\.\d+\.\d+\.\d+/.test((qq.target[0] || '').trim());
+            }
+            function hasAllAddr(qq) {
+                return qq.target && qq.target.some(function(t) {
                     t = (t || '').trim();
                     return t === '0.0.0.0/0' || t === '0.0.0.0';
-                };
-                const catchAll = allSorted.find(q =>
-                    q.target && q.target.some(hasAllAddr)
-                );
-                if (catchAll) {
-                    queue = catchAll;
-                } else {
-                    const nonParentsAll = allSorted.filter(q => !trafficParentNames.has(q.name));
-                    if (nonParentsAll.length > 0) {
-                        queue = nonParentsAll[0];
-                    } else {
-                        const parents = allSorted.filter(q => trafficParentNames.has(q.name));
-                        queue = parents.length > 0 ? parents[0] : null;
-                    }
-                }
+                });
             }
+            function hasEmptyTarget(qq) {
+                return !qq.target || qq.target.length === 0;
+            }
+            function hasOurIp(qq) {
+                var ipStripped = ip.split('/')[0];
+                return qq.target && qq.target.some(function(t) {
+                    return (t || '').trim().split('/')[0] === ipStripped;
+                });
+            }
+
+            var pick = function(arr) { return arr.length > 0 ? arr[0] : null; };
+            var nonParent = sorted.filter(function(q) { return !trafficParentNames.has(q.name); });
+            var parent = sorted.filter(function(q) { return trafficParentNames.has(q.name); });
+
+            queue = pick(nonParent.filter(function(q) { return isInterfaceOnlyTarget(q.target); }));
+            if (!queue) queue = pick(nonParent.filter(hasAllAddr));
+            if (!queue) queue = pick(nonParent.filter(hasEmptyTarget));
+            if (!queue) queue = pick(nonParent.filter(hasOurIp));
+            if (!queue) queue = pick(nonParent);
+            if (!queue) queue = pick(parent.filter(function(q) { return isInterfaceOnlyTarget(q.target); }));
+            if (!queue) queue = pick(parent.filter(hasAllAddr));
+            if (!queue) queue = pick(parent.filter(hasEmptyTarget));
+            if (!queue) queue = pick(parent);
         }
         if (queue) selectedQueues[dst] = queue;
     });
