@@ -95,25 +95,16 @@ app.component('subscriber-tab', {
     template: '#subscriber-tab',
     setup() {
         const searchText = Vue.ref('');
-        const poolFilter = Vue.ref('');
         const selectedIp = Vue.ref(null);
 
         const filteredSubscribers = Vue.computed(() => {
             const q = searchText.value.toLowerCase().trim();
-            let list = store.subscribers;
-            if (poolFilter.value) {
-                list = list.filter(s => {
-                    if (!q) return true;
-                    return (s.ip && s.ip.toLowerCase().includes(q)) ||
-                           (s.comment && s.comment.toLowerCase().includes(q)) ||
-                           (s.mac && s.mac.toLowerCase().includes(q));
-                });
-            }
-            return q ? list.filter(s =>
+            if (!q) return store.subscribers;
+            return store.subscribers.filter(s =>
                 (s.ip && s.ip.toLowerCase().includes(q)) ||
                 (s.comment && s.comment.toLowerCase().includes(q)) ||
                 (s.mac && s.mac.toLowerCase().includes(q))
-            ) : list;
+            );
         });
 
         function parseName(comment) {
@@ -147,8 +138,6 @@ app.component('subscriber-tab', {
         function selectSubscriber(sub) {
             selectedIp.value = sub.ip;
         }
-
-        function filterByPool() {}
 
         function openAddModal() {
             store.showSubscriberModal = true;
@@ -190,9 +179,9 @@ app.component('subscriber-tab', {
             store.deleteSub = sub;
         }
 
-        return { store, searchText, poolFilter, selectedIp,
+        return { store, searchText, selectedIp,
                  filteredSubscribers, parseName, parsePosition, hasInternet,
-                 toggleNet, selectSubscriber, filterByPool,
+                 toggleNet, selectSubscriber,
                  openAddModal, editSubscriber, openMacReplace, copySubscriber, confirmDelete };
     },
 });

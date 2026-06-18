@@ -582,18 +582,6 @@ textarea {
     gap: 6px;
 }
 
-.device-details {
-    font-size: 11px;
-    color: var(--text-secondary);
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px dashed var(--border-color);
-    display: none;
-}
-
-.device-item.active .device-details {
-    display: block;
-}
 
 .device-card {
     padding: 6px;
@@ -611,35 +599,6 @@ textarea {
     overflow: hidden;
     text-overflow: ellipsis;
     margin-top: 1px;
-}
-
-.connect-btn {
-    background: var(--accent-primary);
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 4px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: var(--transition);
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-}
-
-.connect-btn:hover {
-    background: var(--accent-hover);
-}
-
-.connect-btn.btn-danger {
-    background: var(--error);
-}
-
-.connect-btn.btn-danger:hover {
-    background: #e05a4c;
 }
 
 /* ===== ВКЛАДКИ ===== */
@@ -1128,24 +1087,6 @@ textarea {
 }
 
 /* ===== МОДАЛЬНЫЕ ОКНА ===== */
-#device-modal,
-#ip-selector-modal,
-#netbox-config-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.8);
-    z-index: 1000;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    animation: fadeIn 0.3s ease;
-}
-
-#device-modal > div,
 .modal-content {
     background: var(--bg-card);
     width: 100%;
@@ -1793,12 +1734,7 @@ textarea {
     color: var(--info);
 }
 
-/* ===== ТАБЛИЦА АБОНЕНТОВ (MAC Replacement) ===== */
-.mac-replace-section {
-    min-height: 400px;
-}
-
-/* Панель инструментов */
+/* ===== ТАБЛИЦА АБОНЕНТОВ ===== */
 .subscribers-toolbar {
     display: flex;
     gap: 12px;
@@ -2016,213 +1952,7 @@ textarea {
     text-align: center;
 }
 
-/* Панель действий */
-.action-panel {
-    margin-top: 16px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
-    overflow: hidden;
-    animation: slideIn 0.3s ease;
-}
-
-.action-panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 16px;
-    background: rgba(87, 148, 242, 0.1);
-    border-bottom: 1px solid var(--border-color);
-}
-
-.selected-info {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    flex-wrap: wrap;
-    font-size: 13px;
-}
-
-.selected-label {
-    color: var(--text-muted);
-}
-
-.selected-ip {
-    font-family: monospace;
-    font-weight: 600;
-    color: var(--accent-primary);
-}
-
-.selected-mac {
-    font-family: monospace;
-    color: var(--text-secondary);
-}
-
-.selected-comment {
-    color: var(--text-primary);
-}
-
-.action-panel-body {
-    padding: 16px;
-}
-
-.action-buttons {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-
-.action-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: var(--transition);
-    border: 1px solid transparent;
-}
-
-.action-btn-primary {
-    background: var(--accent-primary);
-    color: white;
-}
-
-.action-btn-primary:hover {
-    background: var(--accent-hover);
-    transform: translateY(-1px);
-}
-
-.action-btn-secondary {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    border-color: var(--border-color);
-}
-
-.action-btn-secondary:hover {
-    background: var(--bg-hover);
-    border-color: var(--accent-primary);
-}
-
-.action-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-/* Dropdown меню */
-.action-dropdown {
-    position: relative;
-}
-
-.dropdown-menu {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    margin-top: 4px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
-    min-width: 180px;
-    display: none;
-    z-index: 1000;
-}
-
-.dropdown-menu.show {
-    display: block;
-}
-
-.dropdown-menu a {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-    color: var(--text-primary);
-    text-decoration: none;
-    font-size: 13px;
-    transition: var(--transition);
-}
-
-.dropdown-menu a:hover {
-    background: var(--bg-hover);
-    color: var(--accent-primary);
-}
-
-.dropdown-menu a:disabled {
-    opacity: 0.5;
-    pointer-events: none;
-}
-
-/* Диалог замены MAC */
-.mac-replace-dialog {
-    margin-top: 16px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
-    overflow: hidden;
-}
-
-.dialog-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 16px;
-    background: rgba(255, 152, 48, 0.1);
-    border-bottom: 1px solid var(--border-color);
-    font-weight: 600;
-    color: var(--warning);
-}
-
-.dialog-body {
-    padding: 16px;
-}
-
-.dialog-info {
-    margin-bottom: 16px;
-    font-size: 14px;
-    color: var(--text-primary);
-}
-
-.dialog-field {
-    margin-bottom: 12px;
-}
-
-.dialog-field label {
-    display: block;
-    margin-bottom: 6px;
-    font-size: 13px;
-    color: var(--text-secondary);
-}
-
-.dialog-field input,
-.dialog-field select {
-    padding: 10px 12px;
-}
-
-.dialog-result {
-    margin-top: 16px;
-}
-
-.dialog-footer {
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-    padding: 14px 16px;
-    background: var(--bg-card);
-    border-top: 1px solid var(--border-color);
-}
-
 /* ===== МАРШРУТ ТРАФИКА ===== */
-.traffic-input-row { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 20px; padding: 16px; background: var(--bg-card); border-radius: 10px; flex-wrap: wrap; }
-.traffic-input-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 200px; }
-.traffic-input-group label { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
-.traffic-input { padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary); font-size: 14px; }
-.traffic-input:focus { border-color: var(--accent-primary); outline: none; }
-.traffic-route-container { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 12px; padding: 20px; min-height: 200px; margin-bottom: 20px; }
-.traffic-route-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 150px; color: rgba(255, 255, 255, 0.5); }
-.traffic-route-placeholder i { font-size: 48px; margin-bottom: 15px; }
 .traffic-loading { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 40px; color: var(--text-muted); }
 .traffic-loading i { font-size: 20px; color: var(--accent-primary); }
 .traffic-chains-wrapper { display: flex; flex-direction: column; align-items: center; padding: 20px; }

@@ -169,10 +169,6 @@
                         <input type="text" v-model="searchText" placeholder="Поиск абонента (IP или ФИО)...">
                     </div>
                     <div class="subscribers-filters">
-                        <select v-model="poolFilter" @change="filterByPool">
-                            <option value="">Все пулы</option>
-                            <option v-for="p in store.dhcpPools" :key="p.name" :value="p.name">{{ p.name }}</option>
-                        </select>
                         <button class="btn btn-primary" @click="openAddModal">
                             <i class="fas fa-plus"></i> Добавить абонента
                         </button>
