@@ -225,7 +225,7 @@ app.component('subscriber-modal', {
                     findQueues(ip).catch(() => null),
                 ]);
                 if (channels?.success && queues?.success) {
-                    const data = buildTrafficChains(channels, queues, ip);
+                    const data = buildTrafficChains(channels, store.allQueues, queues, ip);
                     store.trafficChains = data;
                     if (data?.selectedQueues) {
                         store.trafficQueues = data.selectedQueues;

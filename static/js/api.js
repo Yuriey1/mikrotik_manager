@@ -214,13 +214,13 @@ async function refreshData() {
     }
 }
 
-function buildTrafficChains(channels, queuesData, ip) {
+function buildTrafficChains(channels, fullQueues, ipQueuesData, ip) {
     if (!channels?.channels?.length) return null;
 
-    console.warn('buildTrafficChains: ip=' + ip + ' existing=' + JSON.stringify(queuesData?.existing) + ' queuesCount=' + ((queuesData?.queues) || []).length);
+    console.warn('buildTrafficChains: ip=' + ip + ' existing=' + JSON.stringify(ipQueuesData?.existing) + ' fullQueues=' + (fullQueues || []).length);
 
     const allFlat = [];
-    const srcQueues = queuesData?.queues || [];
+    const srcQueues = fullQueues || [];
     for (const n of srcQueues) {
         if (n.parent === 'none') n.parent = null;
         allFlat.push(n);
@@ -259,8 +259,10 @@ function buildTrafficChains(channels, queuesData, ip) {
     });
 
     console.warn('trafficParentNames=' + JSON.stringify([...trafficParentNames]));
+    console.warn('root queues in allFlat: ' + JSON.stringify(allFlat.filter(function(q) { return !q.parent; }).map(function(q) { return q.name + ' dst=' + q.dst; })));
     var mtsNode = allFlat.find(function(q) { return q.name === 'MTS'; });
-    if (mtsNode) console.warn('MTS children=' + JSON.stringify((mtsNode.children || []).map(function(c) { return c.name; })));
+    if (mtsNode) console.warn('MTS found: parent=' + JSON.stringify(mtsNode.parent) + ' dst=' + JSON.stringify(mtsNode.dst) + ' children=' + JSON.stringify((mtsNode.children || []).map(function(c) { return c.name; })));
+    else console.warn('MTS NOT FOUND in allFlat! all queues: ' + JSON.stringify(allFlat.map(function(q) { return q.name; })));
 
     function isAncestorOf(parent, child) {
         if (!parent || !child || !parent.children) return false;
@@ -292,8 +294,8 @@ function buildTrafficChains(channels, queuesData, ip) {
     }
 
     const selectedQueues = {};
-    const existing = queuesData?.existing || [];
-    const ipData = queuesData;
+    const existing = ipQueuesData?.existing || [];
+    const ipData = ipQueuesData;
 
     Object.keys(dstMap).forEach(dst => {
         const isPaid = q => q.name && q.name.toLowerCase().startsWith('paid');
