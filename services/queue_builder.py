@@ -23,8 +23,11 @@ class QueueTreeBuilder:
             print("📡 Загрузка очередей с MikroTik...")
             queues_raw = self.manager.get_queues()
             print(f"✅ Загружено {len(queues_raw)} очередей")
-            
-            # Сохраняем порядок как он пришел с устройства
+
+            self.nodes = {}
+            self.root_nodes = []
+            self.queue_order = {}
+
             for index, queue_data in enumerate(queues_raw):
                 queue_name = queue_data.get('name', '')
                 if queue_name:
@@ -127,10 +130,12 @@ class QueueTreeBuilder:
         # Рекурсивно устанавливаем уровни и детей
         for root in self.root_nodes:
             root.level = 0
+            root.children = []
             self._set_children_and_levels(root, parent_map, 0)
     
     def _set_children_and_levels(self, node: QueueNode, parent_map: Dict, level: int):
         """Рекурсивно установить детей и уровни"""
+        node.children = []
         if node.name in parent_map:
             children = parent_map[node.name]  # Уже отсортировано в _build_hierarchy
             for child in children:
