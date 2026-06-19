@@ -198,6 +198,7 @@ app.component('subscriber-modal', {
         const trafficData = Vue.computed(() => store.trafficChains);
         const popoverTop = Vue.ref(0);
         const popoverLeft = Vue.ref(0);
+        const popoverMaxH = Vue.ref(450);
         const popoverQueues = Vue.ref([]);
         const saving = Vue.ref(false);
         let trafficTimer = null;
@@ -207,14 +208,6 @@ app.component('subscriber-modal', {
             store.trafficChains = null;
             store.trafficLoading = false;
             store.trafficPopover = null;
-            if (trafficTimer) clearTimeout(trafficTimer);
-        }
-
-        async function onIpChange() {
-            if (trafficTimer) clearTimeout(trafficTimer);
-            const ip = form.value.ip;
-            if (!ip) { store.trafficChains = null; return; }
-            trafficTimer = setTimeout(async () => { await loadTrafficForIp(ip); }, 600);
         }
 
         async function loadTrafficForIp(ip) {
@@ -237,15 +230,31 @@ app.component('subscriber-modal', {
         }
 
         Vue.watch(() => store.showSubscriberModal, async (val) => {
-            if (val && mode.value === 'edit' && form.value.ip) {
+            if (val && form.value.ip) {
                 await loadTrafficForIp(form.value.ip);
             }
         });
 
+        Vue.watch(() => form.value.ip, (newIp) => {
+            if (!store.showSubscriberModal) return;
+            if (!newIp) { store.trafficChains = null; return; }
+            if (trafficTimer) clearTimeout(trafficTimer);
+            trafficTimer = setTimeout(async () => { await loadTrafficForIp(newIp); }, 600);
+        });
+
         function openTrafficPopover(event, chain) {
             const rect = event.currentTarget.getBoundingClientRect();
-            popoverTop.value = rect.bottom + 5;
-            popoverLeft.value = Math.max(10, rect.left - 100);
+            const below = window.innerHeight - rect.bottom - 10;
+            const above = rect.top - 10;
+            let maxH = Math.min(Math.max(below, 200), 450);
+            if (below < 200 && above > below) {
+                maxH = Math.min(above, 450);
+                popoverTop.value = Math.max(10, rect.top - maxH - 5);
+            } else {
+                popoverTop.value = Math.min(rect.bottom + 5, window.innerHeight - maxH - 10);
+            }
+            popoverMaxH.value = maxH;
+            popoverLeft.value = Math.max(10, Math.min(rect.left - 100, window.innerWidth - 400));
             store.trafficPopover = chain;
             store.trafficPopoverDst = chain.dst;
 
@@ -263,6 +272,22 @@ app.component('subscriber-modal', {
         }
 
         function closePopover() { store.trafficPopover = null; }
+
+        function clickOutsidePopover(e) {
+            if (!store.trafficPopover) return;
+            const el = document.querySelector('.queue-selector-popover');
+            if (el && !el.contains(e.target)) {
+                closePopover();
+            }
+        }
+
+        Vue.watch(() => store.trafficPopover, (val) => {
+            if (val) {
+                setTimeout(() => document.addEventListener('click', clickOutsidePopover), 0);
+            } else {
+                document.removeEventListener('click', clickOutsidePopover);
+            }
+        });
 
         function isPopoverSelected(q) {
             const sel = store.trafficQueues && store.trafficQueues[store.trafficPopoverDst];
@@ -382,8 +407,8 @@ app.component('subscriber-modal', {
         }
 
         return { store, showModal, mode, form, showTraffic, trafficLoading, trafficData, saving,
-                 popoverTop, popoverLeft, popoverQueues,
-                 closeModal, onIpChange, showFreeIps, formatBandwidth,
+                 popoverTop, popoverLeft, popoverMaxH, popoverQueues,
+                 closeModal, showFreeIps, formatBandwidth,
                  openTrafficPopover, closePopover, isPopoverSelected, selectQueueFromPopover,
                  saveSubscriber };
     },

@@ -29,13 +29,10 @@ class QueueNode:
         """Краткое отображение target"""
         if not self.target:
             return ""
-        result = []
-        for t in self.target:
-            if len(t) > 30:
-                result.append(t[:27] + "...")
-            else:
-                result.append(t)
-        return ", ".join(result)
+        joined = ", ".join(self.target)
+        if len(joined) > 38:
+            return joined[:35] + "..."
+        return joined
     
     @property
     def short_dst(self) -> str:

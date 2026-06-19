@@ -231,7 +231,7 @@
                             <label>IP адрес *</label>
                             <div class="flex gap-10">
                                 <input type="text" v-model="form.ip" placeholder="192.168.1.100" class="flex-1"
-                                       @input="onIpChange" :disabled="mode === 'edit'">
+                                       :disabled="mode === 'edit'">
                                 <button v-if="mode === 'add'" class="btn btn-info btn-sm" @click="showFreeIps">Свободные IP</button>
                             </div>
                         </div>
@@ -266,6 +266,7 @@
                                         <div class="node-icon"><i class="fas fa-sitemap"></i></div>
                                         <div class="node-content">
                                             <div class="node-value">{{ chain.dstQueue ? chain.dstQueue.name : '—' }}</div>
+                                            <div v-if="chain.dstQueue" class="node-target">{{ chain.dstQueue.short_target || '0.0.0.0/0' }}</div>
                                             <div v-if="chain.dstQueue && chain.dstQueue.max_limit && chain.dstQueue.max_limit !== '0/0'" class="node-bandwidth">{{ formatBandwidth(chain.dstQueue.max_limit) }}</div>
                                         </div>
                                     </div>
@@ -276,6 +277,7 @@
                                         <div class="node-icon"><i class="fas fa-folder-tree"></i></div>
                                         <div class="node-content">
                                             <div class="node-value">{{ chain.ancestorParent.name }}</div>
+                                            <div v-if="chain.ancestorParent" class="node-target">{{ chain.ancestorParent.short_target || '0.0.0.0/0' }}</div>
                                             <div v-if="chain.ancestorParent.max_limit && chain.ancestorParent.max_limit !== '0/0'" class="node-bandwidth">{{ formatBandwidth(chain.ancestorParent.max_limit) }}</div>
                                         </div>
                                     </div>
@@ -295,7 +297,7 @@
 
                         <!-- Queue popover -->
                         <div v-if="store.trafficPopover" class="queue-selector-popover"
-                             :style="{ position: 'fixed', top: (popoverTop || 0) + 'px', left: (popoverLeft || 0) + 'px', display: 'block' }">
+                             :style="{ position: 'fixed', top: (popoverTop || 0) + 'px', left: (popoverLeft || 0) + 'px', maxHeight: (popoverMaxH || 450) + 'px', display: 'flex', flexDirection: 'column' }">
                             <div class="popover-header">
                                 <span>Выберите очередь</span>
                                 <button class="popover-close" @click="closePopover"><i class="fas fa-times"></i></button>
@@ -304,7 +306,13 @@
                                 <div v-for="q in popoverQueues" :key="q.name" class="popover-item"
                                      :class="{ selected: isPopoverSelected(q) }"
                                      @click="selectQueueFromPopover(q)">
-                                    <div class="popover-item-name">{{ q.name }}</div>
+                                    <div>
+                                        <div class="popover-item-name">{{ q.name }}</div>
+                                        <div v-if="q.short_target || (q.max_limit && q.max_limit !== '0/0')" class="popover-item-detail">
+                                            <span class="popover-target">{{ q.short_target || '—' }}</span>
+                                            <span class="popover-limit" v-if="q.max_limit && q.max_limit !== '0/0'">{{ formatBandwidth(q.max_limit) }}</span>
+                                        </div>
+                                    </div>
                                     <i v-if="isPopoverSelected(q)" class="fas fa-check check-icon"></i>
                                 </div>
                                 <div v-if="!popoverQueues.length" class="popover-item" style="color: var(--text-muted); cursor: default;">
