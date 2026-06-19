@@ -364,13 +364,10 @@
                     <div v-if="replaceMode === 'by-ip'">
                         <div class="form-group">
                             <label>Новый IP (устройство с новым MAC):</label>
-                            <div class="flex gap-10">
-                                <input type="text" v-model="replaceNewIp" placeholder="192.168.1.100" class="flex-1">
-                                <select v-model="replaceNewIp" style="min-width: 140px;">
-                                    <option value="">Из списка</option>
-                                    <option v-for="s in store.subscribers" :key="s.ip" :value="s.ip">{{ s.ip }} — {{ s.comment || s.mac }}</option>
-                                </select>
-                            </div>
+                            <select v-model="replaceNewIp" style="width: 100%;">
+                                <option value="">— выберите абонента —</option>
+                                <option v-for="s in store.subscribers" :key="s.ip" :value="s.ip">{{ s.ip }} — {{ s.comment || s.mac }}</option>
+                            </select>
                         </div>
                     </div>
 
