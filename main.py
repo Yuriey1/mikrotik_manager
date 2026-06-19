@@ -11,6 +11,13 @@ import traceback
 
 def signal_handler(signum, frame):
     """Обработчик сигналов для корректного завершения"""
+    try:
+        from services.state import mikrotik_manager, current_device_name
+        if mikrotik_manager and mikrotik_manager.connected:
+            print(f"\n🔌 Отключаемся от {current_device_name}...")
+            mikrotik_manager.disconnect()
+    except Exception:
+        pass
     print(f"\n⚠️  Получен сигнал {signum}, завершаю работу...")
     sys.exit(0)
 

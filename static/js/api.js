@@ -210,6 +210,7 @@ async function refreshData() {
             store.interfaces = data.interfaces || [];
         }
     } catch (e) {
+        console.error('refreshData: error', e);
         store.error = e.message;
     }
 }
@@ -282,6 +283,8 @@ function buildTrafficChains(channels, fullQueues, ipQueuesData, ip) {
     }
 
     const selectedQueues = {};
+    const autoPickedDsts = new Set();
+    const defaultQueuePerDst = {};
     const existing = ipQueuesData?.existing || [];
     const ipData = ipQueuesData;
 
@@ -289,16 +292,7 @@ function buildTrafficChains(channels, fullQueues, ipQueuesData, ip) {
         const isPaid = q => q.name && q.name.toLowerCase().startsWith('paid');
         const isMarked = q => !!(q.packet_marks && q.packet_marks.trim());
 
-        let queue = null;
-        if (existing && existing.length > 0) {
-            for (const name of existing) {
-                if (queueDstMap.get(name) === dst) {
-                    const q = allFlat.find(q => q.name === name);
-                    if (q && !isPaid(q)) { queue = q; break; }
-                }
-            }
-        }
-        if (!queue) {
+        var findDefault = function() {
             const dstQueues = allFlat.filter(q => queueDstMap.get(q.name) === dst && !isPaid(q) && !isMarked(q));
             const sorted = [...dstQueues].sort((a, b) => getQueueDepth(b) - getQueueDepth(a));
 
@@ -325,17 +319,39 @@ function buildTrafficChains(channels, fullQueues, ipQueuesData, ip) {
             var nonParent = sorted.filter(function(q) { return !trafficParentNames.has(q.name); });
             var parent = sorted.filter(function(q) { return trafficParentNames.has(q.name); });
 
-            queue = pick(nonParent.filter(function(q) { return isInterfaceOnlyTarget(q.target); }));
-            if (!queue) queue = pick(nonParent.filter(hasAllAddr));
-            if (!queue) queue = pick(nonParent.filter(hasEmptyTarget));
-            if (!queue) queue = pick(nonParent.filter(hasOurIp));
-            if (!queue) queue = pick(nonParent);
-            if (!queue) queue = pick(parent.filter(function(q) { return isInterfaceOnlyTarget(q.target); }));
-            if (!queue) queue = pick(parent.filter(hasAllAddr));
-            if (!queue) queue = pick(parent.filter(hasEmptyTarget));
-            if (!queue) queue = pick(parent);
+            var q = pick(nonParent.filter(function(q) { return isInterfaceOnlyTarget(q.target); }));
+            if (!q) q = pick(nonParent.filter(hasAllAddr));
+            if (!q) q = pick(nonParent.filter(hasEmptyTarget));
+            if (!q) q = pick(nonParent.filter(hasOurIp));
+            if (!q) q = pick(nonParent);
+            if (!q) q = pick(parent.filter(function(q) { return isInterfaceOnlyTarget(q.target); }));
+            if (!q) q = pick(parent.filter(hasAllAddr));
+            if (!q) q = pick(parent.filter(hasEmptyTarget));
+            if (!q) q = pick(parent);
+            return q;
+        };
+
+        var defaultQ = findDefault();
+        if (defaultQ) defaultQueuePerDst[dst] = defaultQ.name;
+
+        let queue = null;
+        let autoPicked = false;
+        if (existing && existing.length > 0) {
+            for (const name of existing) {
+                if (queueDstMap.get(name) === dst) {
+                    const q = allFlat.find(q => q.name === name);
+                    if (q && !isPaid(q)) { queue = q; break; }
+                }
+            }
         }
-        if (queue) selectedQueues[dst] = queue;
+        if (!queue) {
+            autoPicked = true;
+            queue = defaultQ;
+        }
+        if (queue) {
+            selectedQueues[dst] = queue;
+            if (autoPicked) autoPickedDsts.add(dst);
+        }
     });
 
     const chains = [];
@@ -372,7 +388,7 @@ function buildTrafficChains(channels, fullQueues, ipQueuesData, ip) {
         });
     });
 
-    return { ip, chains, allFlat, queueDstMap, selectedQueues };
+    return { ip, chains, allFlat, queueDstMap, selectedQueues, autoPickedDsts, defaultQueuePerDst, userEditedDsts: new Set() };
 }
 
 function formatBandwidth(maxLimit) {

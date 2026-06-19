@@ -1515,7 +1515,7 @@ class MikroTikManager:
                 result['details']['arp'] = True
 
             # --- Очереди: удалить из старых, добавить в новые ---
-            if queues:
+            if 'queues' in data:
                 result['steps'].append("📝 Очереди: обновление...")
                 # Удаляем IP из всех очередей где он есть
                 self.remove_ip_from_all_queues(old_ip_for_rest)

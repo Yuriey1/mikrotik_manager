@@ -275,6 +275,7 @@ app.component('subscriber-modal', {
                 const data = store.trafficChains;
                 if (data) {
                     data.selectedQueues = { ...store.trafficQueues };
+                    if (data.userEditedDsts) data.userEditedDsts.add(store.trafficPopoverDst);
                     const chains = data.chains.map(c => ({
                         ...c,
                         dstQueue: store.trafficQueues[c.dst] || c.dstQueue
@@ -329,10 +330,19 @@ app.component('subscriber-modal', {
                 return;
             }
             const selQueues = [];
+            let hasQueueChange = false;
             const data = store.trafficChains;
             if (data && data.chains) {
+                const autoPicked = data.autoPickedDsts || new Set();
+                const defaults = data.defaultQueuePerDst || {};
+                const userEdited = data.userEditedDsts || new Set();
                 for (const chain of data.chains) {
-                    if (chain.dstQueue && chain.dstQueue.name) {
+                    if (!chain.dstQueue || !chain.dstQueue.name) continue;
+                    if (userEdited.has(chain.dst)) {
+                        hasQueueChange = true;
+                        if (chain.dstQueue.name === defaults[chain.dst]) continue;
+                        selQueues.push(chain.dstQueue.name);
+                    } else if (!autoPicked.has(chain.dst)) {
                         selQueues.push(chain.dstQueue.name);
                     }
                 }
@@ -345,8 +355,8 @@ app.component('subscriber-modal', {
                     ip: f.ip,
                     mac: f.mac,
                     internet_access: f.internet_access,
-                    queues: selQueues,
                 };
+                if (hasQueueChange) reqData.queues = selQueues;
                 if (mode.value === 'add') {
                     const result = await addSubscriber(reqData);
                     if (result.success) {
