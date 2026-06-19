@@ -48,6 +48,8 @@ const store = Vue.reactive({
     showDeleteModal: false,
     deleteSub: null,
 
+    showCleanupModal: false,
+
     floatingMenuSub: null,
     menuX: 0,
     menuY: 0,

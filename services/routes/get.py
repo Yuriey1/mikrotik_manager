@@ -473,3 +473,24 @@ def handle_check_mac(handler, parsed):
     except Exception as e:
         logging.error("Ошибка проверки MAC: %s", e, exc_info=True)
         handler._send_json({'success': False, 'error': str(e)}, 500)
+
+
+# ══════════════════════════════════════════════════════════════
+#  GET /api/old_leases
+# ══════════════════════════════════════════════════════════════
+
+def handle_old_leases(handler, parsed):
+    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+        handler._send_json({'error': 'Не подключено к устройству'}, 400)
+        return
+    qs = parse_qs(parsed.query)
+    try:
+        age = int(qs.get('age', ['30'])[0])
+    except (ValueError, TypeError):
+        age = 30
+    try:
+        old = state.mikrotik_manager.get_old_leases(age)
+        handler._send_json({'success': True, 'leases': old, 'count': len(old), 'age_days': age})
+    except Exception as e:
+        logging.error("Ошибка поиска устаревших лизов: %s", e, exc_info=True)
+        handler._send_json({'success': False, 'error': str(e)}, 500)

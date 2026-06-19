@@ -147,6 +147,10 @@ app.component('subscriber-tab', {
             store.editOldIp = null;
         }
 
+        function openCleanupModal() {
+            store.showCleanupModal = true;
+        }
+
         function editSubscriber(sub) {
             const parts = (sub.comment || '').split(' - ');
             const position = parts.length > 1 ? parts[0] : '';
@@ -182,7 +186,7 @@ app.component('subscriber-tab', {
         return { store, searchText, selectedIp,
                  filteredSubscribers, parseName, parsePosition, hasInternet,
                  toggleNet, selectSubscriber,
-                 openAddModal, editSubscriber, openMacReplace, copySubscriber, confirmDelete };
+                 openAddModal, editSubscriber, openMacReplace, copySubscriber, confirmDelete, openCleanupModal };
     },
 });
 
@@ -672,6 +676,128 @@ app.component('credentials-modal', {
         }
 
         return { store, username, password, savePassword, submit, cancel };
+    },
+});
+
+app.component('cleanup-modal', {
+    template: '#cleanup-modal',
+    setup() {
+        const showModal = Vue.computed(() => store.showCleanupModal);
+        const age = Vue.ref(30);
+        const leases = Vue.ref([]);
+        const selected = Vue.reactive(new Set());
+        const selectAll = Vue.ref(false);
+        const loading = Vue.ref(false);
+        const deleting = Vue.ref(false);
+        const searched = Vue.ref(false);
+        const sortField = Vue.ref('age_days');
+        const sortDir = Vue.ref('desc');
+
+        const sortedLeases = Vue.computed(() => {
+            const list = [...leases.value];
+            const f = sortField.value;
+            const dir = sortDir.value === 'asc' ? 1 : -1;
+            list.sort((a, b) => {
+                const va = a[f] || '';
+                const vb = b[f] || '';
+                if (f === 'age_days') return (a.age_days - b.age_days) * dir;
+                return String(va).localeCompare(String(vb)) * dir;
+            });
+            return list;
+        });
+
+        function sortBy(field) {
+            if (sortField.value === field) {
+                sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortField.value = field;
+                sortDir.value = 'asc';
+            }
+        }
+
+        function sortLabel(field) {
+            if (sortField.value !== field) return '';
+            return sortDir.value === 'asc' ? '▲' : '▼';
+        }
+
+        const ageOptions = [
+            { value: 30, label: '30 дней' },
+            { value: 60, label: '60 дней' },
+            { value: 90, label: '90 дней' },
+            { value: 180, label: '6 мес' },
+            { value: 365, label: '1 год' },
+        ];
+
+        function closeModal() {
+            store.showCleanupModal = false;
+            leases.value = [];
+            selected.clear();
+            searched.value = false;
+        }
+
+        async function doFind() {
+            loading.value = true;
+            searched.value = true;
+            try {
+                const data = await getOldLeases(age.value);
+                if (data.success) {
+                    leases.value = data.leases || [];
+                }
+            } catch (e) {
+                store.error = e.message;
+            } finally {
+                loading.value = false;
+            }
+        }
+
+        function toggleSelect(ip) {
+            if (selected.has(ip)) {
+                selected.delete(ip);
+                selectAll.value = false;
+            } else {
+                selected.add(ip);
+            }
+        }
+
+        function toggleAll() {
+            if (selectAll.value) {
+                leases.value.forEach(l => selected.add(l.ip));
+            } else {
+                selected.clear();
+            }
+        }
+
+        async function doDeleteSelected() {
+            if (selected.size === 0) return;
+            if (!confirm(`Удалить ${selected.size} IP адресов? Это действие необратимо.`)) return;
+            deleting.value = true;
+            const ips = Array.from(selected);
+            let ok = 0;
+            for (const ip of ips) {
+                try {
+                    const r = await deleteSubscriber(ip);
+                    if (r.success) {
+                        selected.delete(ip);
+                        ok++;
+                    }
+                } catch (e) {}
+            }
+            leases.value = leases.value.filter(l => !selected.has(l.ip) && !ips.includes(l.ip));
+            // refresh
+            for (const ip of ips) {
+                if (!selected.has(ip)) continue;
+            }
+            leases.value = leases.value.filter(l => !ips.includes(l.ip));
+            selected.clear();
+            selectAll.value = false;
+            deleting.value = false;
+            store.error = `Удалено ${ok} из ${ips.length} IP`;
+            await refreshData();
+        }
+
+        return { showModal, age, ageOptions, leases, sortedLeases, selected, selectAll, loading, deleting, searched,
+                 closeModal, doFind, toggleSelect, toggleAll, doDeleteSelected,
+                 sortBy, sortLabel };
     },
 });
 

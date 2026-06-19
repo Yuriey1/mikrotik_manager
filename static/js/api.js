@@ -140,6 +140,10 @@ async function deleteSubscriber(ip) {
     finally { store.loading = false; store.loadingMessage = ''; }
 }
 
+async function getOldLeases(age) {
+    return apiGet(`/api/old_leases?age=${age}`);
+}
+
 async function replaceMac(data) {
     store.loading = true;
     store.loadingMessage = 'Замена MAC адреса...';

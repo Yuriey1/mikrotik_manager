@@ -2229,3 +2229,16 @@ textarea {
 }
 .floating-menu-item:hover { background: var(--bg-hover); }
 .floating-menu-item i { margin-right: 8px; width: 16px; text-align: center; }
+
+/* ===== CLEANUP MODAL ===== */
+.old-leases-table-container {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background: var(--bg-secondary);
+}
+.old-leases-table-container table { font-size: 12px; }
+.old-leases-table-container th { font-size: 12px; padding: 8px 10px; }
+.old-leases-table-container td { padding: 6px 10px; }

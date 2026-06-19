@@ -3,10 +3,11 @@
 """
 
 from librouteros import connect
+import datetime
 import ipaddress
 import logging
-from typing import Dict, List, Optional, Tuple
 import re
+from typing import Dict, List, Optional, Tuple
 
 from models.device import MikroTikDevice
 from config.config_manager import ConfigManager
@@ -1547,6 +1548,81 @@ class MikroTikManager:
             result['steps'].append(f"❌ Ошибка: {str(e)}")
             logging.error("Ошибка обновления абонента: %s", e, exc_info=True)
 
+        return result
+
+    # ========== ОЧИСТКА УСТАРЕВШИХ ЛИЗОВ ==========
+
+    def get_old_leases(self, max_age_days: int) -> List[Dict]:
+        result = []
+        try:
+            leases = self.get_dhcp_leases()
+            if not leases:
+                return result
+
+            pools = self.get_dhcp_pools()
+            pool_ranges = []
+            for pool in pools:
+                ranges_str = pool.get('ranges', '')
+                if not ranges_str:
+                    continue
+                for r in ranges_str.split(','):
+                    r = r.strip()
+                    if not r:
+                        continue
+                    try:
+                        if '-' in r:
+                            s, e = r.split('-')
+                            pool_ranges.append((ipaddress.IPv4Address(s.strip()), ipaddress.IPv4Address(e.strip()), pool.get('name', '?')))
+                        elif '/' in r:
+                            net = ipaddress.IPv4Network(r, strict=False)
+                            pool_ranges.append((net.network_address, net.broadcast_address, pool.get('name', '?')))
+                        else:
+                            a = ipaddress.IPv4Address(r)
+                            pool_ranges.append((a, a, pool.get('name', '?')))
+                    except (ValueError, ipaddress.AddressValueError):
+                        continue
+
+            def _in_pool(ip_str):
+                try:
+                    a = ipaddress.IPv4Address(ip_str.split('/')[0])
+                    for start, end, name in pool_ranges:
+                        if start <= a <= end:
+                            return name
+                except Exception:
+                    pass
+                return None
+
+            max_age = datetime.timedelta(days=max_age_days)
+
+            for lease in leases:
+                last_seen = lease.get('last-seen', '')
+                if not last_seen:
+                    continue
+                delta = None
+                m = re.match(r'(?:(\d+)w)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?', last_seen)
+                if m:
+                    w = int(m.group(1) or 0); d = int(m.group(2) or 0); h = int(m.group(3) or 0)
+                    mi = int(m.group(4) or 0); s = int(m.group(5) or 0)
+                    delta = datetime.timedelta(weeks=w, days=d, hours=h, minutes=mi, seconds=s)
+                if not delta or delta <= max_age:
+                    continue
+                ip_str = lease.get('address', '')
+                pool_name = _in_pool(ip_str)
+                if not pool_name:
+                    continue
+                result.append({
+                    'ip': ip_str,
+                    'mac': lease.get('mac-address', ''),
+                    'host': lease.get('host-name', ''),
+                    'comment': lease.get('comment', ''),
+                    'pool': pool_name,
+                    'last_seen': last_seen,
+                    'age_days': delta.days,
+                })
+
+            result.sort(key=lambda x: x['age_days'], reverse=True)
+        except Exception as e:
+            logging.error("Ошибка поиска устаревших лизов: %s", e, exc_info=True)
         return result
 
     # ========== АНАЛИЗ КАНАЛОВ ==========

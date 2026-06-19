@@ -65,6 +65,7 @@ GET_ROUTES = {
     '/api/internet_access':   get_routes.handle_internet_access,
     '/api/analyze_channels':  get_routes.handle_analyze_channels,
     '/api/check_mac':         get_routes.handle_check_mac,
+    '/api/old_leases':        get_routes.handle_old_leases,
 }
 
 POST_ROUTES = {

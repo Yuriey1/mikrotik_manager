@@ -28,6 +28,7 @@
         <subscriber-modal></subscriber-modal>
         <mac-replace-modal></mac-replace-modal>
         <delete-confirm-modal></delete-confirm-modal>
+        <cleanup-modal></cleanup-modal>
         <!-- Floating menu — в корне DOM, position:fixed работает корректно -->
         <div v-show="store.floatingMenuSub" class="menu-backdrop" @click="store.floatingMenuSub = null"></div>
         <div v-show="store.floatingMenuSub" class="floating-menu" @click.stop
@@ -160,6 +161,9 @@
                     <div class="subscribers-filters">
                         <button class="btn btn-primary" @click="openAddModal">
                             <i class="fas fa-plus"></i> Добавить абонента
+                        </button>
+                        <button class="btn btn-warning" @click="openCleanupModal" style="padding: 8px 12px; font-size: 13px;">
+                            <i class="fas fa-broom"></i> Очистка
                         </button>
                     </div>
                 </div>
@@ -419,6 +423,87 @@
                     <button class="btn btn-danger" @click="executeDelete" :disabled="deleteRunning">
                         <i v-if="deleteRunning" class="fas fa-spinner fa-spin"></i>
                         <i v-else class="fas fa-trash-alt"></i> Удалить
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- ====== CLEANUP MODAL ====== -->
+    <template id="cleanup-modal">
+        <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
+            <div class="subscriber-modal-content" style="max-width: 1100px;">
+                <div class="modal-header">
+                    <h2><i class="fas fa-broom"></i> Очистка устаревших IP</h2>
+                </div>
+                <div class="modal-body" style="display: flex; flex-direction: column;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;">
+                        <span style="color: var(--text-secondary); font-size: 13px;">Не активны более:</span>
+                        <button v-for="d in ageOptions" :key="d.value" class="btn btn-sm"
+                                :class="age === d.value ? 'btn-primary' : 'btn-secondary'"
+                                @click="age = d.value">{{ d.label }}</button>
+                        <button class="btn btn-success btn-sm" @click="doFind" :disabled="loading">
+                            <i v-if="loading" class="fas fa-spinner fa-spin"></i>
+                            <i v-else class="fas fa-search"></i> Найти
+                        </button>
+                    </div>
+
+                    <div v-if="leases.length > 0" style="flex: 1; min-height: 0; display: flex; flex-direction: column;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 13px; color: var(--text-secondary);">
+                                Найдено: <strong style="color: var(--warning);">{{ leases.length }}</strong>
+                            </span>
+                            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; color: var(--text-muted);">
+                                <input type="checkbox" v-model="selectAll" @change="toggleAll"> Все
+                            </label>
+                        </div>
+                        <div class="old-leases-table-container">
+                            <table class="subscribers-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40px;"></th>
+                                        <th @click="sortBy('ip')" style="width: 130px; cursor: pointer; user-select: none;">IP {{ sortLabel('ip') }}</th>
+                                        <th @click="sortBy('mac')" style="width: 130px; cursor: pointer; user-select: none;">MAC {{ sortLabel('mac') }}</th>
+                                        <th @click="sortBy('comment')" style="cursor: pointer; user-select: none;">Комментарий {{ sortLabel('comment') }}</th>
+                                        <th @click="sortBy('host')" style="width: 90px; cursor: pointer; user-select: none;">Хост {{ sortLabel('host') }}</th>
+                                        <th @click="sortBy('pool')" style="width: 100px; cursor: pointer; user-select: none;">Пул {{ sortLabel('pool') }}</th>
+                                        <th @click="sortBy('age_days')" style="width: 80px; cursor: pointer; user-select: none;">Возраст {{ sortLabel('age_days') }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="lease in sortedLeases" :key="lease.ip" :class="{ selected: selected.has(lease.ip) }" @click="toggleSelect(lease.ip)">
+                                        <td style="text-align: center;">
+                                            <input type="checkbox" :checked="selected.has(lease.ip)" @click.stop="toggleSelect(lease.ip)">
+                                        </td>
+                                        <td><code style="font-size: 12px;">{{ lease.ip }}</code></td>
+                                        <td style="font-size: 12px; font-family: monospace;">{{ lease.mac || '—' }}</td>
+                                        <td style="font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="lease.comment">{{ lease.comment || '—' }}</td>
+                                        <td style="font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ lease.host || '—' }}</td>
+                                        <td style="font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ lease.pool }}</td>
+                                        <td style="font-size: 12px; color: var(--warning); white-space: nowrap;">{{ lease.age_days }}d</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                            <span style="font-size: 13px; color: var(--text-secondary);">
+                                Выбрано: <strong style="color: var(--warning);">{{ selected.size }}</strong>
+                            </span>
+                            <button class="btn btn-danger btn-sm" @click="doDeleteSelected" :disabled="selected.size === 0 || deleting">
+                                <i v-if="deleting" class="fas fa-spinner fa-spin"></i>
+                                <i v-else class="fas fa-trash-alt"></i> Удалить выбранные
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-else-if="searched && !loading" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                        <i class="fas fa-check-circle" style="font-size: 36px; color: var(--success); margin-bottom: 10px; display: block;"></i>
+                        Устаревших IP не найдено
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="closeModal">
+                        <i class="fas fa-times"></i> Закрыть
                     </button>
                 </div>
             </div>
