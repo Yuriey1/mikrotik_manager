@@ -3,7 +3,7 @@ GET-обработчики маршрутов
 """
 
 import json
-import traceback
+import logging
 import os
 import re
 import ipaddress
@@ -202,35 +202,35 @@ def handle_sync(handler, parsed):
             pools = state.mikrotik_manager.get_dhcp_pools()
             resp['dhcp_pools'] = [{'name': p.get('name',''), 'ranges': p.get('ranges',''), 'id': p.get('.id','')} for p in pools]
         except Exception as e:
-            print(f"⚠️ sync dhcp_pools: {e}")
+            logging.warning("⚠️ sync dhcp_pools: %s", e)
 
         resp['subscribers'] = []
         try:
             resp['subscribers'] = state.mikrotik_manager.get_dhcp_subscribers(include_all=True)
         except Exception as e:
-            print(f"⚠️ sync subscribers: {e}")
+            logging.warning("⚠️ sync subscribers: %s", e)
 
         resp['internet_access'] = []
         try:
             resp['internet_access'] = state.mikrotik_manager.get_internet_access_list()
         except Exception as e:
-            print(f"⚠️ sync internet_access: {e}")
+            logging.warning("⚠️ sync internet_access: %s", e)
 
         resp['channels'] = None
         try:
             resp['channels'] = state.mikrotik_manager.analyze_channels()
         except Exception as e:
-            print(f"⚠️ sync channels: {e}")
+            logging.warning("⚠️ sync channels: %s", e)
 
         resp['interfaces'] = []
         try:
             resp['interfaces'] = state.mikrotik_manager.get_interfaces()
         except Exception as e:
-            print(f"⚠️ sync interfaces: {e}")
+            logging.warning("⚠️ sync interfaces: %s", e)
 
         handler._send_json(resp)
     except Exception as e:
-        traceback.print_exc()
+        logging.error("Ошибка синхронизации: %s", e, exc_info=True)
         handler._send_json({'success': False, 'error': str(e)}, 500)
 
 
@@ -362,7 +362,7 @@ def handle_find_dhcp_lease(handler, parsed):
         else:
             handler._send_json({'success': True, 'found': False, 'message': 'DHCP lease не найден'})
     except Exception as e:
-        traceback.print_exc()
+        logging.error("Ошибка поиска DHCP lease: %s", e, exc_info=True)
         handler._send_json({'success': False, 'error': str(e)}, 500)
 
 
@@ -378,7 +378,7 @@ def handle_free_ips(handler, parsed):
         free = state.mikrotik_manager.get_free_dhcp_ips()
         handler._send_json({'success': True, 'free_ips': free, 'count': len(free)})
     except Exception as e:
-        traceback.print_exc()
+        logging.error("Ошибка получения свободных IP: %s", e, exc_info=True)
         handler._send_json({'error': str(e)}, 500)
 
 
@@ -413,7 +413,7 @@ def handle_dhcp_subscribers(handler, parsed):
         subs = state.mikrotik_manager.get_dhcp_subscribers(pool_name=pool_name, include_all=include_all)
         handler._send_json({'success': True, 'subscribers': subs, 'count': len(subs)})
     except Exception as e:
-        traceback.print_exc()
+        logging.error("Ошибка получения абонентов: %s", e, exc_info=True)
         handler._send_json({'error': str(e)}, 500)
 
 
@@ -429,7 +429,7 @@ def handle_internet_access(handler, parsed):
         ips = state.mikrotik_manager.get_internet_access_list()
         handler._send_json({'success': True, 'ips': ips, 'count': len(ips)})
     except Exception as e:
-        traceback.print_exc()
+        logging.error("Ошибка получения internet_access: %s", e, exc_info=True)
         handler._send_json({'error': str(e)}, 500)
 
 
@@ -445,7 +445,7 @@ def handle_analyze_channels(handler, parsed):
         result = state.mikrotik_manager.analyze_channels()
         handler._send_json(result)
     except Exception as e:
-        traceback.print_exc()
+        logging.error("Ошибка анализа каналов: %s", e, exc_info=True)
         handler._send_json({'success': False, 'error': str(e)}, 500)
 
 
@@ -471,5 +471,5 @@ def handle_check_mac(handler, parsed):
             'message': f"MAC уже используется на IP {result['lease_ip']}" if result['exists'] else 'MAC свободен',
         })
     except Exception as e:
-        traceback.print_exc()
+        logging.error("Ошибка проверки MAC: %s", e, exc_info=True)
         handler._send_json({'success': False, 'error': str(e)}, 500)

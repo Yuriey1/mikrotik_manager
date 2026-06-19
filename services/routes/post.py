@@ -3,7 +3,7 @@ POST-обработчики маршрутов
 """
 
 import json
-import traceback
+import logging
 import re
 import ipaddress
 import time
@@ -226,7 +226,7 @@ def handle_add_employee(handler, data):
         }
         handler._send_json(response)
     except Exception as e:
-        traceback.print_exc()
+        logging.error("Ошибка добавления сотрудника: %s", e, exc_info=True)
         handler._send_json({'error': f'Внутренняя ошибка сервера: {str(e)}'}, 500)
 
 
@@ -280,7 +280,7 @@ def handle_replace_mac(handler, data):
         else:
             handler._send_json({'success': False, 'error': result.get('error', 'Неизвестная ошибка'), 'steps': result.get('steps', [])})
     except Exception as e:
-        traceback.print_exc()
+        logging.error("Ошибка замены MAC: %s", e, exc_info=True)
         handler._send_json({'error': str(e)}, 500)
 
 
@@ -311,7 +311,7 @@ def handle_toggle_internet(handler, data):
     except ValueError as e:
         handler._send_json({'error': f'Неверный формат IP: {e}'}, 400)
     except Exception as e:
-        traceback.print_exc()
+        logging.error("Ошибка переключения интернета: %s", e, exc_info=True)
         handler._send_json({'error': str(e)}, 500)
 
 
@@ -367,7 +367,7 @@ def handle_delete_subscriber(handler, data):
 
         handler._send_json({'success': True, 'ip': ip, 'message': f'Абонент {ip} полностью удалён', 'steps': steps, 'details': details})
     except Exception as e:
-        traceback.print_exc()
+        logging.error("Ошибка удаления абонента: %s", e, exc_info=True)
         handler._send_json({'success': False, 'error': str(e), 'steps': steps}, 500)
 
 
@@ -399,5 +399,5 @@ def handle_edit_subscriber(handler, data):
         else:
             handler._send_json({'success': False, 'error': result.get('error', 'Ошибка обновления'), 'steps': result.get('steps', [])})
     except Exception as e:
-        traceback.print_exc()
+        logging.error("Ошибка редактирования абонента: %s", e, exc_info=True)
         handler._send_json({'success': False, 'error': str(e)}, 500)

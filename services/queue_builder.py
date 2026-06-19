@@ -6,6 +6,7 @@ from collections import defaultdict
 from typing import Dict, List, Optional, Any
 import ipaddress
 import traceback
+import logging
 import re
 
 from models.queue_node import QueueNode
@@ -20,9 +21,9 @@ class QueueTreeBuilder:
     def build_tree(self) -> bool:
         """Построить дерево очередей"""
         try:
-            print("📡 Загрузка очередей с MikroTik...")
+            logging.debug("📡 Загрузка очередей с MikroTik...")
             queues_raw = self.manager.get_queues()
-            print(f"✅ Загружено {len(queues_raw)} очередей")
+            logging.info("✅ Загружено %s очередей", len(queues_raw))
 
             self.nodes = {}
             self.root_nodes = []
@@ -43,8 +44,7 @@ class QueueTreeBuilder:
             return True
             
         except Exception as e:
-            print(f"❌ Ошибка построения дерева: {e}")
-            traceback.print_exc()
+            logging.error("❌ Ошибка построения дерева: %s", e, exc_info=True)
             return False
     
     def _create_node(self, data: Dict) -> Optional[QueueNode]:
@@ -96,8 +96,7 @@ class QueueTreeBuilder:
             return node
             
         except Exception as e:
-            print(f"⚠️ Ошибка создания узла: {e}")
-            traceback.print_exc()
+            logging.warning("⚠️ Ошибка создания узла: %s", e, exc_info=True)
             return None
     
     def _build_hierarchy(self):

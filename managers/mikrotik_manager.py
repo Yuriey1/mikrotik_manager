@@ -4,7 +4,7 @@
 
 from librouteros import connect
 import ipaddress
-import traceback
+import logging
 from typing import Dict, List, Optional, Tuple
 import re
 
@@ -31,7 +31,7 @@ class MikroTikManager:
             if password.startswith("enc:"):
                 password = ConfigManager.decrypt_password(password[4:])
 
-            print(f"🔗 Подключение к {self.device.name} ({self.device.ip})...")
+            logging.info("🔗 Подключение к %s (%s)...", self.device.name, self.device.ip)
 
             self.api = connect(
                 username=self.device.username,
@@ -41,12 +41,11 @@ class MikroTikManager:
                 encoding="windows-1251",
             )
             self.connected = True
-            print(f"✅ Успешное подключение")
+            logging.info("✅ Успешное подключение")
             return True
 
         except Exception as e:
-            print(f"❌ Ошибка подключения: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка подключения: %s", e, exc_info=True)
             self.connected = False
             return False
 
@@ -54,13 +53,13 @@ class MikroTikManager:
         """Отключиться от устройства"""
         try:
             if self.api:
-                print(f"🔌 Закрываем соединение с {self.device.name}...")
+                logging.info("🔌 Закрываем соединение с %s...", self.device.name)
                 self.api.close()
                 self.api = None
                 self.connected = False
-                print(f"✅ Соединение с {self.device.name} закрыто")
+                logging.info("✅ Соединение с %s закрыто", self.device.name)
         except Exception as e:
-            print(f"⚠️  Ошибка при отключении: {e}")
+            logging.warning("⚠️  Ошибка при отключении: %s", e)
 
     # ========== ПРОВЕРКА IP ==========
     def is_ip_in_mikrotik_networks(self, ip: str) -> Tuple[bool, Optional[str]]:
@@ -71,7 +70,7 @@ class MikroTikManager:
             (принадлежит, интерфейс) или (False, None) если не принадлежит
         """
         try:
-            print(f"🔍 Проверка IP {ip} на принадлежность сетям микротика...")
+            logging.debug("🔍 Проверка IP %s на принадлежность сетям микротика...", ip)
 
             # Получаем все адреса интерфейсов
             ipaddr_cmd = self.api.path("/ip/address")
@@ -81,7 +80,7 @@ class MikroTikManager:
             try:
                 ip_obj = ipaddress.ip_address(ip)
             except ValueError:
-                print(f"❌ Неверный формат IP: {ip}")
+                logging.error("Неверный формат IP: %s", ip)
                 return False, None
 
             # Проверяем каждый адрес интерфейса
@@ -95,22 +94,22 @@ class MikroTikManager:
 
                     # Проверяем принадлежность IP к сети
                     if ip_obj in network:
-                        print(
-                            f"✅ IP {ip} принадлежит сети {network} на интерфейсе '{interface}'"
+                        logging.info(
+                            "✅ IP %s принадлежит сети %s на интерфейсе '%s'",
+                            ip, network, interface
                         )
                         return True, interface
 
                 except (ValueError, KeyError) as e:
-                    print(f"⚠️  Ошибка обработки адреса {addr}: {e}")
+                    logging.warning("⚠️  Ошибка обработки адреса %s: %s", addr, e)
                     continue
 
-            print(f"❌ IP {ip} НЕ принадлежит ни одной сети микротика!")
-            print(f"   Найдено сетей: {len(addresses)}")
+            logging.error("❌ IP %s НЕ принадлежит ни одной сети микротика!", ip)
+            logging.info("   Найдено сетей: %s", len(addresses))
             return False, None
 
         except Exception as e:
-            print(f"❌ Ошибка проверки IP: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка проверки IP: %s", e, exc_info=True)
             return False, None
 
     # ========== DHCP LEASES ==========
@@ -120,28 +119,27 @@ class MikroTikManager:
             if not self.api:
                 return None
 
-            print(f"🔍 Поиск DHCP lease для IP: {ip}")
+            logging.debug("🔍 Поиск DHCP lease для IP: %s", ip)
 
             # Используем librouteros API - получаем все DHCP аренды
             leases = self.api.path("/ip/dhcp-server/lease")
             all_leases = list(leases)
 
-            print(f"📊 Всего DHCP leases: {len(all_leases)}")
+            logging.debug("📊 Всего DHCP leases: %s", len(all_leases))
 
             # Проходим по всем записям и ищем match по IP
             for lease in all_leases:
                 if lease.get("address") == ip:
-                    print(
-                        f"✅ Найден DHCP lease для {ip}, MAC: {lease.get('mac-address', '')}"
+                    logging.info(
+                        "✅ Найден DHCP lease для %s, MAC: %s", ip, lease.get('mac-address', '')
                     )
                     return lease
 
-            print(f"⚠️  DHCP lease для {ip} не найден среди {len(all_leases)} записей")
+            logging.warning("⚠️  DHCP lease для %s не найден среди %s записей", ip, len(all_leases))
             return None
 
         except Exception as e:
-            print(f"❌ Ошибка поиска DHCP lease для {ip}: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка поиска DHCP lease для %s: %s", ip, e, exc_info=True)
             return None
 
     def _find_dhcp_server_for_ip(self, ip: str) -> Optional[str]:
@@ -158,16 +156,16 @@ class MikroTikManager:
             ipaddr_cmd = self.api.path('/ip/address')
             addresses = list(ipaddr_cmd)
             
-            print(f"🔍 Поиск DHCP сервера для IP {ip}")
-            print(f"   Найдено DHCP серверов: {len(servers)}")
-            print(f"   Найдено адресов интерфейсов: {len(addresses)}")
+            logging.debug("🔍 Поиск DHCP сервера для IP %s", ip)
+            logging.debug("   Найдено DHCP серверов: %s", len(servers))
+            logging.debug("   Найдено адресов интерфейсов: %s", len(addresses))
             
             # Для каждого DHCP сервера проверяем, входит ли IP в его сеть
             for server in servers:
                 server_name = server.get('name', '')
                 interface = server.get('interface', '')
                 
-                print(f"   Проверяем сервер '{server_name}' на интерфейсе '{interface}'")
+                logging.debug("   Проверяем сервер '%s' на интерфейсе '%s'", server_name, interface)
                 
                 # Ищем адрес интерфейса, к которому привязан DHCP сервер
                 for addr in addresses:
@@ -176,40 +174,39 @@ class MikroTikManager:
                         try:
                             network = ipaddress.ip_network(network_str, strict=False)
                             if ip_obj in network:
-                                print(f"   ✅ IP {ip} принадлежит сети {network} сервера '{server_name}'")
+                                logging.info("   ✅ IP %s принадлежит сети %s сервера '%s'", ip, network, server_name)
                                 return server_name
                         except ValueError as e:
-                            print(f"   ⚠️ Ошибка парсинга сети {network_str}: {e}")
+                            logging.warning("   ⚠️ Ошибка парсинга сети %s: %s", network_str, e)
                             continue
             
-            print(f"   ❌ Не найден DHCP сервер для IP {ip}")
+            logging.error("   ❌ Не найден DHCP сервер для IP %s", ip)
             return None
             
         except Exception as e:
-            print(f"❌ Ошибка поиска DHCP сервера: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка поиска DHCP сервера: %s", e, exc_info=True)
             return None
 
     def create_static_lease(self, ip: str, mac: str, comment: str = "") -> bool:
         """Создать/обновить статический DHCP lease"""
         try:
-            print(f"\n🔧 DHCP: Работа с {ip} -> {mac}")
+            logging.info("🔧 DHCP: Работа с %s -> %s", ip, mac)
         
             # Получаем объект пути
             dhcp_cmd = self.api.path('/ip/dhcp-server/lease')
         
             # 1. Определяем правильный DHCP сервер для этого IP
-            print(f"🔍 DHCP: Определяем правильный DHCP сервер для {ip}...")
+            logging.debug("🔍 DHCP: Определяем правильный DHCP сервер для %s...", ip)
             dhcp_server = self._find_dhcp_server_for_ip(ip)
             
             if not dhcp_server:
-                print(f"⚠️ DHCP: Не найден подходящий DHCP сервер, используем 'all'")
+                logging.warning("⚠️ DHCP: Не найден подходящий DHCP сервер, используем 'all'")
                 dhcp_server = 'all'
             else:
-                print(f"✅ DHCP: Найден DHCP сервер: {dhcp_server}")
+                logging.info("✅ DHCP: Найден DHCP сервер: %s", dhcp_server)
         
             # 2. Ищем существующий lease
-            print(f"🔍 DHCP: Ищем существующий lease для {ip}")
+            logging.debug("🔍 DHCP: Ищем существующий lease для %s", ip)
             leases = list(dhcp_cmd)
             lease = None
             lease_id = None
@@ -218,20 +215,20 @@ class MikroTikManager:
                 if l.get('address') == ip:
                     lease = l
                     lease_id = l.get('.id')
-                    print(f"✅ DHCP: Найден существующий lease ID: {lease_id}")
+                    logging.info("✅ DHCP: Найден существующий lease ID: %s", lease_id)
                     break
         
             # 3. Проверяем статус найденного lease
             if lease:
                 flags = lease.get('flags', '')
-                print(f"📊 DHCP: Поле 'flags': '{flags}'")
+                logging.debug("📊 DHCP: Поле 'flags': '%s'", flags)
                 
                 # Проверяем наличие флага D (DYNAMIC)
                 is_dynamic = 'D' in flags
                 
                 # Также проверяем поле dynamic для совместимости
                 dynamic_field = lease.get('dynamic', '')
-                print(f"📊 DHCP: Поле 'dynamic': '{dynamic_field}'")
+                logging.debug("📊 DHCP: Поле 'dynamic': '%s'", dynamic_field)
                 
                 if isinstance(dynamic_field, bool):
                     is_dynamic = is_dynamic or dynamic_field
@@ -242,37 +239,37 @@ class MikroTikManager:
                 current_mac = lease.get('mac-address', '')
                 current_server = lease.get('server', 'all')
             
-                print(f"📊 DHCP: Статус lease:")
-                print(f"  - Динамический: {is_dynamic}")
-                print(f"  - Отключен: {is_disabled}")
-                print(f"  - MAC: {current_mac}")
-                print(f"  - Server: {current_server}")
+                logging.debug("📊 DHCP: Статус lease:")
+                logging.debug("  - Динамический: %s", is_dynamic)
+                logging.debug("  - Отключен: %s", is_disabled)
+                logging.debug("  - MAC: %s", current_mac)
+                logging.debug("  - Server: %s", current_server)
             
                 # Проверяем MAC адрес
                 if current_mac and current_mac.lower() != mac.lower():
-                    print(f"⚠️ DHCP: MAC отличается! Обновляем...")
+                    logging.warning("⚠️ DHCP: MAC отличается! Обновляем...")
                     try:
                         tuple(dhcp_cmd('set', **{'.id': lease_id, 'mac-address': mac}))
-                        print(f"✅ DHCP: MAC обновлен")
+                        logging.info("✅ DHCP: MAC обновлен")
                     except Exception as e:
-                        print(f"❌ DHCP: Ошибка обновления MAC: {e}")
+                        logging.error("DHCP: Ошибка обновления MAC: %s", e)
             
                 # Обновляем поле server если нужно
                 if current_server != dhcp_server:
-                    print(f"🔄 DHCP: Обновляем поле server")
+                    logging.info("🔄 DHCP: Обновляем поле server")
                     try:
                         tuple(dhcp_cmd('set', **{'.id': lease_id, 'server': dhcp_server}))
-                        print(f"✅ DHCP: Поле server обновлено")
+                        logging.info("✅ DHCP: Поле server обновлено")
                     except Exception as e:
-                        print(f"⚠️ DHCP: Ошибка обновления server: {e}")
+                        logging.warning("⚠️ DHCP: Ошибка обновления server: %s", e)
             
                 # Если lease динамический - делаем статическим
                 if is_dynamic:
-                    print(f"🔄 DHCP: Делаем lease статическим...")
+                    logging.info("🔄 DHCP: Делаем lease статическим...")
                     
                     try:
                         result = tuple(dhcp_cmd('make-static', **{'.id': lease_id}))
-                        print(f"✅ DHCP: Lease помечен как статический")
+                        logging.info("✅ DHCP: Lease помечен как статический")
                         
                         # После make-static ID может измениться
                         leases = list(dhcp_cmd)
@@ -284,20 +281,20 @@ class MikroTikManager:
                                 break
                                 
                     except Exception as e:
-                        print(f"⚠️ DHCP: Ошибка make-static: {e}")
-                        print(f"  Пробуем set dynamic=no...")
+                        logging.warning("⚠️ DHCP: Ошибка make-static: %s", e)
+                        logging.info("  Пробуем set dynamic=no...")
                         
                         try:
                             tuple(dhcp_cmd('set', **{'.id': lease_id, 'dynamic': 'no'}))
-                            print(f"✅ DHCP: Lease помечен как статический")
+                            logging.info("✅ DHCP: Lease помечен как статический")
                             
                         except Exception as e2:
-                            print(f"⚠️ DHCP: Ошибка set dynamic=no: {e2}")
-                            print(f"  Удаляем и создаем заново...")
+                            logging.warning("⚠️ DHCP: Ошибка set dynamic=no: %s", e2)
+                            logging.info("  Удаляем и создаем заново...")
                             
                             try:
                                 tuple(dhcp_cmd('remove', **{'.id': lease_id}))
-                                print(f"✅ DHCP: Динамический lease удален")
+                                logging.info("✅ DHCP: Динамический lease удален")
                                 
                                 import time
                                 time.sleep(0.5)
@@ -315,7 +312,7 @@ class MikroTikManager:
                                     lease_data['server'] = dhcp_server
                                 
                                 tuple(dhcp_cmd('add', **lease_data))
-                                print(f"✅ DHCP: Новый статический lease создан")
+                                logging.info("✅ DHCP: Новый статический lease создан")
                                 
                                 leases = list(dhcp_cmd)
                                 for l in leases:
@@ -324,21 +321,21 @@ class MikroTikManager:
                                         break
                                         
                             except Exception as e3:
-                                print(f"❌ DHCP: Ошибка удаления/создания: {e3}")
+                                logging.error("DHCP: Ошибка удаления/создания: %s", e3)
                                 return False
             
                 # Если отключен - включаем
                 if is_disabled:
-                    print(f"🔄 DHCP: Включаем lease")
+                    logging.info("🔄 DHCP: Включаем lease")
                     try:
                         tuple(dhcp_cmd('set', **{'.id': lease_id, 'disabled': 'no'}))
-                        print(f"✅ DHCP: Lease включен")
+                        logging.info("✅ DHCP: Lease включен")
                     except Exception as e:
-                        print(f"⚠️ DHCP: Ошибка включения: {e}")
+                        logging.warning("⚠️ DHCP: Ошибка включения: %s", e)
         
             # 4. Если lease не найден - создаем новый
             else:
-                print(f"➕ DHCP: Создаем новый lease для {ip} -> {mac}")
+                logging.info("➕ DHCP: Создаем новый lease для %s -> %s", ip, mac)
                 try:
                     mikrotik_comment = russian_to_mikrotik_comment(comment) if comment else ""
                     
@@ -353,7 +350,7 @@ class MikroTikManager:
                         lease_data['server'] = dhcp_server
                     
                     tuple(dhcp_cmd('add', **lease_data))
-                    print(f"✅ DHCP: Новый статический lease создан")
+                    logging.info("✅ DHCP: Новый статический lease создан")
                     
                     leases = list(dhcp_cmd)
                     for l in leases:
@@ -362,37 +359,37 @@ class MikroTikManager:
                             break
         
                 except Exception as e:
-                    print(f"❌ DHCP: Ошибка создания lease: {e}")
+                    logging.error("DHCP: Ошибка создания lease: %s", e)
                     return False
         
             # 5. Добавляем/обновляем комментарий
             if lease_id and comment:
-                print(f"📝 DHCP: Добавляем комментарий: {comment}")
+                logging.debug("📝 DHCP: Добавляем комментарий: %s", comment)
                 mikrotik_comment = russian_to_mikrotik_comment(comment)
 
                 try:
                     tuple(dhcp_cmd('comment', **{'numbers': lease_id, 'comment': mikrotik_comment}))
-                    print(f"✅ DHCP: Комментарий добавлен")
+                    logging.info("✅ DHCP: Комментарий добавлен")
                 except Exception as e:
-                    print(f"⚠️ DHCP: Ошибка comment, пробуем set: {e}")
+                    logging.warning("⚠️ DHCP: Ошибка comment, пробуем set: %s", e)
                     try:
                         tuple(dhcp_cmd('set', **{'.id': lease_id, 'comment': mikrotik_comment}))
-                        print(f"✅ DHCP: Комментарий добавлен через set")
+                        logging.info("✅ DHCP: Комментарий добавлен через set")
                     except Exception as e2:
-                        print(f"⚠️ DHCP: Ошибка добавления комментария: {e2}")
+                        logging.warning("⚠️ DHCP: Ошибка добавления комментария: %s", e2)
 
             # 5b. Авто-заполнение ClientID при наличии MAC
             if lease_id and mac:
                 client_id = "1:" + mac.lower()
-                print(f"📝 DHCP: Установка ClientID: {client_id}")
+                logging.debug("📝 DHCP: Установка ClientID: %s", client_id)
                 try:
                     tuple(dhcp_cmd('set', **{'.id': lease_id, 'client-id': client_id}))
-                    print(f"✅ DHCP: ClientID установлен")
+                    logging.info("✅ DHCP: ClientID установлен")
                 except Exception as e:
-                    print(f"⚠️ DHCP: ошибка установки ClientID: {e}")
+                    logging.warning("⚠️ DHCP: ошибка установки ClientID: %s", e)
         
             # 6. Финальная проверка
-            print(f"🔍 DHCP: Финальная проверка...")
+            logging.debug("🔍 DHCP: Финальная проверка...")
             if lease_id:
                 leases = list(dhcp_cmd)
                 for l in leases:
@@ -400,21 +397,20 @@ class MikroTikManager:
                         final_flags = l.get('flags', '')
                         
                         if 'D' in final_flags:
-                            print(f"⚠️ DHCP: Lease все еще динамический!")
+                            logging.warning("⚠️ DHCP: Lease все еще динамический!")
                             return False
                         else:
-                            print(f"✅ DHCP: Lease успешно статический")
+                            logging.info("✅ DHCP: Lease успешно статический")
                             return True
                         
-                print(f"❌ DHCP: Не удалось найти lease после обновления")
+                logging.error("DHCP: Не удалось найти lease после обновления")
                 return False
             else:
-                print(f"❌ DHCP: Не удалось получить/создать lease")
+                logging.error("DHCP: Не удалось получить/создать lease")
                 return False
             
         except Exception as e:
-            print(f"❌ DHCP: Критическая ошибка: {e}")
-            traceback.print_exc()
+            logging.error("DHCP: Критическая ошибка: %s", e, exc_info=True)
             return False
 
     # ========== ПРОВЕРКА MAC ==========
@@ -451,8 +447,7 @@ class MikroTikManager:
             return result
 
         except Exception as e:
-            print(f"❌ Ошибка проверки MAC {mac}: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка проверки MAC %s: %s", mac, e, exc_info=True)
             return {'exists': False, 'lease_ip': None, 'arp_ip': None, 'error': str(e)}
 
     # ========== ARP ==========
@@ -461,7 +456,7 @@ class MikroTikManager:
     ) -> bool:
         """Добавить статическую ARP запись"""
         try:
-            print(f"\n🔧 ARP: Начинаем работу с {ip} -> {mac}")
+            logging.info("🔧 ARP: Начинаем работу с %s -> %s", ip, mac)
 
             if interface is None:
                 belongs, found_interface = self.is_ip_in_mikrotik_networks(ip)
@@ -474,16 +469,16 @@ class MikroTikManager:
             arp_cmd = self.api.path("/ip/arp")
 
             # Проверяем существующую запись
-            print(f"🔍 ARP: Проверяем существующие записи")
+            logging.debug("🔍 ARP: Проверяем существующие записи")
             arp_entries = list(arp_cmd)
             for entry in arp_entries:
                 if entry.get("address") == ip:
-                    print(f"⚠️ ARP: Запись для {ip} уже существует")
+                    logging.warning("⚠️ ARP: Запись для %s уже существует", ip)
                     return True
 
             # Добавляем новую запись
-            print(f"➕ ARP: Добавляем новую запись")
-            print(f"   📍 Интерфейс: {interface}")
+            logging.info("➕ ARP: Добавляем новую запись")
+            logging.info("   📍 Интерфейс: %s", interface)
             mikrotik_comment = russian_to_mikrotik_comment(comment) if comment else ""
 
             try:
@@ -499,19 +494,18 @@ class MikroTikManager:
                         },
                     )
                 )
-                print(f"✅ ARP: Запись успешно добавлена")
+                logging.info("✅ ARP: Запись успешно добавлена")
                 return True
 
             except Exception as e:
-                print(f"❌ ARP: Ошибка добавления: {e}")
+                logging.error("ARP: Ошибка добавления: %s", e)
                 return False
 
         except ValueError as e:
-            print(f"❌ ARP: {e}")
+            logging.error("ARP: %s", e)
             raise
         except Exception as e:
-            print(f"❌ ARP: Критическая ошибка: {e}")
-            traceback.print_exc()
+            logging.error("ARP: Критическая ошибка: %s", e, exc_info=True)
             return False
 
     # ========== FIREWALL ==========
@@ -520,21 +514,21 @@ class MikroTikManager:
     ) -> bool:
         """Добавить адрес в список"""
         try:
-            print(f"\n🔧 Firewall: Добавление {address} в список '{list_name}'")
+            logging.info("🔧 Firewall: Добавление %s в список '%s'", address, list_name)
 
             fw_cmd = self.api.path("/ip/firewall/address-list")
 
             # Проверяем существующую запись
-            print(f"🔍 Firewall: Проверяем существующие записи")
+            logging.debug("🔍 Firewall: Проверяем существующие записи")
             addresses = list(fw_cmd)
 
             for addr in addresses:
                 if addr.get("list") == list_name and addr.get("address") == address:
-                    print(f"⚠️ Firewall: Адрес {address} уже в списке {list_name}")
+                    logging.warning("⚠️ Firewall: Адрес %s уже в списке %s", address, list_name)
                     return True
 
             # Добавляем новую запись
-            print(f"➕ Firewall: Добавляем {address} в список {list_name}")
+            logging.info("➕ Firewall: Добавляем %s в список %s", address, list_name)
             mikrotik_comment = russian_to_mikrotik_comment(comment) if comment else ""
 
             try:
@@ -549,16 +543,15 @@ class MikroTikManager:
                         },
                     )
                 )
-                print(f"✅ Firewall: Адрес успешно добавлен")
+                logging.info("✅ Firewall: Адрес успешно добавлен")
                 return True
 
             except Exception as e:
-                print(f"❌ Firewall: Ошибка добавления: {e}")
+                logging.error("Firewall: Ошибка добавления: %s", e)
                 return False
 
         except Exception as e:
-            print(f"❌ Firewall: Критическая ошибка: {e}")
-            traceback.print_exc()
+            logging.error("Firewall: Критическая ошибка: %s", e, exc_info=True)
             return False
 
     def get_internet_access_list(self) -> List[str]:
@@ -574,12 +567,11 @@ class MikroTikManager:
                     if ip:
                         internet_ips.append(ip)
             
-            print(f"📋 Найдено {len(internet_ips)} IP с доступом в интернет")
+            logging.info("📋 Найдено %s IP с доступом в интернет", len(internet_ips))
             return internet_ips
             
         except Exception as e:
-            print(f"❌ Ошибка получения internet_access: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка получения internet_access: %s", e, exc_info=True)
             return []
 
     def check_internet_access(self, ip: str) -> bool:
@@ -595,7 +587,7 @@ class MikroTikManager:
             return False
             
         except Exception as e:
-            print(f"❌ Ошибка проверки доступа: {e}")
+            logging.error("Ошибка проверки доступа: %s", e)
             return False
 
     def add_internet_access(self, ip: str, comment: str = "") -> bool:
@@ -605,7 +597,7 @@ class MikroTikManager:
     def remove_internet_access(self, ip: str) -> bool:
         """Удалить IP из списка internet_access"""
         try:
-            print(f"🔧 Удаление {ip} из internet_access...")
+            logging.info("🔧 Удаление %s из internet_access...", ip)
             
             fw_cmd = self.api.path("/ip/firewall/address-list")
             addresses = list(fw_cmd)
@@ -615,15 +607,14 @@ class MikroTikManager:
                     addr_id = addr.get(".id")
                     if addr_id:
                         tuple(fw_cmd("remove", **{".id": addr_id}))
-                        print(f"✅ IP {ip} удалён из internet_access")
+                        logging.info("✅ IP %s удалён из internet_access", ip)
                         return True
             
-            print(f"⚠️ IP {ip} не найден в internet_access")
+            logging.warning("⚠️ IP %s не найден в internet_access", ip)
             return True  # Не ошибка, если уже нет в списке
             
         except Exception as e:
-            print(f"❌ Ошибка удаления из internet_access: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка удаления из internet_access: %s", e, exc_info=True)
             return False
 
     def toggle_internet_access(self, ip: str, enable: bool, comment: str = "") -> Dict:
@@ -658,7 +649,7 @@ class MikroTikManager:
         """Удалить IP из всех firewall address-list'ов"""
         results = []
         try:
-            print(f"🔧 Firewall: удаление {ip} из всех address-list'ов")
+            logging.info("🔧 Firewall: удаление %s из всех address-list'ов", ip)
             fw_cmd = self.api.path("/ip/firewall/address-list")
             addresses = list(fw_cmd)
 
@@ -671,13 +662,13 @@ class MikroTikManager:
                     if addr_id:
                         try:
                             tuple(fw_cmd("remove", **{".id": addr_id}))
-                            print(f"   ✅ Удалён из списка '{list_name}'")
+                            logging.info("   ✅ Удалён из списка '%s'", list_name)
                             results.append({
                                 'list_name': list_name,
                                 'success': True
                             })
                         except Exception as e:
-                            print(f"   ❌ Ошибка удаления из '{list_name}': {e}")
+                            logging.error("   ❌ Ошибка удаления из '%s': %s", list_name, e)
                             results.append({
                                 'list_name': list_name,
                                 'success': False,
@@ -685,24 +676,23 @@ class MikroTikManager:
                             })
 
             if not results:
-                print(f"   ⚠️ IP {ip} не найден ни в одном address-list'е")
+                logging.warning("   ⚠️ IP %s не найден ни в одном address-list'е", ip)
             return results
 
         except Exception as e:
-            print(f"❌ Ошибка удаления из address-list'ов: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка удаления из address-list'ов: %s", e, exc_info=True)
             return results
 
     # ========== QUEUES ==========
     def get_queues(self) -> List[Dict]:
         """Получить все активные очереди"""
         try:
-            print("📡 Получение очередей с MikroTik...")
+            logging.debug("📡 Получение очередей с MikroTik...")
             queues = list(self.api("/queue/simple/print"))
-            print(f"📊 Получено {len(queues)} очередей")
+            logging.debug("📊 Получено %s очередей", len(queues))
 
             if not queues:
-                print("⚠️ Очереди не найдены!")
+                logging.warning("⚠️ Очереди не найдены!")
                 return []
 
             # Фильтруем отключенные очереди
@@ -723,12 +713,11 @@ class MikroTikManager:
                 if not disabled and not is_disabled_by_flags:
                     active_queues.append(queue)
 
-            print(f"✅ Активных: {len(active_queues)}")
+            logging.info("✅ Активных: %s", len(active_queues))
             return active_queues
 
         except Exception as e:
-            print(f"❌ Ошибка получения очередей: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка получения очередей: %s", e, exc_info=True)
             return []
 
     def _get_queue_targets(self, queue_id: str) -> List[str]:
@@ -751,28 +740,28 @@ class MikroTikManager:
             tuple(queue_cmd("set", **{".id": queue_id, "target": new_target}))
             return True
         except Exception as e:
-            print(f"❌ Queue: ошибка set: {e}")
+            logging.error("Queue: ошибка set: %s", e)
             try:
                 self.api("/queue/simple/set", **{".id": queue_id, "target": new_target})
                 return True
             except Exception as e2:
-                print(f"❌ Queue: ошибка alt set: {e2}")
+                logging.error("Queue: ошибка alt set: %s", e2)
                 return False
 
     def add_ip_to_queue(self, queue_id: str, ip: str) -> bool:
         """Добавить IP в очередь. Если в target уже есть интерфейс — не добавлять IP"""
         try:
-            print(f"\n🔧 Queue: Добавление IP {ip} в очередь ID: {queue_id}")
+            logging.info("🔧 Queue: Добавление IP %s в очередь ID: %s", ip, queue_id)
 
             targets = self._get_queue_targets(queue_id)
-            print(f"   Текущие target'ы: {targets}")
+            logging.debug("   Текущие target'ы: %s", targets)
 
             # Если в target уже есть интерфейс (не IP-адрес) — не трогаем
             import re
             ip_pattern = re.compile(r'^\d+\.\d+\.\d+\.\d+')
             for t in targets:
                 if t and not ip_pattern.match(t.strip()):
-                    print(f"   ℹ️  В target уже есть интерфейс '{t}', IP добавлять не нужно")
+                    logging.info("   ℹ️  В target уже есть интерфейс '%s', IP добавлять не нужно", t)
                     return True
 
             if "/" in ip:
@@ -783,32 +772,31 @@ class MikroTikManager:
             # Убираем dummy-IP если он есть
             if DUMMY_IP in targets:
                 targets.remove(DUMMY_IP)
-                print(f"   🧹 Убран dummy-IP {DUMMY_IP}")
+                logging.info("   🧹 Убран dummy-IP %s", DUMMY_IP)
 
             # Добавляем настоящий IP если его ещё нет
             if ip_with_mask not in targets:
                 targets.append(ip_with_mask)
-                print(f"   ➕ Добавлен {ip_with_mask}")
+                logging.info("   ➕ Добавлен %s", ip_with_mask)
             else:
-                print(f"   ⚠️ {ip_with_mask} уже в target")
+                logging.warning("   ⚠️ %s уже в target", ip_with_mask)
 
             if self._set_queue_targets(queue_id, targets):
-                print(f"✅ Queue: очередь обновлена")
+                logging.info("✅ Queue: очередь обновлена")
                 return True
             return False
 
         except Exception as e:
-            print(f"❌ Queue: Критическая ошибка: {e}")
-            traceback.print_exc()
+            logging.error("Queue: Критическая ошибка: %s", e, exc_info=True)
             return False
 
     def remove_ip_from_queue(self, queue_id: str, ip: str) -> bool:
         """Убрать IP из очереди. Если очередь опустеет — вставить DUMMY_IP"""
         try:
-            print(f"\n🔧 Queue: Удаление IP {ip} из очереди ID: {queue_id}")
+            logging.info("🔧 Queue: Удаление IP %s из очереди ID: %s", ip, queue_id)
 
             targets = self._get_queue_targets(queue_id)
-            print(f"   Текущие target'ы: {targets}")
+            logging.debug("   Текущие target'ы: %s", targets)
 
             if "/" in ip:
                 ip_with_mask = ip
@@ -817,23 +805,22 @@ class MikroTikManager:
 
             if ip_with_mask in targets:
                 targets.remove(ip_with_mask)
-                print(f"   ➖ Убран {ip_with_mask}")
+                logging.info("   ➖ Убран %s", ip_with_mask)
             else:
-                print(f"   ⚠️ {ip_with_mask} не найден в target")
+                logging.warning("   ⚠️ %s не найден в target", ip_with_mask)
 
             # Если опустела — вставляем dummy
             if not targets:
                 targets.append(DUMMY_IP)
-                print(f"   🧹 Очередь опустела, добавлен dummy-IP {DUMMY_IP}")
+                logging.info("   🧹 Очередь опустела, добавлен dummy-IP %s", DUMMY_IP)
 
             if self._set_queue_targets(queue_id, targets):
-                print(f"✅ Queue: очередь обновлена")
+                logging.info("✅ Queue: очередь обновлена")
                 return True
             return False
 
         except Exception as e:
-            print(f"❌ Queue: ошибка удаления IP из очереди: {e}")
-            traceback.print_exc()
+            logging.error("Queue: ошибка удаления IP из очереди: %s", e, exc_info=True)
             return False
 
     def remove_ip_from_all_queues(self, ip: str) -> List[Dict]:
@@ -849,7 +836,7 @@ class MikroTikManager:
                 if ip_with_mask in targets or ip in targets:
                     queue_id = queue.get(".id")
                     queue_name = queue.get("name", queue_id)
-                    print(f"🔍 Найден IP {ip} в очереди '{queue_name}'")
+                    logging.debug("🔍 Найден IP %s в очереди '%s'", ip, queue_name)
                     success = self.remove_ip_from_queue(queue_id, ip)
                     results.append({
                         'queue_name': queue_name,
@@ -858,8 +845,7 @@ class MikroTikManager:
                     })
             return results
         except Exception as e:
-            print(f"❌ Ошибка удаления IP из всех очередей: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка удаления IP из всех очередей: %s", e, exc_info=True)
             return results
 
     # ========== DHCP POOLS ==========
@@ -870,7 +856,7 @@ class MikroTikManager:
             pools = list(pools_cmd)
             return pools
         except Exception as e:
-            print(f"❌ Ошибка получения DHCP пулов: {e}")
+            logging.error("Ошибка получения DHCP пулов: %s", e)
             return []
 
     def get_dhcp_leases(self) -> List[Dict]:
@@ -880,22 +866,22 @@ class MikroTikManager:
             leases = list(leases_cmd)
             return leases
         except Exception as e:
-            print(f"❌ Ошибка получения DHCP leases: {e}")
+            logging.error("Ошибка получения DHCP leases: %s", e)
             return []
 
     def get_free_dhcp_ips(self, max_per_pool: int = 20) -> Dict[str, List[str]]:
         """Получить свободные IP адреса из DHCP пулов"""
         try:
-            print(f"🔍 Поиск свободных IP адресов в DHCP пулах...")
+            logging.debug("🔍 Поиск свободных IP адресов в DHCP пулах...")
             
             # Получаем все пулы
             pools = self.get_dhcp_pools()
-            print(f"📊 Найдено пулов DHCP: {len(pools)}")
+            logging.debug("📊 Найдено пулов DHCP: %s", len(pools))
             
             # Получаем все leases
             leases = self.get_dhcp_leases()
             used_ips = {lease.get('address') for lease in leases if lease.get('address')}
-            print(f"📊 Используется IP адресов: {len(used_ips)}")
+            logging.debug("📊 Используется IP адресов: %s", len(used_ips))
             
             # Анализируем каждый пул
             free_ips_by_pool = {}
@@ -907,7 +893,7 @@ class MikroTikManager:
                 if not ranges:
                     continue
                 
-                print(f"🔍 Анализ пула '{pool_name}': {ranges}")
+                logging.debug("🔍 Анализ пула '%s': %s", pool_name, ranges)
                 
                 # Парсим диапазоны IP
                 pool_ips = set()
@@ -937,13 +923,12 @@ class MikroTikManager:
                     'ranges': ranges
                 }
                 
-                print(f"   📊 Свободно: {len(free_ips)}/{len(pool_ips)}")
+                logging.debug("   📊 Свободно: %s/%s", len(free_ips), len(pool_ips))
             
             return free_ips_by_pool
             
         except Exception as e:
-            print(f"❌ Ошибка поиска свободных IP: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка поиска свободных IP: %s", e, exc_info=True)
             return {}
     
     def _parse_ip_range(self, ip_range: str) -> List[str]:
@@ -958,7 +943,7 @@ class MikroTikManager:
                 end = ipaddress.IPv4Address(end_ip.strip())
                 return [str(ipaddress.IPv4Address(ip)) for ip in range(int(start), int(end) + 1)]
             except (ipaddress.AddressValueError, ValueError) as e:
-                print(f"⚠️ Ошибка парсинга диапазона {ip_range}: {e}")
+                logging.warning("⚠️ Ошибка парсинга диапазона %s: %s", ip_range, e)
                 return []
         elif '/' in ip_range:
             # Формат: 192.168.1.0/24
@@ -966,7 +951,7 @@ class MikroTikManager:
                 network = ipaddress.IPv4Network(ip_range, strict=False)
                 return [str(ip) for ip in network.hosts()]
             except ipaddress.AddressValueError as e:
-                print(f"⚠️ Ошибка парсинга сети {ip_range}: {e}")
+                logging.warning("⚠️ Ошибка парсинга сети %s: %s", ip_range, e)
                 return []
         else:
             # Одиночный IP
@@ -974,7 +959,7 @@ class MikroTikManager:
                 ipaddress.IPv4Address(ip_range)
                 return [ip_range]
             except ipaddress.AddressValueError as e:
-                print(f"⚠️ Ошибка парсинга IP {ip_range}: {e}")
+                logging.warning("⚠️ Ошибка парсинга IP %s: %s", ip_range, e)
                 return []
 
     # ========== MAC REPLACEMENT FUNCTIONALITY ==========
@@ -986,7 +971,7 @@ class MikroTikManager:
             arp_list = list(arp_cmd)
             return arp_list
         except Exception as e:
-            print(f"❌ Ошибка получения ARP таблицы: {e}")
+            logging.error("Ошибка получения ARP таблицы: %s", e)
             return []
 
     def delete_dhcp_lease(self, ip: str) -> bool:
@@ -995,23 +980,22 @@ class MikroTikManager:
             # Находим lease по IP
             lease = self.find_dhcp_lease(ip=ip)
             if not lease:
-                print(f"⚠️ DHCP lease для IP {ip} не найден")
+                logging.warning("⚠️ DHCP lease для IP %s не найден", ip)
                 return False
             
             lease_id = lease.get('.id')
             if not lease_id:
-                print(f"❌ Не удалось получить ID lease для IP {ip}")
+                logging.error("Не удалось получить ID lease для IP %s", ip)
                 return False
             
             # Удаляем lease
             dhcp_cmd = self.api.path('/ip/dhcp-server/lease')
             tuple(dhcp_cmd('remove', **{'.id': lease_id}))
-            print(f"✅ DHCP lease для IP {ip} удален")
+            logging.info("✅ DHCP lease для IP %s удален", ip)
             return True
             
         except Exception as e:
-            print(f"❌ Ошибка удаления DHCP lease: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка удаления DHCP lease: %s", e, exc_info=True)
             return False
 
     def update_dhcp_lease(self, old_ip: str, new_mac: str, comment: str = "") -> bool:
@@ -1020,12 +1004,12 @@ class MikroTikManager:
             # Находим lease по старому IP
             lease = self.find_dhcp_lease(ip=old_ip)
             if not lease:
-                print(f"⚠️ DHCP lease для IP {old_ip} не найден")
+                logging.warning("⚠️ DHCP lease для IP %s не найден", old_ip)
                 return False
             
             lease_id = lease.get('.id')
             if not lease_id:
-                print(f"❌ Не удалось получить ID lease для IP {old_ip}")
+                logging.error("Не удалось получить ID lease для IP %s", old_ip)
                 return False
             
             # Обновляем MAC и комментарий
@@ -1035,12 +1019,11 @@ class MikroTikManager:
                 update_data['comment'] = comment
             
             tuple(dhcp_cmd('set', **update_data))
-            print(f"✅ DHCP lease обновлен: IP={old_ip}, MAC={new_mac}")
+            logging.info("✅ DHCP lease обновлен: IP=%s, MAC=%s", old_ip, new_mac)
             return True
             
         except Exception as e:
-            print(f"❌ Ошибка обновления DHCP lease: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка обновления DHCP lease: %s", e, exc_info=True)
             return False
 
     def update_arp_entry(self, ip: str, new_mac: str) -> bool:
@@ -1057,17 +1040,16 @@ class MikroTikManager:
                     break
             
             if not arp_id:
-                print(f"⚠️ ARP запись для IP {ip} не найдена")
+                logging.warning("⚠️ ARP запись для IP %s не найдена", ip)
                 return False
             
             # Обновляем MAC
             tuple(arp_cmd('set', **{'.id': arp_id, 'mac-address': new_mac.lower()}))
-            print(f"✅ ARP запись обновлена: IP={ip}, MAC={new_mac}")
+            logging.info("✅ ARP запись обновлена: IP=%s, MAC=%s", ip, new_mac)
             return True
             
         except Exception as e:
-            print(f"❌ Ошибка обновления ARP записи: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка обновления ARP записи: %s", e, exc_info=True)
             return False
 
     def add_arp_entry(self, ip: str, mac: str, interface: str = None, comment: str = "") -> bool:
@@ -1085,18 +1067,17 @@ class MikroTikManager:
                 arp_data['interface'] = interface
             
             tuple(arp_cmd('add', **arp_data))
-            print(f"✅ ARP запись добавлена: IP={ip}, MAC={mac}")
+            logging.info("✅ ARP запись добавлена: IP=%s, MAC=%s", ip, mac)
             return True
             
         except Exception as e:
-            print(f"❌ Ошибка добавления ARP записи: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка добавления ARP записи: %s", e, exc_info=True)
             return False
 
     def delete_arp_entry(self, ip: str) -> bool:
         """Удалить ARP запись по IP"""
         try:
-            print(f"🔧 ARP: удаление записи для {ip}")
+            logging.info("🔧 ARP: удаление записи для %s", ip)
             arp_cmd = self.api.path('/ip/arp')
             entries = list(arp_cmd)
 
@@ -1105,15 +1086,14 @@ class MikroTikManager:
                     arp_id = entry.get('.id')
                     if arp_id:
                         tuple(arp_cmd('remove', **{'.id': arp_id}))
-                        print(f"✅ ARP запись для {ip} удалена")
+                        logging.info("✅ ARP запись для %s удалена", ip)
                         return True
 
-            print(f"⚠️ ARP запись для {ip} не найдена")
+            logging.warning("⚠️ ARP запись для %s не найдена", ip)
             return True
 
         except Exception as e:
-            print(f"❌ Ошибка удаления ARP записи: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка удаления ARP записи: %s", e, exc_info=True)
             return False
 
     def get_dhcp_subscribers(self, pool_name: str = None, include_all: bool = False) -> List[Dict]:
@@ -1202,14 +1182,13 @@ class MikroTikManager:
             subscribers.sort(key=safe_ip_sort)
             
             if pool_name:
-                print(f"✅ Найдено абонентов в пуле '{pool_name}': {len(subscribers)}")
+                logging.info("✅ Найдено абонентов в пуле '%s': %s", pool_name, len(subscribers))
             else:
-                print(f"✅ Найдено абонентов: {len(subscribers)}")
+                logging.info("✅ Найдено абонентов: %s", len(subscribers))
             return subscribers
             
         except Exception as e:
-            print(f"❌ Ошибка получения абонентов: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка получения абонентов: %s", e, exc_info=True)
             return []
 
     def replace_mac_address(self, old_ip: str, new_ip: str) -> Dict:
@@ -1313,14 +1292,13 @@ class MikroTikManager:
             result['success'] = True
             result['message'] = f"MAC адрес успешно заменён. IP {old_ip} теперь привязан к MAC {new_mac}"
             
-            print(f"✅ Замена MAC завершена: {old_ip} → MAC {new_mac}")
+            logging.info("✅ Замена MAC завершена: %s → MAC %s", old_ip, new_mac)
             return result
             
         except Exception as e:
             result['error'] = f"Ошибка при замене MAC: {str(e)}"
             result['steps'].append(f"❌ Ошибка: {str(e)}")
-            print(f"❌ Ошибка замены MAC: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка замены MAC: %s", e, exc_info=True)
             return result
 
     def replace_mac_manual(self, ip: str, new_mac: str, client_id: str = None) -> Dict:
@@ -1391,14 +1369,13 @@ class MikroTikManager:
             result['success'] = True
             result['message'] = f"MAC адрес успешно изменён. IP {ip} теперь привязан к MAC {new_mac}"
             
-            print(f"✅ Ручная замена MAC завершена: {ip} → {new_mac}")
+            logging.info("✅ Ручная замена MAC завершена: %s → %s", ip, new_mac)
             return result
             
         except Exception as e:
             result['error'] = f"Ошибка при замене MAC: {str(e)}"
             result['steps'].append(f"❌ Ошибка: {str(e)}")
-            print(f"❌ Ошибка ручной замены MAC: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка ручной замены MAC: %s", e, exc_info=True)
             return result
 
     # ========== ОБНОВЛЕНИЕ АБОНЕНТА ==========
@@ -1563,13 +1540,12 @@ class MikroTikManager:
 
             result['success'] = True
             result['message'] = f"Абонент {old_ip} обновлён"
-            print(f"✅ Обновление абонента завершено")
+            logging.info("✅ Обновление абонента завершено")
 
         except Exception as e:
             result['error'] = str(e)
             result['steps'].append(f"❌ Ошибка: {str(e)}")
-            print(f"❌ Ошибка обновления абонента: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка обновления абонента: %s", e, exc_info=True)
 
         return result
 
@@ -1582,7 +1558,7 @@ class MikroTikManager:
             interfaces = list(self.api.path('/interface'))
             return [{'name': i.get('name', ''), 'type': i.get('type', ''), 'running': i.get('running', False), 'disabled': i.get('disabled', False)} for i in interfaces]
         except Exception as e:
-            print(f"❌ Ошибка получения интерфейсов: {e}")
+            logging.error("Ошибка получения интерфейсов: %s", e)
             return []
 
     def get_ip_addresses(self) -> List[Dict]:
@@ -1593,7 +1569,7 @@ class MikroTikManager:
             addresses = list(self.api.path('/ip/address'))
             return [{'address': addr.get('address', ''), 'interface': addr.get('interface', ''), 'network': addr.get('network', '')} for addr in addresses]
         except Exception as e:
-            print(f"❌ Ошибка получения IP адресов: {e}")
+            logging.error("Ошибка получения IP адресов: %s", e)
             return []
 
     def get_routes(self) -> List[Dict]:
@@ -1604,7 +1580,7 @@ class MikroTikManager:
             routes = list(self.api.path('/ip/route'))
             return [{'dst_address': r.get('dst-address', ''), 'gateway': r.get('gateway', ''), 'interface': r.get('interface', ''), 'distance': int(r.get('distance', 255)), 'active': r.get('active', False)} for r in routes]
         except Exception as e:
-            print(f"❌ Ошибка получения маршрутов: {e}")
+            logging.error("Ошибка получения маршрутов: %s", e)
             return []
 
     def analyze_channels(self) -> Dict:
@@ -1634,6 +1610,5 @@ class MikroTikManager:
             result['backup_channel'] = channels[1] if len(channels) > 1 else None
             return result
         except Exception as e:
-            print(f"❌ Ошибка анализа каналов: {e}")
-            traceback.print_exc()
+            logging.error("Ошибка анализа каналов: %s", e, exc_info=True)
             return {'success': False, 'error': str(e)}

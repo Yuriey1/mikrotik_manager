@@ -4,6 +4,7 @@
 
 import requests
 import ipaddress
+import logging
 from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
 from urllib.parse import urljoin
@@ -107,7 +108,7 @@ class NetBoxClient:
             return devices
             
         except requests.RequestException as e:
-            print(f"❌ Ошибка получения устройств из NetBox: {e}")
+            logging.error("❌ Ошибка получения устройств из NetBox: %s", e)
             return []
     
     def test_connection(self) -> bool:

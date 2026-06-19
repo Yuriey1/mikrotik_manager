@@ -2,6 +2,8 @@
 DELETE-обработчики маршрутов
 """
 
+import logging
+
 from urllib.parse import parse_qs
 
 from config.config_manager import ConfigManager

@@ -6,6 +6,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 import json
 import traceback
+import logging
 import os
 
 # ── Route handlers ────────────────────────────────────────────
@@ -32,7 +33,7 @@ class StoppableHTTPServer(HTTPServer):
                 break
             except Exception as e:
                 if self._is_running:
-                    print(f"⚠️  Ошибка обработки запроса: {e}")
+                    logging.warning("⚠️  Ошибка обработки запроса: %s", e)
 
     def shutdown(self):
         self._is_running = False
@@ -170,7 +171,7 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             else:
                 self.send_error(404, "Not Found")
         except Exception as e:
-            print(f"❌ Ошибка DELETE: {e}")
+            logging.error("❌ Ошибка DELETE: %s", e)
             self._send_json({'error': str(e)}, 500)
 
     def do_GET(self):
@@ -189,7 +190,7 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             else:
                 self.send_error(404, "Not Found")
         except Exception as e:
-            print(f"❌ Ошибка GET: {e}")
+            logging.error("❌ Ошибка GET: %s", e)
             self._send_json({'error': str(e)}, 500)
 
     def do_POST(self):
@@ -206,13 +207,13 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             else:
                 self.send_error(404, "Not Found")
         except Exception as e:
-            print(f"❌ Ошибка POST: {e}")
+            logging.error("❌ Ошибка POST: %s", e)
             self._send_json({'error': str(e)}, 500)
 
     # ── Logging ───────────────────────────────────────────────
 
     def log_message(self, format, *args):
-        print(f"🌐 {self.address_string()} - {format % args}")
+        logging.info("🌐 %s - %s", self.address_string(), format % args)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -224,21 +225,20 @@ def start_server(port=8090, host='0.0.0.0'):
         server_address = (host, port)
         http_server = StoppableHTTPServer(server_address, MikroTikManagerHandler)
 
-        print("\n" + "=" * 60)
-        print("🌐 Запуск веб-интерфейса...")
-        print(f"   Адрес: http://localhost:{port}")
-        print(f"   Или:   http://ваш_IP_адрес:{port}")
-        print("\n📱 Откройте браузер для работы с приложением")
-        print("=" * 60)
-        print("Для остановки нажмите Ctrl+C")
-        print("=" * 60)
+        logging.info("=" * 60)
+        logging.info("🌐 Запуск веб-интерфейса...")
+        logging.info("   Адрес: http://localhost:%s", port)
+        logging.info("   Или:   http://ваш_IP_адрес:%s", port)
+        logging.info("📱 Откройте браузер для работы с приложением")
+        logging.info("=" * 60)
+        logging.info("Для остановки нажмите Ctrl+C")
+        logging.info("=" * 60)
 
         http_server.serve_forever()
 
     except KeyboardInterrupt:
-        print("\n👋 Приложение завершено пользователем")
+        logging.info("👋 Приложение завершено пользователем")
     except Exception as e:
-        print(f"\n❌ Ошибка запуска сервера: {e}")
-        traceback.print_exc()
+        logging.error("❌ Ошибка запуска сервера: %s", e, exc_info=True)
     finally:
-        print("\n👋 До свидания!")
+        logging.info("👋 До свидания!")

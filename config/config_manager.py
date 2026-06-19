@@ -7,6 +7,7 @@ import json
 import os
 import base64
 import traceback
+import logging
 
 CONFIG_FILE = 'mikrotik_manager.conf'
 NETBOX_CONFIG_FILE = 'netbox_config.json'  # Новый файл только для настроек NetBox
@@ -62,7 +63,7 @@ class ConfigManager:
                         loaded_config = json.loads(content)
                         default_config.update(loaded_config)
             except Exception as e:
-                print(f"⚠️  Ошибка загрузки конфигурации NetBox: {e}")
+                logging.warning("⚠️  Ошибка загрузки конфигурации NetBox: %s", e)
         
         return default_config
     
@@ -73,7 +74,7 @@ class ConfigManager:
             with open(NETBOX_CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"❌ Ошибка сохранения конфигурации NetBox: {e}")
+            logging.error("❌ Ошибка сохранения конфигурации NetBox: %s", e)
     
     @staticmethod
     def encrypt_password(password):
@@ -116,13 +117,12 @@ class ConfigManager:
                             
                             # Сохраняем в новом формате
                             ConfigManager.save_credentials_dict(new_data)
-                            print(f"🔄 Конвертирован старый формат паролей в новый (логины: {default_username})")
+                            logging.info("🔄 Конвертирован старый формат паролей в новый (логины: %s)", default_username)
                             return new_data
                         
                         return data
             except Exception as e:
-                print(f"⚠️  Ошибка загрузки учетных данных: {e}")
-                traceback.print_exc()
+                logging.warning("⚠️  Ошибка загрузки учетных данных: %s", e, exc_info=True)
         return {}
     
     @staticmethod
@@ -132,7 +132,7 @@ class ConfigManager:
             with open(PASSWORDS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(credentials, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"❌ Ошибка сохранения учетных данных: {e}")
+            logging.error("❌ Ошибка сохранения учетных данных: %s", e)
     
     @staticmethod
     def get_credentials(device_name):
@@ -168,7 +168,7 @@ class ConfigManager:
             credentials.pop(device_name, None)
         
         ConfigManager.save_credentials_dict(credentials)
-        print(f"💾 Сохранены учетные данные для {device_name}: логин={username}")
+        logging.info("💾 Сохранены учетные данные для %s: логин=%s", device_name, username)
     
     # ↓↓↓ Старые методы для обратной совместимости ↓↓↓
     
