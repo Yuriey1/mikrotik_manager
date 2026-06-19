@@ -511,45 +511,50 @@ class MikroTikManager:
 
     # ========== FIREWALL ==========
     def add_to_address_list(
-        self, list_name: str, address: str, comment: str = ""
+        self, list_name: str, address: str, comment: str = "", timeout: str = ""
     ) -> bool:
         """Добавить адрес в список"""
         try:
-            logging.info("🔧 Firewall: Добавление %s в список '%s'", address, list_name)
+            logging.debug("🔧 Firewall: Добавление %s в список '%s'", address, list_name)
 
             fw_cmd = self.api.path("/ip/firewall/address-list")
 
             # Проверяем существующую запись
-            logging.debug("🔍 Firewall: Проверяем существующие записи")
             addresses = list(fw_cmd)
 
             for addr in addresses:
                 if addr.get("list") == list_name and addr.get("address") == address:
-                    logging.warning("⚠️ Firewall: Адрес %s уже в списке %s", address, list_name)
+                    # Если timeout отличается — обновляем
+                    if timeout:
+                        addr_id = addr.get(".id")
+                        if addr_id:
+                            try:
+                                tuple(fw_cmd("set", **{".id": addr_id, "timeout": timeout}))
+                                logging.info("   ✅ Timeout обновлён на %s", timeout)
+                                return True
+                            except Exception:
+                                pass
+                    logging.debug("   ⚠️ Firewall: Адрес %s уже в списке %s", address, list_name)
                     return True
 
             # Добавляем новую запись
-            logging.info("➕ Firewall: Добавляем %s в список %s", address, list_name)
             mikrotik_comment = russian_to_mikrotik_comment(comment) if comment else ""
+            params = {
+                "list": list_name,
+                "address": address,
+                "comment": mikrotik_comment,
+                "disabled": "no",
+            }
+            if timeout:
+                params["timeout"] = timeout
 
-            try:
-                tuple(
-                    fw_cmd(
-                        "add",
-                        **{
-                            "list": list_name,
-                            "address": address,
-                            "comment": mikrotik_comment,
-                            "disabled": "no",
-                        },
-                    )
-                )
-                logging.info("✅ Firewall: Адрес успешно добавлен")
-                return True
+            tuple(fw_cmd("add", **params))
+            logging.info("   ✅ Firewall: Адрес добавлен")
+            return True
 
-            except Exception as e:
-                logging.error("Firewall: Ошибка добавления: %s", e)
-                return False
+        except Exception as e:
+            logging.error("Firewall: Критическая ошибка: %s", e, exc_info=True)
+            return False
 
         except Exception as e:
             logging.error("Firewall: Критическая ошибка: %s", e, exc_info=True)
@@ -591,9 +596,9 @@ class MikroTikManager:
             logging.error("Ошибка проверки доступа: %s", e)
             return False
 
-    def add_internet_access(self, ip: str, comment: str = "") -> bool:
+    def add_internet_access(self, ip: str, comment: str = "", timeout: str = "") -> bool:
         """Добавить IP в список internet_access"""
-        return self.add_to_address_list("internet_access", ip, comment)
+        return self.add_to_address_list("internet_access", ip, comment, timeout)
 
     def remove_internet_access(self, ip: str) -> bool:
         """Удалить IP из списка internet_access"""
@@ -618,7 +623,7 @@ class MikroTikManager:
             logging.error("Ошибка удаления из internet_access: %s", e, exc_info=True)
             return False
 
-    def toggle_internet_access(self, ip: str, enable: bool, comment: str = "") -> Dict:
+    def toggle_internet_access(self, ip: str, enable: bool, comment: str = "", timeout: str = "") -> Dict:
         """Включить/выключить доступ в интернет для IP"""
         result = {
             'success': False,
@@ -626,10 +631,10 @@ class MikroTikManager:
             'enabled': enable,
             'error': None
         }
-        
+
         try:
             if enable:
-                if self.add_internet_access(ip, comment):
+                if self.add_internet_access(ip, comment, timeout):
                     result['success'] = True
                     result['message'] = f"Доступ в интернет включён для {ip}"
                 else:
@@ -640,10 +645,10 @@ class MikroTikManager:
                     result['message'] = f"Доступ в интернет выключен для {ip}"
                 else:
                     result['error'] = "Не удалось удалить из списка"
-                    
+
         except Exception as e:
             result['error'] = str(e)
-            
+
         return result
 
     def remove_from_all_address_lists(self, ip: str) -> List[Dict]:
@@ -1395,6 +1400,7 @@ class MikroTikManager:
             comment = data.get('comment', '')
             queues = data.get('queues', [])
             internet_access = data.get('internet_access', False)
+            internet_timeout = data.get('internet_timeout', '')
 
             # --- DHCP: обновление комментария ---
             result['steps'].append("📝 DHCP: обновление комментария...")
@@ -1530,7 +1536,7 @@ class MikroTikManager:
             # --- Firewall: интернет доступ ---
             if internet_access:
                 result['steps'].append("📝 Firewall: включение интернета...")
-                fw_result = self.add_internet_access(old_ip_for_rest, comment)
+                fw_result = self.add_internet_access(old_ip_for_rest, comment, internet_timeout)
                 result['details']['firewall'] = fw_result
                 result['steps'].append("   ✅ Доступ включён" if fw_result else "   ❌ Ошибка")
             else:

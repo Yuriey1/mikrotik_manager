@@ -97,6 +97,7 @@ def handle_add_employee(handler, data):
         ip = data.get('ip', '').strip()
         mac = data.get('mac', '').strip()
         internet_access = bool(data.get('internet_access', False))
+        internet_timeout = data.get('internet_timeout', '').strip()
 
         queues = data.get('queues', [])
         if isinstance(queues, str):
@@ -201,7 +202,7 @@ def handle_add_employee(handler, data):
 
         # 4. Firewall
         if internet_access:
-            results['firewall'] = state.mikrotik_manager.add_to_address_list('internet_access', f"{ip}/32", comment)
+            results['firewall'] = state.mikrotik_manager.add_to_address_list('internet_access', f"{ip}/32", comment, internet_timeout)
         else:
             results['firewall'] = True
 
@@ -296,6 +297,7 @@ def handle_toggle_internet(handler, data):
     ip = data.get('ip', '').strip()
     enable = data.get('enable', False)
     comment = data.get('comment', '').strip()
+    timeout = data.get('timeout', '').strip()
 
     if not ip:
         handler._send_json({'error': 'Не указан IP адрес'}, 400)
@@ -303,7 +305,7 @@ def handle_toggle_internet(handler, data):
 
     try:
         ipaddress.ip_address(ip)
-        result = state.mikrotik_manager.toggle_internet_access(ip, enable, comment)
+        result = state.mikrotik_manager.toggle_internet_access(ip, enable, comment, timeout)
         if result['success']:
             handler._send_json({'success': True, 'message': result.get('message', 'Статус изменён'), 'ip': ip, 'enabled': enable})
         else:

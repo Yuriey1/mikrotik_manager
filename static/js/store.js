@@ -54,6 +54,10 @@ const store = Vue.reactive({
     menuX: 0,
     menuY: 0,
 
+    internetPopupSub: null,
+    customDays: 0,
+    customHours: 1,
+
     autoSavePassword: false,
     defaultUsername: 'admin',
 });
@@ -95,4 +99,27 @@ store.menuDelete = function(sub) {
     store.floatingMenuSub = null;
     store.showDeleteModal = true;
     store.deleteSub = sub;
+};
+
+store.setTimedInternet = async function(timeout) {
+    var sub = store.internetPopupSub;
+    store.internetPopupSub = null;
+    if (!sub) return;
+    try {
+        await toggleInternet(sub.ip, true, sub.comment, timeout);
+        if (store.internetAccess.indexOf(sub.ip) === -1) store.internetAccess.push(sub.ip);
+    } catch (e) {
+        store.error = e.message;
+    }
+};
+
+store.applyCustomTimeout = function() {
+    var d = parseInt(store.customDays) || 0;
+    var h = parseInt(store.customHours) || 0;
+    if (d === 0 && h === 0) return;
+    var totalH = d * 24 + h;
+    var timeout = String(totalH).padStart(2, '0') + ':00:00';
+    store.customDays = 0;
+    store.customHours = 1;
+    store.setTimedInternet(timeout);
 };

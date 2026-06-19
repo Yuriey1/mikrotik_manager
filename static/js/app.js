@@ -121,17 +121,19 @@ app.component('subscriber-tab', {
             return store.internetAccess.includes(ip);
         }
 
-        async function toggleNet(sub) {
+        async function toggleNet(sub, event) {
             const enable = !hasInternet(sub.ip);
-            try {
-                await toggleInternet(sub.ip, enable, sub.comment);
-                if (enable) {
-                    if (!store.internetAccess.includes(sub.ip)) store.internetAccess.push(sub.ip);
-                } else {
+            if (!enable) {
+                try {
+                    await toggleInternet(sub.ip, false, sub.comment);
                     store.internetAccess = store.internetAccess.filter(i => i !== sub.ip);
+                } catch (e) { store.error = e.message; }
+            } else {
+                if (event) {
+                    store.menuX = event.clientX;
+                    store.menuY = event.clientY;
                 }
-            } catch (e) {
-                store.error = e.message;
+                store.internetPopupSub = sub;
             }
         }
 
@@ -205,6 +207,17 @@ app.component('subscriber-modal', {
         const popoverMaxH = Vue.ref(450);
         const popoverQueues = Vue.ref([]);
         const saving = Vue.ref(false);
+        const internetTimeout = Vue.ref('');
+        const internetCustomD = Vue.ref(0);
+        const internetCustomH = Vue.ref(1);
+        const internetDurations = [
+            { value: '', label: 'Навсегда' },
+            { value: '01:00:00', label: '1 ч' },
+            { value: '04:00:00', label: '4 ч' },
+            { value: '08:00:00', label: '8 ч' },
+            { value: '24:00:00', label: '1 д' },
+            { value: '168:00:00', label: '1 нед' },
+        ];
         let trafficTimer = null;
 
         function closeModal() {
@@ -352,6 +365,16 @@ app.component('subscriber-modal', {
             } catch (e) { store.error = e.message; }
         }
 
+        function applyCustomTimeout() {
+            const d = parseInt(internetCustomD.value) || 0;
+            const h = parseInt(internetCustomH.value) || 0;
+            if (d === 0 && h === 0) return;
+            const totalH = d * 24 + h;
+            internetTimeout.value = String(totalH).padStart(2, '0') + ':00:00';
+            internetCustomD.value = 0;
+            internetCustomH.value = 1;
+        }
+
         async function saveSubscriber() {
             const f = form.value;
             if (!f.full_name || !f.position || !f.ip) {
@@ -384,6 +407,7 @@ app.component('subscriber-modal', {
                     ip: f.ip,
                     mac: f.mac,
                     internet_access: f.internet_access,
+                    internet_timeout: internetTimeout.value,
                 };
                 if (hasQueueChange) reqData.queues = selQueues;
                 if (mode.value === 'add') {
@@ -412,7 +436,8 @@ app.component('subscriber-modal', {
 
         return { store, showModal, mode, form, showTraffic, trafficLoading, trafficData, saving,
                  popoverTop, popoverLeft, popoverMaxH, popoverQueues,
-                 closeModal, showFreeIps, formatBandwidth,
+                 internetTimeout, internetDurations, internetCustomD, internetCustomH,
+                 closeModal, showFreeIps, formatBandwidth, applyCustomTimeout,
                  openTrafficPopover, closePopover, isPopoverSelected, selectQueueFromPopover,
                  saveSubscriber };
     },

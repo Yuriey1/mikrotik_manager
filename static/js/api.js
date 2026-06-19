@@ -151,10 +151,10 @@ async function replaceMac(data) {
     finally { store.loading = false; store.loadingMessage = ''; }
 }
 
-async function toggleInternet(ip, enable, comment) {
+async function toggleInternet(ip, enable, comment, timeout) {
     store.loading = true;
     store.loadingMessage = (enable ? 'Включение' : 'Отключение') + ' доступа в интернет...';
-    try { return await apiPost('/api/internet_access/toggle', { ip, enable, comment: comment || '' }); }
+    try { return await apiPost('/api/internet_access/toggle', { ip, enable, comment: comment || '', timeout: timeout || '' }); }
     finally { store.loading = false; store.loadingMessage = ''; }
 }
 

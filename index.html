@@ -38,6 +38,32 @@
             <div @click="store.menuCopy(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-copy"></i> Копировать</div>
             <div @click="store.menuDelete(store.floatingMenuSub)" class="floating-menu-item"><i class="fas fa-trash-alt"></i> Удалить</div>
         </div>
+        <!-- Internet timeout popup -->
+        <div v-show="store.internetPopupSub" class="menu-backdrop" @click="store.internetPopupSub = null"></div>
+        <div v-show="store.internetPopupSub" class="floating-menu" @click.stop
+             :style="{ left: Math.min((store.menuX || 0), innerW - 220) + 'px', top: Math.min((store.menuY || 0), innerH - 300) + 'px' }">
+            <div class="floating-menu-item" style="color: var(--text-muted); cursor: default; font-weight: 600;">
+                Вкл. интернет для {{ store.internetPopupSub && store.internetPopupSub.ip }}
+            </div>
+            <div @click="store.setTimedInternet('')" class="floating-menu-item"><i class="fas fa-infinity"></i> Навсегда</div>
+            <div @click="store.setTimedInternet('01:00:00')" class="floating-menu-item"><i class="fas fa-clock"></i> 1 час</div>
+            <div @click="store.setTimedInternet('04:00:00')" class="floating-menu-item"><i class="fas fa-clock"></i> 4 часа</div>
+            <div @click="store.setTimedInternet('08:00:00')" class="floating-menu-item"><i class="fas fa-clock"></i> 8 часов</div>
+            <div @click="store.setTimedInternet('24:00:00')" class="floating-menu-item"><i class="fas fa-calendar"></i> 1 день</div>
+            <div @click="store.setTimedInternet('168:00:00')" class="floating-menu-item"><i class="fas fa-calendar"></i> 1 неделя</div>
+            <div class="floating-menu-item" style="flex-direction: column; align-items: stretch; gap: 6px; cursor: default;" @click.stop>
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 12px;">
+                    <i class="fas fa-edit" style="margin-right: 8px;"></i> Свой вариант
+                </div>
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <input type="number" v-model.number="store.customDays" min="0" max="365" placeholder="0" style="width: 50px; padding: 4px 6px; font-size: 12px; text-align: center;">
+                    <span style="font-size: 11px; color: var(--text-muted);">дн</span>
+                    <input type="number" v-model.number="store.customHours" min="0" max="23" placeholder="0" style="width: 50px; padding: 4px 6px; font-size: 12px; text-align: center;">
+                    <span style="font-size: 11px; color: var(--text-muted);">ч</span>
+                    <button class="btn btn-primary btn-sm" style="padding: 2px 8px; font-size: 11px;" @click="store.applyCustomTimeout()">OK</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- ====== APP HEADER ====== -->
@@ -189,7 +215,7 @@
                         </thead>
                         <tbody>
                             <tr v-for="sub in filteredSubscribers" :key="sub.ip" @click="selectSubscriber(sub)" :class="{ selected: selectedIp === sub.ip }">
-                                <td class="col-inet clickable" @click.stop="toggleNet(sub)">
+                                <td class="col-inet clickable" @click.stop="toggleNet(sub, $event)">
                                     <i :class="'fas ' + (hasInternet(sub.ip) ? 'fa-globe' : 'fa-globe')"
                                        :style="{ color: hasInternet(sub.ip) ? 'var(--success)' : 'var(--text-muted)', fontSize: '16px' }"></i>
                                 </td>
@@ -331,6 +357,20 @@
                             <input type="checkbox" v-model="form.internet_access">
                             <span>Доступ в интернет</span>
                         </label>
+                        <div v-if="form.internet_access" style="display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+                            <span v-for="d in internetDurations" :key="d.value"
+                                  @click="internetTimeout = d.value"
+                                  class="btn btn-sm"
+                                  :class="internetTimeout === d.value ? 'btn-primary' : 'btn-secondary'"
+                                  style="font-size: 11px; padding: 3px 8px;">{{ d.label }}</span>
+                            <input type="number" v-model.number="internetCustomD" min="0" max="365" placeholder="0"
+                                   style="width: 46px; padding: 3px 4px; font-size: 11px; text-align: center;">
+                            <span style="font-size: 11px; color: var(--text-muted);">дн</span>
+                            <input type="number" v-model.number="internetCustomH" min="0" max="23" placeholder="0"
+                                   style="width: 46px; padding: 3px 4px; font-size: 11px; text-align: center;">
+                            <span style="font-size: 11px; color: var(--text-muted);">ч</span>
+                            <button class="btn btn-primary btn-sm" style="padding: 2px 8px; font-size: 11px;" @click="applyCustomTimeout">OK</button>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
