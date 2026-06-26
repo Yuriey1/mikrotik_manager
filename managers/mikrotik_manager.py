@@ -250,7 +250,7 @@ class MikroTikManager:
                 if current_mac and current_mac.lower() != mac.lower():
                     logging.warning("⚠️ DHCP: MAC отличается! Обновляем...")
                     try:
-                        tuple(dhcp_cmd('set', **{'.id': lease_id, 'mac-address': mac}))
+                        tuple(dhcp_cmd('set', **{'.id': lease_id, 'mac-address': mac.upper()}))
                         logging.info("✅ DHCP: MAC обновлен")
                     except Exception as e:
                         logging.error("DHCP: Ошибка обновления MAC: %s", e)
@@ -304,7 +304,7 @@ class MikroTikManager:
                                 
                                 lease_data = {
                                     'address': ip,
-                                    'mac-address': mac,
+                                    'mac-address': mac.upper(),
                                     'disabled': 'no',
                                     'comment': mikrotik_comment
                                 }
@@ -342,7 +342,7 @@ class MikroTikManager:
                     
                     lease_data = {
                         'address': ip,
-                        'mac-address': mac,
+                        'mac-address': mac.upper(),
                         'disabled': 'no',
                         'comment': mikrotik_comment
                     }
@@ -415,6 +415,18 @@ class MikroTikManager:
             return False
 
     # ========== ПРОВЕРКА MAC ==========
+    def _ips_in_same_network(self, ip_a: str, ip_b: str) -> bool:
+        if not ip_a or not ip_b:
+            return True
+        try:
+            belongs_a, iface_a = self.is_ip_in_mikrotik_networks(ip_a)
+            belongs_b, iface_b = self.is_ip_in_mikrotik_networks(ip_b)
+            if not belongs_a or not belongs_b:
+                return True
+            return iface_a == iface_b
+        except Exception:
+            return True
+
     def check_mac_exists(self, mac: str, exclude_ip: Optional[str] = None) -> Dict:
         """Проверить, существует ли MAC в DHCP лизах или ARP таблице"""
         try:
@@ -429,6 +441,8 @@ class MikroTikManager:
                 if lease_mac == mac_lower:
                     if exclude_ip and lease_ip == exclude_ip:
                         continue
+                    if not self._ips_in_same_network(lease_ip, exclude_ip):
+                        continue
                     result['exists'] = True
                     result['lease_ip'] = lease_ip
                     break
@@ -440,6 +454,8 @@ class MikroTikManager:
                 arp_ip = entry.get('address', '')
                 if arp_mac == mac_lower:
                     if exclude_ip and arp_ip == exclude_ip:
+                        continue
+                    if not self._ips_in_same_network(arp_ip, exclude_ip):
                         continue
                     result['exists'] = True
                     result['arp_ip'] = arp_ip
@@ -488,7 +504,7 @@ class MikroTikManager:
                         "add",
                         **{
                             "address": ip,
-                            "mac-address": mac,
+                            "mac-address": mac.upper(),
                             "interface": interface,
                             "disabled": "no",
                             "comment": mikrotik_comment,
@@ -739,8 +755,17 @@ class MikroTikManager:
         return []
 
     def _set_queue_targets(self, queue_id: str, targets: List[str]) -> bool:
-        """Записать список target'ов в очередь"""
+        """Записать список target'ов в очередь (IP сортируются по возрастанию)"""
         queue_cmd = self.api.path("/queue/simple")
+
+        def _sort_key(t):
+            ip_part = t.strip().split('/')[0]
+            try:
+                return (0, ipaddress.ip_address(ip_part))
+            except ValueError:
+                return (1, t)
+
+        targets.sort(key=_sort_key)
         new_target = ",".join(targets)
         try:
             tuple(queue_cmd("set", **{".id": queue_id, "target": new_target}))
@@ -853,6 +878,81 @@ class MikroTikManager:
         except Exception as e:
             logging.error("Ошибка удаления IP из всех очередей: %s", e, exc_info=True)
             return results
+
+    def move_ip_between_queues(self, from_queue_id: str, to_queue_id: str, ip: str) -> Dict:
+        """Переместить IP из одной очереди в другую"""
+        result = {'success': False, 'removed': False, 'added': False, 'error': None}
+        try:
+            logging.info("🔧 Queue: Перемещение IP %s из %s в %s", ip, from_queue_id, to_queue_id)
+
+            if from_queue_id == to_queue_id:
+                result['error'] = 'Исходная и целевая очереди совпадают'
+                return result
+
+            result['removed'] = self.remove_ip_from_queue(from_queue_id, ip)
+            if not result['removed']:
+                result['error'] = 'Не удалось удалить IP из исходной очереди'
+                return result
+
+            result['added'] = self.add_ip_to_queue(to_queue_id, ip)
+            if not result['added']:
+                result['error'] = 'Не удалось добавить IP в целевую очередь'
+                self.add_ip_to_queue(from_queue_id, ip)
+                result['removed'] = False
+                return result
+
+            result['success'] = True
+            logging.info("✅ Queue: IP %s перемещён", ip)
+            return result
+
+        except Exception as e:
+            logging.error("Queue: ошибка перемещения IP: %s", e, exc_info=True)
+            result['error'] = str(e)
+            return result
+
+    def set_queue_comment(self, queue_id: str, comment: str) -> bool:
+        """Установить комментарий очереди"""
+        try:
+            queue_cmd = self.api.path("/queue/simple")
+            tuple(queue_cmd("set", **{".id": queue_id, "comment": comment}))
+            logging.info("✅ Queue: комментарий обновлён: %s", comment)
+            return True
+        except Exception as e:
+            logging.error("Queue: ошибка установки комментария: %s", e)
+            return False
+
+    def reset_queue_traffic(self, queue_id: str, new_downloaded: int = 0) -> Dict:
+        """Сбросить счётчик трафика в комментарии очереди (формат: downloaded/total)"""
+        result = {'success': False, 'error': None, 'previous': None, 'new_comment': None}
+        try:
+            queue_cmd = self.api.path("/queue/simple")
+            queues = list(queue_cmd)
+            current_comment = ""
+            for q in queues:
+                if q.get(".id") == queue_id:
+                    current_comment = q.get("comment", "") or ""
+                    break
+
+            if not current_comment or "/" not in current_comment:
+                result['error'] = 'Комментарий очереди не содержит счётчик трафика'
+                return result
+
+            parts = current_comment.split("/", 1)
+            total = parts[1] if len(parts) > 1 else ""
+            result['previous'] = current_comment
+            result['new_comment'] = f"{new_downloaded}/{total}"
+
+            if self.set_queue_comment(queue_id, result['new_comment']):
+                result['success'] = True
+            else:
+                result['error'] = 'Не удалось обновить комментарий'
+
+            return result
+
+        except Exception as e:
+            logging.error("Queue: ошибка сброса трафика: %s", e, exc_info=True)
+            result['error'] = str(e)
+            return result
 
     # ========== DHCP POOLS ==========
     def get_dhcp_pools(self) -> List[Dict]:
@@ -1020,7 +1120,7 @@ class MikroTikManager:
             
             # Обновляем MAC и комментарий
             dhcp_cmd = self.api.path('/ip/dhcp-server/lease')
-            update_data = {'.id': lease_id, 'mac-address': new_mac.lower()}
+            update_data = {'.id': lease_id, 'mac-address': new_mac.upper()}
             if comment:
                 update_data['comment'] = comment
             
@@ -1050,7 +1150,7 @@ class MikroTikManager:
                 return False
             
             # Обновляем MAC
-            tuple(arp_cmd('set', **{'.id': arp_id, 'mac-address': new_mac.lower()}))
+            tuple(arp_cmd('set', **{'.id': arp_id, 'mac-address': new_mac.upper()}))
             logging.info("✅ ARP запись обновлена: IP=%s, MAC=%s", ip, new_mac)
             return True
             
@@ -1065,7 +1165,7 @@ class MikroTikManager:
             
             arp_data = {
                 'address': ip,
-                'mac-address': mac.lower(),
+                'mac-address': mac.upper(),
                 'comment': comment
             }
             
@@ -1396,7 +1496,7 @@ class MikroTikManager:
 
         try:
             new_ip = data.get('ip', old_ip)
-            new_mac = data.get('mac', '').strip()
+            new_mac = data.get('mac', '').strip().upper()
             comment = data.get('comment', '')
             queues = data.get('queues', [])
             internet_access = data.get('internet_access', False)

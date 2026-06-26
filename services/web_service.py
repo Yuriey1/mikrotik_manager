@@ -76,6 +76,9 @@ POST_ROUTES = {
     '/api/internet_access/toggle': post_routes.handle_toggle_internet,
     '/api/delete_subscriber':      post_routes.handle_delete_subscriber,
     '/api/edit_subscriber':        post_routes.handle_edit_subscriber,
+    '/api/move_ip':                post_routes.handle_move_ip,
+    '/api/reset_queue_traffic':    post_routes.handle_reset_queue_traffic,
+    '/api/save_credentials':       post_routes.handle_save_credentials,
 }
 
 DELETE_ROUTES = {

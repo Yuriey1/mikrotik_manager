@@ -583,6 +583,24 @@ textarea {
     overflow: hidden;
 }
 
+.device-credentials-btn {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 10px;
+    padding: 1px 5px;
+    margin-left: 6px;
+    vertical-align: middle;
+    transition: all 0.15s;
+    float: right;
+}
+.device-credentials-btn:hover {
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+
 .device-name {
     font-weight: 600;
     color: var(--text-primary);
@@ -2059,6 +2077,9 @@ textarea {
 .chain-node.channel-node.backup .node-icon { background: rgba(79, 172, 254, 0.3); color: #4facfe; }
 .chain-node.channel-node:not(.main):not(.backup) .node-icon { background: rgba(115, 191, 105, 0.2); color: #73bf69; }
 .chain-actions { text-align: center; padding: 12px; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 8px; }
+.popover-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px; padding: 0 4px; line-height: 1; }
+.popover-close:hover { color: var(--text-primary); }
+
 .queue-selector-popover {
     z-index: 1000;
     width: 380px;
@@ -2080,6 +2101,82 @@ textarea {
 .popover-target { font-size: 10px; color: var(--text-muted); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 0; min-width: 0; }
 .popover-limit { font-size: 10px; color: var(--accent-primary); font-family: monospace; white-space: nowrap; flex-shrink: 0; margin-left: 12px; }
 .popover-item .check-icon { color: var(--accent-primary); font-size: 12px; position: absolute; right: 16px; }
+
+/* ===== QUEUE NODE DETAILS ===== */
+.queue-node-detail {
+    padding: 4px 0 8px 24px;
+    border-left: 1px solid var(--border-color);
+    margin-left: 14px;
+}
+
+.queue-node-ips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.queue-ip-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 12px;
+    font-family: monospace;
+    color: var(--text-primary);
+}
+
+.queue-ip-text { }
+
+.queue-ip-move-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0 2px;
+    line-height: 1;
+    transition: color 0.15s;
+}
+
+.queue-ip-move-btn:hover {
+    color: var(--accent-primary);
+}
+
+.queue-node-traffic {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 2px 0;
+}
+
+.traffic-label { color: var(--text-muted); }
+
+.traffic-value {
+    font-family: monospace;
+    color: var(--accent-secondary);
+}
+
+.traffic-reset-btn {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 1px 6px;
+    transition: all 0.15s;
+}
+
+.traffic-reset-btn:hover {
+    color: var(--danger);
+    border-color: var(--danger);
+}
 
 /* ===== VUE-КОМПОНЕНТЫ: СТАТУС-ТОЧКА ===== */
 .status-dot.connected { background: var(--success); box-shadow: 0 0 8px rgba(115, 191, 105, 0.5); }

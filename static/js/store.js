@@ -50,6 +50,9 @@ const store = Vue.reactive({
 
     showCleanupModal: false,
 
+    moveIpPopover: null,
+    moveIpData: null,
+
     floatingMenuSub: null,
     menuX: 0,
     menuY: 0,

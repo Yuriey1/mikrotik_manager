@@ -122,8 +122,8 @@ def handle_add_employee(handler, data):
                 pass
 
         if mac:
-            mac = mac.lower().replace('-', ':').replace('.', ':')
-            mac_pattern = re.compile(r'^([0-9a-f]{2}[:-]){5}([0-9a-f]{2})$')
+            mac = mac.upper().replace('-', ':').replace('.', ':')
+            mac_pattern = re.compile(r'^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$', re.IGNORECASE)
             if not mac_pattern.match(mac):
                 handler._send_json({'error': 'Неверный формат MAC'}, 400)
                 return
@@ -402,4 +402,100 @@ def handle_edit_subscriber(handler, data):
             handler._send_json({'success': False, 'error': result.get('error', 'Ошибка обновления'), 'steps': result.get('steps', [])})
     except Exception as e:
         logging.error("Ошибка редактирования абонента: %s", e, exc_info=True)
+        handler._send_json({'success': False, 'error': str(e)}, 500)
+
+
+# ══════════════════════════════════════════════════════════════
+#  POST /api/move_ip
+# ══════════════════════════════════════════════════════════════
+
+def handle_move_ip(handler, data):
+    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+        handler._send_json({'error': 'Не подключено к устройству'}, 400)
+        return
+
+    ip = data.get('ip', '').strip()
+    from_queue_id = data.get('from_queue_id', '').strip()
+    to_queue_id = data.get('to_queue_id', '').strip()
+
+    if not ip or not from_queue_id or not to_queue_id:
+        handler._send_json({'error': 'Укажите ip, from_queue_id, to_queue_id'}, 400)
+        return
+
+    try:
+        result = state.mikrotik_manager.move_ip_between_queues(from_queue_id, to_queue_id, ip)
+
+        if state.tree_builder and state.mikrotik_manager.connected:
+            try:
+                state.tree_builder.build_tree()
+            except Exception:
+                pass
+
+        if result['success']:
+            handler._send_json({'success': True, 'message': f'IP {ip} перемещён'})
+        else:
+            handler._send_json({'success': False, 'error': result.get('error', 'Ошибка перемещения')})
+    except Exception as e:
+        logging.error("Ошибка перемещения IP: %s", e, exc_info=True)
+        handler._send_json({'success': False, 'error': str(e)}, 500)
+
+
+# ══════════════════════════════════════════════════════════════
+#  POST /api/reset_queue_traffic
+# ══════════════════════════════════════════════════════════════
+
+def handle_reset_queue_traffic(handler, data):
+    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+        handler._send_json({'error': 'Не подключено к устройству'}, 400)
+        return
+
+    queue_id = data.get('queue_id', '').strip()
+    new_value = data.get('new_value', 0)
+
+    if not queue_id:
+        handler._send_json({'error': 'Укажите queue_id'}, 400)
+        return
+
+    try:
+        result = state.mikrotik_manager.reset_queue_traffic(queue_id, int(new_value))
+
+        if state.tree_builder and state.mikrotik_manager.connected:
+            try:
+                state.tree_builder.build_tree()
+            except Exception:
+                pass
+
+        if result['success']:
+            handler._send_json({
+                'success': True,
+                'message': 'Счётчик трафика сброшен',
+                'previous': result.get('previous'),
+                'new_comment': result.get('new_comment')
+            })
+        else:
+            handler._send_json({'success': False, 'error': result.get('error', 'Ошибка сброса трафика')})
+    except Exception as e:
+        logging.error("Ошибка сброса трафика: %s", e, exc_info=True)
+        handler._send_json({'success': False, 'error': str(e)}, 500)
+
+
+# ══════════════════════════════════════════════════════════════
+#  POST /api/save_credentials
+# ══════════════════════════════════════════════════════════════
+
+def handle_save_credentials(handler, data):
+    device = data.get('device', '').strip()
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+
+    if not device:
+        handler._send_json({'error': 'Не указано устройство'}, 400)
+        return
+
+    try:
+        from config.config_manager import ConfigManager
+        ConfigManager.save_credentials(device, username, password)
+        handler._send_json({'success': True, 'message': f'Учётные данные для {device} сохранены'})
+    except Exception as e:
+        logging.error("Ошибка сохранения учётных данных: %s", e, exc_info=True)
         handler._send_json({'success': False, 'error': str(e)}, 500)

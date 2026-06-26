@@ -76,7 +76,12 @@ app.component('device-sidebar', {
 
         function openNetBoxConfig() { store.showNetBoxModal = true; }
 
-        return { store, searchQuery, filteredDevices, doConnect, doDisconnect, openNetBoxConfig };
+        function openCredentials(deviceName) {
+            store.credentialsDevice = deviceName;
+            store.showCredentialsModal = true;
+        }
+
+        return { store, searchQuery, filteredDevices, doConnect, doDisconnect, openNetBoxConfig, loadDevices, openCredentials };
     },
 });
 
@@ -404,6 +409,7 @@ app.component('subscriber-modal', {
                 const reqData = {
                     full_name: f.full_name,
                     position: f.position,
+                    comment: f.position + ' - ' + f.full_name,
                     ip: f.ip,
                     mac: f.mac,
                     internet_access: f.internet_access,
@@ -609,7 +615,107 @@ app.component('queue-node', {
     emits: ['toggle'],
     setup(props) {
         const expanded = Vue.computed(() => !!props.expandedNodes[props.node.id]);
-        return { expanded };
+
+        const DUMMY_IP = '192.168.100.5';
+
+        const displayIps = Vue.computed(() => {
+            const targets = props.node.target || [];
+            return targets.filter(function(t) {
+                const clean = t.replace(/\/32$/, '');
+                return clean !== DUMMY_IP;
+            });
+        });
+
+        const trafficInfo = Vue.computed(() => {
+            const comment = props.node.comment || '';
+            const match = comment.match(/^(\d+)\/(\d+)$/);
+            if (!match) return null;
+            const downloaded = parseInt(match[1]);
+            const total = parseInt(match[2]);
+            function fmt(n) {
+                if (n >= 1073741824) return (n / 1073741824).toFixed(1) + ' GB';
+                if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+                if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
+                return n + ' B';
+            }
+            return {
+                downloaded: downloaded,
+                total: total,
+                display: fmt(downloaded) + ' / ' + fmt(total)
+            };
+        });
+
+        function startMoveIp(ip, queueId, event) {
+            store.moveIpData = { ip: ip, from_queue_id: queueId };
+            store.moveIpPopover = { top: 0, left: 0 };
+            Vue.nextTick(function() {
+                var el = document.querySelector('.queue-selector-popover');
+                if (!el) return;
+                var cx = event ? event.clientX : 300;
+                var cy = event ? event.clientY : 200;
+                var x = Math.min(window.innerWidth - 420, Math.max(20, cx - 200));
+                var y = Math.min(window.innerHeight - 520, Math.max(20, cy - 20));
+                store.moveIpPopover = { top: y, left: x };
+            });
+        }
+
+        async function resetTraffic(queueId) {
+            try {
+                var result = await resetQueueTraffic(queueId, 0);
+                if (result.success) {
+                    await refreshData();
+                } else {
+                    store.error = result.error || 'Ошибка сброса трафика';
+                }
+            } catch (e) {
+                store.error = e.message;
+            }
+        }
+
+        return { expanded, displayIps, trafficInfo, startMoveIp, resetTraffic };
+    },
+});
+
+app.component('move-ip-popover', {
+    template: '#move-ip-popover',
+    setup() {
+        const moveTargetQueues = Vue.computed(function() {
+            var fromId = store.moveIpData ? store.moveIpData.from_queue_id : null;
+            var all = store.allQueues || [];
+            return all.filter(function(q) {
+                return q.id !== fromId;
+            }).map(function(q) {
+                var t = q.target || [];
+                if (Array.isArray(t)) {
+                    q.short_target = t.join(', ').substring(0, 40);
+                } else if (typeof t === 'string') {
+                    q.short_target = t.substring(0, 40);
+                }
+                return q;
+            });
+        });
+
+        function closeMovePopover() {
+            store.moveIpPopover = null;
+            store.moveIpData = null;
+        }
+
+        async function doMoveIp(toQueueId) {
+            if (!store.moveIpData) return;
+            try {
+                var result = await moveIp(store.moveIpData.ip, store.moveIpData.from_queue_id, toQueueId);
+                if (result.success) {
+                    closeMovePopover();
+                    await refreshData();
+                } else {
+                    store.error = result.error || 'Ошибка перемещения IP';
+                }
+            } catch (e) {
+                store.error = e.message;
+            }
+        }
+
+        return { store, moveTargetQueues, closeMovePopover, doMoveIp };
     },
 });
 
@@ -687,12 +793,29 @@ app.component('credentials-modal', {
     setup() {
         const username = Vue.ref(store.defaultUsername);
         const password = Vue.ref('');
-        const savePassword = Vue.ref(store.autoSavePassword);
 
-        function submit() {
+        function connectAndClose() {
             store.showCredentialsModal = false;
             connectDevice(store.credentialsDevice, username.value, password.value)
                 .catch(e => { store.error = e.message; });
+        }
+
+        async function saveAndClose() {
+            store.showCredentialsModal = false;
+            try {
+                await saveCredentials(store.credentialsDevice, username.value, password.value);
+            } catch (e) {
+                store.error = e.message;
+            }
+        }
+
+        async function forgetAndClose() {
+            store.showCredentialsModal = false;
+            try {
+                await forgetCredentials(store.credentialsDevice);
+            } catch (e) {
+                store.error = e.message;
+            }
         }
 
         function cancel() {
@@ -700,7 +823,7 @@ app.component('credentials-modal', {
             store.credentialsDevice = null;
         }
 
-        return { store, username, password, savePassword, submit, cancel };
+        return { store, username, password, connectAndClose, saveAndClose, forgetAndClose, cancel };
     },
 });
 

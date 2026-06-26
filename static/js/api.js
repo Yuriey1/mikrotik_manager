@@ -185,8 +185,20 @@ async function findQueues(ip) {
     return apiGet(`/api/find_queues${params}`);
 }
 
+async function moveIp(ip, from_queue_id, to_queue_id) {
+    return apiPost('/api/move_ip', { ip, from_queue_id, to_queue_id });
+}
+
+async function resetQueueTraffic(queue_id, new_value) {
+    return apiPost('/api/reset_queue_traffic', { queue_id, new_value: new_value || 0 });
+}
+
 async function forgetCredentials(device) {
     return apiDelete(`/api/forget_credentials?device=${encodeURIComponent(device)}`);
+}
+
+async function saveCredentials(device, username, password) {
+    return apiPost('/api/save_credentials', { device, username, password });
 }
 
 async function loadSubscribers() {
