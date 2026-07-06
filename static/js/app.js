@@ -848,7 +848,12 @@ app.component('cleanup-modal', {
             list.sort((a, b) => {
                 const va = a[f] || '';
                 const vb = b[f] || '';
-                if (f === 'age_days') return (a.age_days - b.age_days) * dir;
+                if (f === 'age_days') {
+                    if (a.age_days === -1 && b.age_days === -1) return 0;
+                    if (a.age_days === -1) return -1;
+                    if (b.age_days === -1) return 1;
+                    return (a.age_days - b.age_days) * dir;
+                }
                 return String(va).localeCompare(String(vb)) * dir;
             });
             return list;
@@ -874,6 +879,7 @@ app.component('cleanup-modal', {
             { value: 90, label: '90 дней' },
             { value: 180, label: '6 мес' },
             { value: 365, label: '1 год' },
+            { value: -1, label: 'never' },
         ];
 
         function closeModal() {
@@ -887,7 +893,8 @@ app.component('cleanup-modal', {
             loading.value = true;
             searched.value = true;
             try {
-                const data = await getOldLeases(age.value);
+                const isNever = age.value === -1;
+                const data = await getOldLeases(isNever ? 0 : age.value, isNever);
                 if (data.success) {
                     leases.value = data.leases || [];
                 }

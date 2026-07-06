@@ -140,8 +140,10 @@ async function deleteSubscriber(ip) {
     finally { store.loading = false; store.loadingMessage = ''; }
 }
 
-async function getOldLeases(age) {
-    return apiGet(`/api/old_leases?age=${age}`);
+async function getOldLeases(age, includeNever) {
+    var url = `/api/old_leases?age=${age}`;
+    if (includeNever) url += '&include_never=true';
+    return apiGet(url);
 }
 
 async function replaceMac(data) {

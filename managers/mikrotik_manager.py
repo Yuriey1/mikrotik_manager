@@ -1658,7 +1658,7 @@ class MikroTikManager:
 
     # ========== ОЧИСТКА УСТАРЕВШИХ ЛИЗОВ ==========
 
-    def get_old_leases(self, max_age_days: int) -> List[Dict]:
+    def get_old_leases(self, max_age_days: int, include_never: bool = False) -> List[Dict]:
         result = []
         try:
             leases = self.get_dhcp_leases()
@@ -1702,16 +1702,23 @@ class MikroTikManager:
 
             for lease in leases:
                 last_seen = lease.get('last-seen', '')
-                if not last_seen:
-                    continue
-                delta = None
-                m = re.match(r'(?:(\d+)w)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?', last_seen)
-                if m:
-                    w = int(m.group(1) or 0); d = int(m.group(2) or 0); h = int(m.group(3) or 0)
-                    mi = int(m.group(4) or 0); s = int(m.group(5) or 0)
-                    delta = datetime.timedelta(weeks=w, days=d, hours=h, minutes=mi, seconds=s)
-                if not delta or delta <= max_age:
-                    continue
+                is_never = (last_seen.lower() == 'never') or (not last_seen)
+
+                if include_never:
+                    if not is_never:
+                        continue
+                else:
+                    if is_never:
+                        continue
+                    delta = None
+                    m = re.match(r'(?:(\d+)w)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?', last_seen)
+                    if m:
+                        w = int(m.group(1) or 0); d = int(m.group(2) or 0); h = int(m.group(3) or 0)
+                        mi = int(m.group(4) or 0); s = int(m.group(5) or 0)
+                        delta = datetime.timedelta(weeks=w, days=d, hours=h, minutes=mi, seconds=s)
+                    if not delta or delta <= max_age:
+                        continue
+
                 ip_str = lease.get('address', '')
                 pool_name = _in_pool(ip_str)
                 if not pool_name:
@@ -1722,11 +1729,14 @@ class MikroTikManager:
                     'host': lease.get('host-name', ''),
                     'comment': lease.get('comment', ''),
                     'pool': pool_name,
-                    'last_seen': last_seen,
-                    'age_days': delta.days,
+                    'last_seen': last_seen if last_seen else 'never',
+                    'age_days': -1 if is_never else delta.days,
                 })
 
-            result.sort(key=lambda x: x['age_days'], reverse=True)
+            if include_never:
+                result.sort(key=lambda x: x['ip'])
+            else:
+                result.sort(key=lambda x: -x['age_days'])
         except Exception as e:
             logging.error("Ошибка поиска устаревших лизов: %s", e, exc_info=True)
         return result

@@ -526,7 +526,7 @@
                                         <td style="font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="lease.comment">{{ lease.comment || '—' }}</td>
                                         <td style="font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ lease.host || '—' }}</td>
                                         <td style="font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ lease.pool }}</td>
-                                        <td style="font-size: 12px; color: var(--warning); white-space: nowrap;">{{ lease.age_days }}d</td>
+                                        <td style="font-size: 12px; color: var(--warning); white-space: nowrap;">{{ lease.age_days === -1 ? 'never' : lease.age_days + 'd' }}</td>
                                     </tr>
                                 </tbody>
                             </table>
