@@ -102,6 +102,10 @@ app.component('subscriber-tab', {
         const searchText = Vue.ref('');
         const selectedIp = Vue.ref(null);
 
+        Vue.watch(function() { return store.connected; }, function(val) {
+            if (!val) { searchText.value = ''; selectedIp.value = null; }
+        });
+
         const filteredSubscribers = Vue.computed(() => {
             const q = searchText.value.toLowerCase().trim();
             if (!q) return store.subscribers;
@@ -123,7 +127,8 @@ app.component('subscriber-tab', {
             return parts.length > 1 ? parts[0] : '';
         }
         function hasInternet(ip) {
-            return store.internetAccess.includes(ip);
+            var clean = (ip || '').split('/')[0];
+            return store.internetAccess.some(function(a) { return (a || '').split('/')[0] === clean; });
         }
 
         async function toggleNet(sub, event) {
@@ -131,7 +136,9 @@ app.component('subscriber-tab', {
             if (!enable) {
                 try {
                     await toggleInternet(sub.ip, false, sub.comment);
-                    store.internetAccess = store.internetAccess.filter(i => i !== sub.ip);
+                    var cleanSubIp = (sub.ip || '').split('/')[0];
+                    store.internetAccess = store.internetAccess.filter(function(i) { return (i || '').split('/')[0] !== cleanSubIp; });
+                    delete store.internetTimeouts[cleanSubIp];
                 } catch (e) { store.error = e.message; }
             } else {
                 if (event) {
@@ -147,11 +154,11 @@ app.component('subscriber-tab', {
         }
 
         function openAddModal() {
-            store.showSubscriberModal = true;
             store.subscriberModalMode = 'add';
+            store.editOldIp = null;
             store.subscriberForm = { full_name: '', position: '', ip: '', mac: '', internet_access: false };
             store.trafficChains = null;
-            store.editOldIp = null;
+            store.showSubscriberModal = true;
         }
 
         function openCleanupModal() {
@@ -162,7 +169,6 @@ app.component('subscriber-tab', {
             const parts = (sub.comment || '').split(' - ');
             const position = parts.length > 1 ? parts[0] : '';
             const name = parts.length > 1 ? parts.slice(1).join(' - ') : (sub.comment || '');
-            store.showSubscriberModal = true;
             store.subscriberModalMode = 'edit';
             store.editOldIp = sub.ip;
             store.subscriberForm = {
@@ -173,6 +179,7 @@ app.component('subscriber-tab', {
                 internet_access: hasInternet(sub.ip)
             };
             store.trafficChains = null;
+            store.showSubscriberModal = true;
         }
 
         function openMacReplace(sub) {
@@ -214,7 +221,8 @@ app.component('subscriber-modal', {
         const saving = Vue.ref(false);
         const internetTimeout = Vue.ref('');
         const internetCustomD = Vue.ref(0);
-        const internetCustomH = Vue.ref(1);
+        const internetCustomH = Vue.ref(0);
+        const loadingTimeout = Vue.ref(false);
         const internetDurations = [
             { value: '', label: 'Навсегда' },
             { value: '01:00:00', label: '1 ч' },
@@ -225,11 +233,53 @@ app.component('subscriber-modal', {
         ];
         let trafficTimer = null;
 
+        Vue.watch(showModal, function(val) {
+            if (val) {
+                Vue.nextTick(async function() {
+                    if (!showModal.value) return;
+                    var ip = (store.subscriberForm && store.subscriberForm.ip) || '';
+                    ip = ip.split('/')[0];
+                    if (!ip) return;
+
+                    // Пробуем из кэша store
+                    var saved = (store.internetTimeouts || {})[ip];
+
+                    // Если кэш пуст — запрашиваем напрямую
+                    if (saved === undefined) {
+                        loadingTimeout.value = true;
+                        try {
+                            var data = await apiGet('/api/internet_access');
+                            if (data && data.timeouts) {
+                                store.internetTimeouts = data.timeouts;
+                                saved = data.timeouts[ip];
+                            }
+                        } catch (e) {
+                            console.warn('internet sync fetch error:', e);
+                        }
+                        loadingTimeout.value = false;
+                    }
+
+                    if (saved !== undefined && saved !== null) {
+                        internetTimeout.value = saved || '';
+                    }
+                    if (saved && saved.indexOf(':') !== -1) {
+                        var parts = saved.split(':');
+                        var totalH = parseInt(parts[0]) || 0;
+                        internetCustomD.value = Math.floor(totalH / 24);
+                        internetCustomH.value = totalH % 24;
+                    }
+                });
+            }
+        });
+
         function closeModal() {
             store.showSubscriberModal = false;
             store.trafficChains = null;
             store.trafficLoading = false;
             store.trafficPopover = null;
+            internetTimeout.value = '';
+            internetCustomD.value = 0;
+            internetCustomH.value = 0;
         }
 
         async function loadTrafficForIp(ip) {
@@ -377,7 +427,7 @@ app.component('subscriber-modal', {
             const totalH = d * 24 + h;
             internetTimeout.value = String(totalH).padStart(2, '0') + ':00:00';
             internetCustomD.value = 0;
-            internetCustomH.value = 1;
+            internetCustomH.value = 0;
         }
 
         async function saveSubscriber() {
@@ -386,6 +436,17 @@ app.component('subscriber-modal', {
                 store.error = 'Заполните ФИО, должность и IP';
                 return;
             }
+
+            // Авто-применение кастомных дней/часов если они не нулевые
+            const cd = parseInt(internetCustomD.value) || 0;
+            const ch = parseInt(internetCustomH.value) || 0;
+            if (f.internet_access && (cd > 0 || ch > 0)) {
+                const totalH = cd * 24 + ch;
+                internetTimeout.value = String(totalH).padStart(2, '0') + ':00:00';
+                internetCustomD.value = 0;
+                internetCustomH.value = 0;
+            }
+
             const selQueues = [];
             let hasQueueChange = false;
             const data = store.trafficChains;
@@ -442,7 +503,7 @@ app.component('subscriber-modal', {
 
         return { store, showModal, mode, form, showTraffic, trafficLoading, trafficData, saving,
                  popoverTop, popoverLeft, popoverMaxH, popoverQueues,
-                 internetTimeout, internetDurations, internetCustomD, internetCustomH,
+                 internetTimeout, internetDurations, internetCustomD, internetCustomH, loadingTimeout,
                  closeModal, showFreeIps, formatBandwidth, applyCustomTimeout,
                  openTrafficPopover, closePopover, isPopoverSelected, selectQueueFromPopover,
                  saveSubscriber };
@@ -555,6 +616,10 @@ app.component('queue-tab', {
     setup() {
         const treeFilter = Vue.ref('');
         const expandedNodes = Vue.reactive({});
+
+        Vue.watch(function() { return store.connected; }, function(val) {
+            if (!val) { treeFilter.value = ''; }
+        });
 
         const filteredTree = Vue.computed(() => {
             const q = treeFilter.value.toLowerCase().trim();

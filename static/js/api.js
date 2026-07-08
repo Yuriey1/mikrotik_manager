@@ -101,6 +101,7 @@ async function disconnectDevice() {
     store.dhcpPools = [];
     store.subscribers = [];
     store.internetAccess = [];
+    store.internetTimeouts = {};
     store.channelsInfo = null;
     store.interfaces = [];
     store.selectedSubscriber = null;
@@ -224,6 +225,7 @@ async function refreshData() {
             store.dhcpPools = data.dhcp_pools || [];
             store.subscribers = data.subscribers || [];
             store.internetAccess = data.internet_access || [];
+            store.internetTimeouts = data.internet_timeouts || {};
             store.channelsInfo = data.channels || null;
             store.interfaces = data.interfaces || [];
         }

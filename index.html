@@ -363,19 +363,24 @@
                             <input type="checkbox" v-model="form.internet_access">
                             <span>Доступ в интернет</span>
                         </label>
-                        <div v-if="form.internet_access" style="display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
-                            <span v-for="d in internetDurations" :key="d.value"
-                                  @click="internetTimeout = d.value"
-                                  class="btn btn-sm"
-                                  :class="internetTimeout === d.value ? 'btn-primary' : 'btn-secondary'"
-                                  style="font-size: 11px; padding: 3px 8px;">{{ d.label }}</span>
-                            <input type="number" v-model.number="internetCustomD" min="0" max="365" placeholder="0"
-                                   style="width: 46px; padding: 3px 4px; font-size: 11px; text-align: center;">
-                            <span style="font-size: 11px; color: var(--text-muted);">дн</span>
-                            <input type="number" v-model.number="internetCustomH" min="0" max="23" placeholder="0"
-                                   style="width: 46px; padding: 3px 4px; font-size: 11px; text-align: center;">
-                            <span style="font-size: 11px; color: var(--text-muted);">ч</span>
-                            <button class="btn btn-primary btn-sm" style="padding: 2px 8px; font-size: 11px;" @click="applyCustomTimeout">OK</button>
+                        <div v-if="form.internet_access" style="position: relative;">
+                            <div v-if="loadingTimeout" style="position: absolute; inset: 0; background: rgba(11,12,14,0.7); z-index: 1; display: flex; align-items: center; justify-content: center; border-radius: 4px;">
+                                <i class="fas fa-spinner fa-spin" style="color: var(--accent-primary); margin-right: 6px;"></i>
+                                <span style="color: var(--text-secondary); font-size: 12px;">Загрузка таймаута...</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+                                <span v-for="d in internetDurations" :key="d.value"
+                                      @click="internetTimeout = d.value"
+                                      class="btn btn-sm"
+                                      :class="internetTimeout === d.value ? 'btn-primary' : 'btn-secondary'"
+                                      style="font-size: 11px; padding: 3px 8px;">{{ d.label }}</span>
+                                <input type="number" v-model.number="internetCustomD" min="0" max="365" placeholder="0"
+                                       style="width: 46px; padding: 3px 4px; font-size: 11px; text-align: center;">
+                                <span style="font-size: 11px; color: var(--text-muted);">дн</span>
+                                <input type="number" v-model.number="internetCustomH" min="0" max="23" placeholder="0"
+                                       style="width: 46px; padding: 3px 4px; font-size: 11px; text-align: center;">
+                                <span style="font-size: 11px; color: var(--text-muted);">ч</span>
+                            </div>
                         </div>
                     </div>
                 </div>

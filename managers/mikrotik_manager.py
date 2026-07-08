@@ -576,21 +576,45 @@ class MikroTikManager:
             logging.error("Firewall: Критическая ошибка: %s", e, exc_info=True)
             return False
 
-    def get_internet_access_list(self) -> List[str]:
+    @staticmethod
+    def _parse_ros_timeout(raw: str) -> str:
+        """Конвертировать таймаут RouterOS (2w3d4h5m6s) в HH:MM:SS"""
+        if not raw or raw.strip() == '':
+            return ''
+        raw = raw.strip()
+        if ':' in raw:
+            return raw
+        m = re.match(r'(?:(\d+)w)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$', raw)
+        if not m:
+            return raw
+        w = int(m.group(1) or 0)
+        d = int(m.group(2) or 0)
+        h = int(m.group(3) or 0)
+        mi = int(m.group(4) or 0)
+        s = int(m.group(5) or 0)
+        total_h = w * 7 * 24 + d * 24 + h
+        return f"{total_h}:{mi:02d}:{s:02d}"
+
+    def get_internet_access_list(self) -> List[Dict]:
         """Получить список IP с доступом в интернет (из address-list internet_access)"""
+        result = []
         try:
             fw_cmd = self.api.path("/ip/firewall/address-list")
             addresses = list(fw_cmd)
             
-            internet_ips = []
             for addr in addresses:
                 if addr.get("list") == "internet_access" and not addr.get("disabled", False):
-                    ip = addr.get("address", "")
-                    if ip:
-                        internet_ips.append(ip)
+                    raw = addr.get("address", "")
+                    if raw:
+                        ip = raw.split('/')[0]
+                        result.append({
+                            'ip': ip,
+                            'timeout': MikroTikManager._parse_ros_timeout(addr.get('timeout', '') or ''),
+                            'comment': addr.get('comment', '') or '',
+                        })
             
-            logging.info("📋 Найдено %s IP с доступом в интернет", len(internet_ips))
-            return internet_ips
+            logging.info("📋 Найдено %s IP с доступом в интернет", len(result))
+            return result
             
         except Exception as e:
             logging.error("Ошибка получения internet_access: %s", e, exc_info=True)
@@ -1354,6 +1378,42 @@ class MikroTikManager:
             result['steps'].append(f"   Новый MAC: {new_mac}")
             if new_client_id:
                 result['steps'].append(f"   ClientID: {new_client_id}")
+
+            # Шаг 2.5: Если новый lease динамический — делаем статическим
+            flags = new_lease.get('flags', '')
+            is_dynamic = 'D' in flags
+            dynamic_field = new_lease.get('dynamic', '')
+            if isinstance(dynamic_field, bool):
+                is_dynamic = is_dynamic or dynamic_field
+            elif isinstance(dynamic_field, str):
+                is_dynamic = is_dynamic or dynamic_field.lower() == 'true'
+
+            if is_dynamic:
+                result['steps'].append(f"🔄 Делаем динамический lease статическим...")
+                dhcp_cmd = self.api.path('/ip/dhcp-server/lease')
+                static_ok = False
+                try:
+                    tuple(dhcp_cmd('make-static', **{'.id': new_lease_id}))
+                    static_ok = True
+                    result['steps'].append(f"   ✅ make-static")
+                except Exception:
+                    pass
+                if not static_ok:
+                    try:
+                        tuple(dhcp_cmd('set', **{'.id': new_lease_id, 'dynamic': 'no'}))
+                        static_ok = True
+                        result['steps'].append(f"   ✅ dynamic=no")
+                    except Exception:
+                        pass
+                if not static_ok:
+                    result['error'] = f"Не удалось сделать динамический lease {new_ip} статическим"
+                    return result
+                # Обновляем ID после make-static
+                leases = list(dhcp_cmd)
+                for l in leases:
+                    if l.get('address') == new_ip:
+                        new_lease_id = l.get('.id')
+                        break
             
             # Шаг 3: Удаляем старый DHCP lease
             result['steps'].append(f"🗑️ Удаление старого DHCP lease ({old_ip})...")

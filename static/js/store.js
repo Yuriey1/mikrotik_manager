@@ -14,6 +14,7 @@ const store = Vue.reactive({
     dhcpPools: [],
     subscribers: [],
     internetAccess: [],
+    internetTimeouts: {},
     channelsInfo: null,
     interfaces: [],
 
@@ -70,7 +71,6 @@ store.menuEdit = function(sub) {
     var parts = (sub.comment || '').split(' - ');
     var position = parts.length > 1 ? parts[0] : '';
     var name = parts.length > 1 ? parts.slice(1).join(' - ') : (sub.comment || '');
-    store.showSubscriberModal = true;
     store.subscriberModalMode = 'edit';
     store.editOldIp = sub.ip;
     store.subscriberForm = {
@@ -80,10 +80,12 @@ store.menuEdit = function(sub) {
         mac: sub.mac || '',
         internet_access: false,
     };
+    var cleanIp = (sub.ip || '').split('/')[0];
     for (var i = 0; i < (store.internetAccess || []).length; i++) {
-        if (store.internetAccess[i] === sub.ip) { store.subscriberForm.internet_access = true; break; }
+        if ((store.internetAccess[i] || '').split('/')[0] === cleanIp) { store.subscriberForm.internet_access = true; break; }
     }
     store.trafficChains = null;
+    store.showSubscriberModal = true;
 };
 
 store.menuMacReplace = function(sub) {
@@ -110,7 +112,9 @@ store.setTimedInternet = async function(timeout) {
     if (!sub) return;
     try {
         await toggleInternet(sub.ip, true, sub.comment, timeout);
-        if (store.internetAccess.indexOf(sub.ip) === -1) store.internetAccess.push(sub.ip);
+        var cleanIp = (sub.ip || '').split('/')[0];
+        if (!store.internetAccess.some(function(a) { return (a || '').split('/')[0] === cleanIp; })) store.internetAccess.push(sub.ip);
+        store.internetTimeouts[(sub.ip || '').split('/')[0]] = timeout || '';
     } catch (e) {
         store.error = e.message;
     }

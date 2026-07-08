@@ -211,8 +211,11 @@ def handle_sync(handler, parsed):
             logging.warning("⚠️ sync subscribers: %s", e)
 
         resp['internet_access'] = []
+        resp['internet_timeouts'] = {}
         try:
-            resp['internet_access'] = state.mikrotik_manager.get_internet_access_list()
+            entries = state.mikrotik_manager.get_internet_access_list()
+            resp['internet_access'] = [e['ip'] for e in entries]
+            resp['internet_timeouts'] = {e['ip']: e['timeout'] for e in entries}
         except Exception as e:
             logging.warning("⚠️ sync internet_access: %s", e)
 
@@ -426,8 +429,10 @@ def handle_internet_access(handler, parsed):
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
     try:
-        ips = state.mikrotik_manager.get_internet_access_list()
-        handler._send_json({'success': True, 'ips': ips, 'count': len(ips)})
+        entries = state.mikrotik_manager.get_internet_access_list()
+        ips = [e['ip'] for e in entries]
+        timeouts = {e['ip']: e['timeout'] for e in entries}
+        handler._send_json({'success': True, 'ips': ips, 'entries': entries, 'timeouts': timeouts, 'count': len(ips)})
     except Exception as e:
         logging.error("Ошибка получения internet_access: %s", e, exc_info=True)
         handler._send_json({'error': str(e)}, 500)
