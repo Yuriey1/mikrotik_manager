@@ -86,6 +86,13 @@ DELETE_ROUTES = {
     '/api/forget_password':    delete_routes.handle_forget_password,
 }
 
+# Подключение плагинов
+try:
+    from plugins.matrix_integration.routes import register_routes
+    register_routes(GET_ROUTES, POST_ROUTES, DELETE_ROUTES)
+except ImportError:
+    pass
+
 
 # ══════════════════════════════════════════════════════════════
 #  Request handler

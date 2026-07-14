@@ -64,6 +64,12 @@ const store = Vue.reactive({
 
     autoSavePassword: false,
     defaultUsername: 'admin',
+
+    matrixEnabled: false,
+    pendingRequests: [],
+    pendingCount: 0,
+    matrixPendingId: null,
+    showPendingList: false,
 });
 
 store.menuEdit = function(sub) {

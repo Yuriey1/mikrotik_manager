@@ -63,3 +63,6 @@ netbox_config.json
 devices.json
 device_passwords.json
 test.sh
+
+# Matrix integration credentials
+plugins/matrix_integration/config.json

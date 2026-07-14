@@ -23,6 +23,8 @@ const app = createApp({
             const saved = JSON.parse(localStorage.getItem('mikrotik_settings') || '{}');
             if (saved.auto_save_password !== undefined) store.autoSavePassword = saved.auto_save_password;
             if (saved.default_username) store.defaultUsername = saved.default_username;
+
+            try { startMatrixPoll(); } catch (e) {}
         });
 
         return { store, ...Vue, innerW: Vue.ref(window.innerWidth), innerH: Vue.ref(window.innerHeight) };
@@ -45,6 +47,31 @@ app.component('app-header', {
         }
 
         return { store, queueCount, deviceTitle, netboxLabel, refreshDevices, doDisconnect };
+    },
+});
+
+app.component('matrix-bell', {
+    template: '#matrix-bell',
+    setup() {
+        function toggleList() {
+            store.showPendingList = !store.showPendingList;
+        }
+        function openRequest(req) {
+            store.showPendingList = false;
+            store.subscriberForm = {
+                full_name: req.full_name || '',
+                position: req.position || (req.org ? req.org : ''),
+                ip: req.ip || '',
+                mac: req.mac || '',
+                internet_access: req.internet_access || false,
+            };
+            store.matrixPendingId = req.id;
+            store.showSubscriberModal = true;
+            store.subscriberModalMode = 'add';
+            store.trafficChains = null;
+            store.editOldIp = null;
+        }
+        return { store, toggleList, openRequest };
     },
 });
 
@@ -471,6 +498,9 @@ app.component('subscriber-modal', {
                 if (mode.value === 'add') {
                     const result = await addSubscriber(reqData);
                     if (result.success) {
+                        if (store.matrixPendingId) {
+                            try { await confirmMatrixRequest(store.matrixPendingId); store.matrixPendingId = null; } catch (e) {}
+                        }
                         closeModal();
                         await refreshData();
                     } else {
@@ -479,6 +509,9 @@ app.component('subscriber-modal', {
                 } else {
                     const result = await editSubscriber(store.editOldIp, reqData);
                     if (result.success) {
+                        if (store.matrixPendingId) {
+                            try { await confirmMatrixRequest(store.matrixPendingId); store.matrixPendingId = null; } catch (e) {}
+                        }
                         closeModal();
                         await refreshData();
                     } else {
@@ -492,12 +525,21 @@ app.component('subscriber-modal', {
             }
         }
 
+        async function rejectMatrix() {
+            if (!store.matrixPendingId) return;
+            try {
+                await rejectMatrixRequest(store.matrixPendingId);
+                store.matrixPendingId = null;
+                closeModal();
+            } catch (e) { store.error = e.message; }
+        }
+
         return { store, showModal, mode, form, showTraffic, trafficLoading, trafficData, saving,
                  popoverTop, popoverLeft, popoverMaxH, popoverQueues,
                  internetTimeout, internetDurations, internetCustomD, internetCustomH, loadingTimeout,
                  closeModal, showFreeIps, formatBandwidth, applyCustomTimeout,
                  openTrafficPopover, closePopover, isPopoverSelected, selectQueueFromPopover,
-                 saveSubscriber };
+                  saveSubscriber, rejectMatrix };
     },
 });
 

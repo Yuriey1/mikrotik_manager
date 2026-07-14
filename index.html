@@ -88,7 +88,44 @@
                     <span class="status-dot" :class="{ connected: store.netboxConfigured }"></span>
                     <span>{{ netboxLabel }}</span>
                 </div>
+                <matrix-bell v-if="store.matrixEnabled"></matrix-bell>
             </div>
+        </div>
+    </template>
+
+    <!-- ====== MATRIX BELL ====== -->
+    <template id="matrix-bell">
+        <div class="matrix-bell-container" v-if="store.matrixEnabled">
+            <div class="matrix-bell" @click="toggleList">
+                <i class="fas fa-bell"></i>
+                <span v-if="store.pendingCount > 0" class="matrix-badge">{{ store.pendingCount }}</span>
+            </div>
+            <div v-if="store.showPendingList" class="matrix-pending-list">
+                <div class="matrix-pending-header">
+                    <span>Заявки из Matrix ({{ store.pendingCount }})</span>
+                    <button class="popover-close" @click="store.showPendingList = false"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="matrix-pending-body">
+                    <div v-if="store.pendingRequests.length === 0" style="padding: 16px; color: var(--text-muted); text-align: center;">
+                        Нет ожидающих заявок
+                    </div>
+                    <div v-for="req in store.pendingRequests" :key="req.id" class="matrix-pending-item" @click="openRequest(req)">
+                        <div class="matrix-pending-name">{{ req.full_name || '—' }}</div>
+                        <div class="matrix-pending-details">
+                            <span v-if="req.site">{{ req.site }}</span>
+                            <span v-if="req.position">{{ req.position }}</span>
+                            <span v-if="req.ip" style="font-family: monospace;">{{ req.ip }}</span>
+                            <span v-if="req.mac" style="font-family: monospace; font-size: 11px;">{{ req.mac }}</span>
+                        </div>
+                        <div class="matrix-pending-access">
+                            <span v-if="req.is_full_access === true" style="color: var(--success);">🌐 полный доступ</span>
+                            <span v-else-if="req.is_full_access === false" style="color: var(--accent-secondary);">🏢 корп.ресы</span>
+                            <span v-else style="color: var(--text-muted);">—</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div v-if="store.showPendingList" class="menu-backdrop" @click="store.showPendingList = false"></div>
         </div>
     </template>
 
@@ -385,6 +422,9 @@
                     </div>
                 </div>
                 <div class="modal-footer">
+                    <button v-if="store.matrixPendingId" class="btn btn-danger" @click="rejectMatrix">
+                        <i class="fas fa-times"></i> Отклонить
+                    </button>
                     <button class="btn btn-secondary" @click="closeModal">
                         <i class="fas fa-times"></i> Отмена
                     </button>
@@ -810,6 +850,7 @@
     <script src="/static/js/vue.global.prod.js"></script>
     <script src="/static/js/store.js"></script>
     <script src="/static/js/api.js"></script>
+    <script src="/static/js/matrix.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>

@@ -63,6 +63,15 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
+    # Запуск плагинов
+    import os
+    if os.path.isdir('plugins/matrix_integration'):
+        try:
+            from plugins.matrix_integration.plugin import start as start_matrix_plugin
+            start_matrix_plugin()
+        except Exception:
+            logging.warning("⚠️ Не удалось загрузить плагин Matrix", exc_info=True)
+
     # Запуск HTTP сервера
     start_server(port=args.port, host=args.host)
 

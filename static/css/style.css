@@ -2339,3 +2339,69 @@ textarea {
 .old-leases-table-container table { font-size: 12px; }
 .old-leases-table-container th { font-size: 12px; padding: 8px 10px; }
 .old-leases-table-container td { padding: 6px 10px; }
+
+/* ===== MATRIX BELL ===== */
+.matrix-bell-container { position: relative; }
+.matrix-bell {
+    position: relative;
+    cursor: pointer;
+    font-size: 18px;
+    color: var(--text-secondary);
+    padding: 4px 8px;
+    transition: color 0.15s;
+}
+.matrix-bell:hover { color: var(--text-primary); }
+.matrix-badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    line-height: 1;
+}
+.matrix-pending-list {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    width: 380px;
+    max-height: 480px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.matrix-pending-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+.matrix-pending-body { flex: 1; overflow-y: auto; }
+.matrix-pending-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.matrix-pending-item:hover { background: var(--bg-hover); }
+.matrix-pending-name { font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px; }
+.matrix-pending-details { font-size: 11px; color: var(--text-muted); display: flex; gap: 8px; flex-wrap: wrap; }
+.matrix-pending-access { font-size: 11px; margin-top: 4px; }
