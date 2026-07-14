@@ -448,19 +448,10 @@ app.component('subscriber-modal', {
             }
 
             const selQueues = [];
-            let hasQueueChange = false;
             const data = store.trafficChains;
             if (data && data.chains) {
-                const autoPicked = data.autoPickedDsts || new Set();
-                const defaults = data.defaultQueuePerDst || {};
-                const userEdited = data.userEditedDsts || new Set();
                 for (const chain of data.chains) {
-                    if (!chain.dstQueue || !chain.dstQueue.name) continue;
-                    if (userEdited.has(chain.dst)) {
-                        hasQueueChange = true;
-                        if (chain.dstQueue.name === defaults[chain.dst]) continue;
-                        selQueues.push(chain.dstQueue.name);
-                    } else if (!autoPicked.has(chain.dst)) {
+                    if (chain.dstQueue && chain.dstQueue.name) {
                         selQueues.push(chain.dstQueue.name);
                     }
                 }
@@ -476,7 +467,7 @@ app.component('subscriber-modal', {
                     internet_access: f.internet_access,
                     internet_timeout: internetTimeout.value,
                 };
-                if (hasQueueChange) reqData.queues = selQueues;
+                if (selQueues.length > 0) reqData.queues = selQueues;
                 if (mode.value === 'add') {
                     const result = await addSubscriber(reqData);
                     if (result.success) {

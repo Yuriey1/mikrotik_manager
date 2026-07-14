@@ -178,7 +178,7 @@ def handle_add_employee(handler, data):
 
         # 3. Queues
         queue_results = []
-        if queues:
+        if 'queues' in data:
             for queue_name in queues:
                 queue_id = None
                 for node in state.tree_builder.nodes.values():
