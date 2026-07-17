@@ -142,9 +142,9 @@
                 </h2>
                 <div class="device-search-container">
                     <i class="fas fa-search device-search-icon"></i>
-                    <input type="text" v-model="searchQuery" class="device-search-input"
+                    <input type="text" v-model="store.deviceSearchQuery" class="device-search-input"
                            placeholder="Быстрый поиск устройства..." autocomplete="off">
-                    <button v-if="searchQuery" class="device-search-clear" @click="searchQuery = ''">
+                    <button v-if="store.deviceSearchQuery" class="device-search-clear" @click="store.deviceSearchQuery = ''">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>

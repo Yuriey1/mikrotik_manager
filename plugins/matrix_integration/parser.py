@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 SITES = [
     'Шалакит', 'Дражный', 'Магызы', 'Весёлый', 'Караган',
     'Караган РТ', 'Нелькан', 'Джигда', 'Чумикан', 'Аим',
+    'Надежда',
 ]
 
 # Ключевые фразы для определения типа доступа
@@ -25,12 +26,12 @@ CORP_ACCESS_PHRASES = [
 def _find_mac(text: str) -> Optional[str]:
     """Извлечь MAC-адрес"""
     m = re.search(
-        r'(?:mac[:\-\s]*(?:адрес)?[:\s]*)([0-9A-Fa-f]{2}(?:[:-]){5}[0-9A-Fa-f]{2})',
+        r'(?:mac[:\-\s]*(?:адрес)?[:\s]*)([0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5})',
         text, re.IGNORECASE,
     )
     if not m:
         # Резервный поиск: просто MAC-паттерн без префикса
-        m = re.search(r'([0-9A-Fa-f]{2}(?:[:-]){5}[0-9A-Fa-f]{2})', text)
+        m = re.search(r'([0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5})', text)
     if m:
         return m.group(1).upper().replace('-', ':')
     return None
@@ -63,16 +64,34 @@ def _find_access_type(text: str) -> Dict:
 
 def _find_site(text: str) -> Optional[str]:
     """Извлечь площадку"""
-    # a) По справочнику
+    # a) По справочнику — ищем гибко (падежи)
     for site in SITES:
         if site.lower() in text.lower():
             return site
-    # b) Паттерны: "на уч. X", "на X", "корп X", "уч. X"
+    # Проверяем слова из текста на частичное совпадение с SITES
+    words = re.findall(r'[А-Яа-яЁё\w]+', text)
+    for w in words:
+        for site in SITES:
+            if len(w) >= 4 and (w.lower().startswith(site.lower()[:4]) or site.lower().startswith(w.lower()[:4])):
+                return site
+    # b) Паттерны: "уч. X", "на уч. X", "уч. X", "корп X"
+    # Только слова от 4 символов, исключая "отправ", "провер" и т.п.
     m = re.search(
-        r'(?:на\s+уч[.\s]*|на\s+|корп[.\s]*|уч[.\s]+)([А-Яа-яЁё\w]+)',
+        r'(?:уч[.\s]+|на\s+уч[.\s]*|корп[.\s]*)([А-Яа-яЁё]{4,})',
         text, re.IGNORECASE,
     )
-    return m.group(1).capitalize() if m else None
+    if m:
+        candidate = m.group(1).capitalize()
+        if candidate.lower() not in ('отправ', 'провер', 'закон', 'добав', 'очеред'):
+            return candidate
+    # "на X" — только если слово найдено в SITES по первым 4 символам
+    m = re.search(r'на\s+([А-Яа-яЁё]{4,})', text, re.IGNORECASE)
+    if m:
+        candidate = m.group(1).capitalize()
+        for site in SITES:
+            if candidate.lower().startswith(site.lower()[:4]):
+                return site
+    return None
 
 
 def _find_full_name(text: str) -> Optional[str]:
@@ -93,10 +112,26 @@ def _find_position_org(text: str, full_name: Optional[str]) -> tuple:
 
     # Простейшая эвристика: после ФИО, до площадки/IP/MAC — должность и организация
     after_name = text
+    before_name = ''
     if full_name:
         idx = text.find(full_name)
         if idx >= 0:
             after_name = text[idx + len(full_name):]
+            before_name = text[:idx]
+
+    # Должность из текста до ФИО: аббревиатуры (2-4 заглавные) или слова с заглавной
+    if not position and before_name:
+        # Аббревиатура: 2-4 заглавные буквы подряд
+        abbr_m = re.search(r'(?:сотрудника\s+|должность\s+)?([А-ЯЁ]{2,4})\b', before_name)
+        if abbr_m:
+            position = abbr_m.group(1)
+        if not position:
+            # Слово с заглавной в конце текста до ФИО
+            pos_m = re.search(r'([А-ЯЁ][а-яё]+)\s*$', before_name.strip())
+            if pos_m:
+                candidate = pos_m.group(1)
+                if candidate not in (full_name or ''):
+                    position = candidate
 
     # Ищем конструкцию "Организация Должность" или "Должность Организация"
     # ООО/ИП/etc + два-три слова с заглавной

@@ -102,6 +102,7 @@ async function disconnectDevice() {
     store.subscribers = [];
     store.internetAccess = [];
     store.internetTimeouts = {};
+    store.deviceSearchQuery = '';
     store.channelsInfo = null;
     store.interfaces = [];
     store.selectedSubscriber = null;

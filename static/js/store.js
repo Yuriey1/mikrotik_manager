@@ -70,6 +70,7 @@ const store = Vue.reactive({
     pendingCount: 0,
     matrixPendingId: null,
     showPendingList: false,
+    deviceSearchQuery: '',
 });
 
 store.menuEdit = function(sub) {

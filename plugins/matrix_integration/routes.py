@@ -1,17 +1,23 @@
 """API-эндпоинты для Matrix-интеграции"""
 
 import logging
+import datetime
 import services.state as state
 
 log = logging.getLogger(__name__)
 
 
 def handle_get_pending(handler, parsed):
-    """GET /api/matrix/pending — список ожидающих заявок"""
+    """GET /api/matrix/pending — список ожидающих заявок (только сегодняшние)"""
+    today = datetime.date.today().isoformat()
+    requests = [
+        r for r in state.pending_requests
+        if r.get('received_at', '')[:10] == today
+    ]
     handler._send_json({
         'success': True,
-        'requests': list(state.pending_requests),
-        'count': len(state.pending_requests),
+        'requests': requests,
+        'count': len(requests),
     })
 
 

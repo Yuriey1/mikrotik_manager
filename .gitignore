@@ -66,3 +66,4 @@ test.sh
 
 # Matrix integration credentials
 plugins/matrix_integration/config.json
+plugins/matrix_integration/_matrix_store/

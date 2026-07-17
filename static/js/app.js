@@ -56,8 +56,41 @@ app.component('matrix-bell', {
         function toggleList() {
             store.showPendingList = !store.showPendingList;
         }
-        function openRequest(req) {
+        async function openRequest(req) {
             store.showPendingList = false;
+
+            // 1. Переключаемся на нужное устройство (по 3 октетам IP)
+            var targetDevice = null;
+            if (req.ip) {
+                var ip3 = req.ip.split('.').slice(0, 3).join('.');
+                var devices = Object.values(store.devices || {});
+                for (var i = 0; i < devices.length; i++) {
+                    if ((devices[i].ip || '').startsWith(ip3)) {
+                        targetDevice = devices[i];
+                        break;
+                    }
+                }
+            }
+
+            if (targetDevice && (!store.connected || store.currentDevice !== targetDevice.name)) {
+                store.loading = true;
+                store.loadingMessage = 'Подключение к ' + targetDevice.name + '...';
+                try {
+                    if (store.connected) {
+                        await disconnectDevice();
+                    }
+                    await connectDevice(targetDevice.name, '', '');
+                } catch (e) {
+                    store.error = 'Не удалось подключиться к ' + targetDevice.name;
+                    store.loading = false;
+                    store.loadingMessage = '';
+                    return;
+                }
+                store.loading = false;
+                store.loadingMessage = '';
+            }
+
+            // 2. Открываем модалку с заполненными данными
             store.subscriberForm = {
                 full_name: req.full_name || '',
                 position: req.position || (req.org ? req.org : ''),
@@ -66,10 +99,16 @@ app.component('matrix-bell', {
                 internet_access: req.internet_access || false,
             };
             store.matrixPendingId = req.id;
-            store.showSubscriberModal = true;
             store.subscriberModalMode = 'add';
             store.trafficChains = null;
             store.editOldIp = null;
+
+            // Подсвечиваем устройство в сайдбаре
+            if (targetDevice) {
+                store.deviceSearchQuery = targetDevice.name;
+            }
+
+            store.showSubscriberModal = true;
         }
         return { store, toggleList, openRequest };
     },
@@ -78,10 +117,8 @@ app.component('matrix-bell', {
 app.component('device-sidebar', {
     template: '#device-sidebar',
     setup() {
-        const searchQuery = Vue.ref('');
-
         const filteredDevices = computed(() => {
-            const q = searchQuery.value.toLowerCase().trim();
+            const q = (store.deviceSearchQuery || '').toLowerCase().trim();
             const list = Object.values(store.devices);
             if (!q) return list;
             return list.filter(d =>
@@ -108,7 +145,7 @@ app.component('device-sidebar', {
             store.showCredentialsModal = true;
         }
 
-        return { store, searchQuery, filteredDevices, doConnect, doDisconnect, openNetBoxConfig, loadDevices, openCredentials };
+        return { store, filteredDevices, doConnect, doDisconnect, openNetBoxConfig, loadDevices, openCredentials };
     },
 });
 
