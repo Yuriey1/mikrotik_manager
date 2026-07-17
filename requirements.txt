@@ -3,3 +3,4 @@ requests==2.32.5
 matrix-nio==0.25.2
 cachetools
 bcrypt
+httpx
