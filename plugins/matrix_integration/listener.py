@@ -14,6 +14,26 @@ log = logging.getLogger(__name__)
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.json')
 STORE_PATH = os.path.join(os.path.dirname(__file__), '_matrix_store')
 
+LLM_SYSTEM_PROMPT = """Извлеки из сообщения данные для подключения абонента к MikroTik.
+Верни ТОЛЬКО JSON, без пояснений:
+{
+  "mac": "AA:BB:CC:DD:EE:FF или null",
+  "ip": "192.168.x.x или null",
+  "full_name": "Фамилия Имя Отчество или null",
+  "position": "должность или null",
+  "site": "площадка или null",
+  "internet_access": true или false,
+  "is_full_access": true или false или null
+}
+Площадки (site): Шалакит, Дражный, Надежда, Магызы, Весёлый, Караган, Нелькан, Джигда, Чумикан, Аим.
+internet_access=true если "полный доступ", "интернет", "подключите интернет", "инет".
+internet_access=false если "корп.ресы", "корпоративные ресурсы", "бесплатный доступ", "max".
+is_full_access=true если "полный доступ" или "интернет".
+is_full_access=false если "корп.ресы" или "max".
+is_full_access=null если непонятно.
+Если IP сокращённый (ип 91.67) — восстанови до полного: 192.168.XX.YY.
+MAC всегда в верхнем регистре через двоеточие."""
+
 
 def _remove_replied_request(event):
     """Удалить pending-заявку, на которую пришёл ответ + или лс (через Matrix reply)"""
@@ -249,7 +269,21 @@ class MatrixListener:
                         continue
 
                     log.info("📩 Matrix: новое сообщение от %s — %s", event.sender, body[:80])
-                    parsed = parse_message(body)
+
+                    # LLM-парсер (если включен) → regex fallback
+                    parsed = None
+                    if self.config.get('llm_enabled', False):
+                        try:
+                            from plugins.llm.parser import parse_with_llm
+                            parsed = await asyncio.wait_for(
+                                parse_with_llm(body, LLM_SYSTEM_PROMPT), timeout=10
+                            )
+                            log.debug("Matrix: LLM парсинг успешен")
+                        except Exception:
+                            log.debug("Matrix: LLM ошибка, использую regex")
+
+                    if not parsed:
+                        parsed = parse_message(body)
 
                     # Пропускаем сообщения без полезных данных (не заявки)
                     if not parsed.get('mac') and not parsed.get('ip') and not parsed.get('full_name'):

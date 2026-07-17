@@ -7,5 +7,6 @@
     "access_token": "",
     "password": "Ur0chk@13",
     "room_id": "!OSxqokVDbVbljGbMOf:matrix.krasintegra.ru",
-    "poll_interval_sec": 5
+    "poll_interval_sec": 5,
+    "llm_enabled": false
 }
