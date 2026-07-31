@@ -541,3 +541,27 @@ def handle_device_credentials(handler, parsed):
     web_user = ctx.user.username if ctx.user else None
     creds = ConfigManager.get_credentials(device_name, web_user)
     handler._send_json({'success': True, 'username': creds['username']})
+
+
+# ══════════════════════════════════════════════════════════════
+#  GET /api/netbox/site_for_ip
+# ══════════════════════════════════════════════════════════════
+
+def handle_site_for_ip(handler, parsed):
+    qs = parse_qs(parsed.query)
+    ip = qs.get('ip', [''])[0].strip()
+    if not ip:
+        handler._send_json({'error': 'Укажите ip'}, 400)
+        return
+
+    _init_netbox()
+    if not state.netbox_client:
+        handler._send_json({'error': 'NetBox не настроен'}, 400)
+        return
+
+    try:
+        site = state.netbox_client.get_site_for_ip(ip)
+        handler._send_json({'success': True, 'site': site, 'ip': ip})
+    except Exception as e:
+        logging.error("Ошибка site_for_ip: %s", e, exc_info=True)
+        handler._send_json({'success': False, 'error': str(e)}, 500)

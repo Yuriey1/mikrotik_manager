@@ -5,6 +5,7 @@ import datetime
 import logging
 import json
 import os
+import re
 from typing import Dict
 
 import services.state as state
@@ -14,39 +15,51 @@ log = logging.getLogger(__name__)
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.json')
 STORE_PATH = os.path.join(os.path.dirname(__file__), '_matrix_store')
 
-LLM_SYSTEM_PROMPT = """Извлеки из сообщения данные для подключения абонента к MikroTik.
-Верни ТОЛЬКО JSON, без пояснений:
-{
-  "mac": "AA:BB:CC:DD:EE:FF или null",
-  "ip": "192.168.x.x или null",
-  "full_name": "Фамилия Имя Отчество или null",
-  "position": "должность или null",
-  "site": "площадка или null",
-  "internet_access": true или false,
-  "is_full_access": true или false или null
-}
-Площадки (site): Шалакит, Дражный, Надежда, Магызы, Весёлый, Караган, Нелькан, Джигда, Чумикан, Аим.
-internet_access=true если "полный доступ", "интернет", "подключите интернет", "инет".
-internet_access=false если "корп.ресы", "корпоративные ресурсы", "бесплатный доступ", "max".
-is_full_access=true если "полный доступ" или "интернет".
-is_full_access=false если "корп.ресы" или "max".
-is_full_access=null если непонятно.
-Если IP сокращённый (ип 91.67) — восстанови до полного: 192.168.XX.YY.
-MAC всегда в верхнем регистре через двоеточие."""
+LLM_SYSTEM_PROMPT = """Извлеки из сообщения поля: mac, ip, full_name, position, site, internet_access.
+null если нет.
+mac: AA:BB:CC:DD:EE:FF
+ip: полный (192.168.91.67 если "ип 91.67")
+full_name: Фамилия Имя Отчество
+position: должность
+site: Шалакит,Дражный,Надежда,Магызы,Весёлый,Караган
+internet_access: true(интернет,полный доступ) или false(корп.ресы,max)
+Верни ТОЛЬКО JSON: {"mac":null,"ip":null,"full_name":null,"position":null,"site":null,"internet_access":false}"""
+
+CLASSIFY_PROMPT = """Это заявка на подключение абонента к MikroTik? Ответь ТОЛЬКО "ДА" или "НЕТ".
+
+ДА (заявка): подключите, пропишите, добавьте, mac-адрес, ip-адрес, ФИО, должность, площадка
+НЕТ (не заявка): проверьте, не хватает, закончился, скиньте сессию, вопрос, согласовано, +
+
+Сообщение: {text}"""
 
 
 def _remove_replied_request(event):
-    """Удалить pending-заявку, на которую пришёл ответ + или лс (через Matrix reply)"""
+    """Удалить pending-заявку, на которую пришёл ответ (через Matrix reply)"""
     reply_to = None
     content = getattr(event, 'source', {})
     if isinstance(content, dict):
-        content = content.get('content', {})
-    if isinstance(content, dict):
-        relates = content.get('m.relates_to', {})
+        # Ищем m.relates_to на двух уровнях
+        inner = content.get('content', {})
+        if isinstance(inner, dict):
+            relates = inner.get('m.relates_to', {})
+        else:
+            relates = {}
+        # Если не нашли внутри content — ищем на верхнем уровне
+        if not relates:
+            relates = content.get('m.relates_to', {})
         if isinstance(relates, dict):
+            # Формат 1: простой reply {event_id: ...}
             reply_to = relates.get('event_id')
-
+            # Формат 2: Element rich reply {m.in_reply_to: {event_id: ...}}
+            if not reply_to:
+                in_reply = relates.get('m.in_reply_to', {})
+                if isinstance(in_reply, dict):
+                    reply_to = in_reply.get('event_id')
     if not reply_to:
+        log.info("🔍 Matrix: reply не найден. top_keys=%s, inner_keys=%s, relates=%s",
+                 list(content.keys())[:8] if isinstance(content, dict) else '?',
+                 list(inner.keys())[:8] if isinstance(inner, dict) else '?',
+                 json.dumps(relates, ensure_ascii=False)[:200] if relates else 'N/A')
         return False
 
     before = len(state.pending_requests)
@@ -56,7 +69,11 @@ def _remove_replied_request(event):
     ]
     removed = before - len(state.pending_requests)
     if removed:
-        log.info("🗑️ Matrix: удалена заявка по reply %s (%d шт.)", reply_to[:20], removed)
+        fmt = 'event_id' if relates.get('event_id') else 'm.in_reply_to'
+        log.info("🗑️ Matrix: удалена заявка по reply (fmt=%s, relates=%s) %s (%d шт.)",
+                 fmt,
+                 json.dumps(relates, ensure_ascii=False)[:100] if relates else '?',
+                 reply_to[:20], removed)
     return removed > 0
 
 
@@ -223,6 +240,21 @@ class MatrixListener:
         except Exception as e:
             log.warning("⚠️ Matrix: ошибка авто-доверия — %s", e)
 
+    async def _classify_request(self, text: str) -> bool:
+        """Этап 1: быстрая классификация — похоже ли сообщение на заявку?"""
+        try:
+            from plugins.llm.client import generate
+            prompt = CLASSIFY_PROMPT.format(text=text)
+            result = await generate(prompt)
+            # DeepSeek возвращает JSON, извлекаем ответ
+            answer = str(result).strip().upper()
+            is_request = 'ДА' in answer and len(answer) < 10
+            log.info("🔍 Matrix: классификация → %s", 'ЗАЯВКА' if is_request else 'НЕТ')
+            return is_request
+        except Exception as e:
+            log.warning("🔍 Matrix: ошибка классификации (%s), пропускаю", e)
+            return False
+
     async def _listen(self):
         if not self.client:
             return
@@ -284,25 +316,59 @@ class MatrixListener:
                             continue
 
                     # Пропускаем подтверждения (+ / лс) — не заявки
-                    if body_stripped.startswith('+') or body_stripped.lower().startswith('лс'):
+                    clean = re.sub(r'^[*>\s]+', '', body_stripped)
+                    if clean.startswith('+') or clean.lower().startswith('лс'):
+                        if not _remove_replied_request(event):
+                            if len(state.pending_requests) == 1:
+                                removed = state.pending_requests.pop()
+                                log.info("🗑️ Matrix: удалена заявка по '+' (единственная) %s", removed.get('id', '?')[:8])
                         continue
 
                     log.info("📩 Matrix: новое сообщение от %s — %s", event.sender, body[:80])
 
-                    # LLM-парсер (если включен) → regex fallback
+                    # Этап 1: LLM-классификация — похоже ли на заявку?
+                    looks_like_request = False
+                    if self.config.get('llm_enabled', False):
+                        try:
+                            looks_like_request = await asyncio.wait_for(
+                                self._classify_request(body), timeout=10
+                            )
+                        except Exception:
+                            # Таймаут — fallback на regex
+                            has_mac = re.search(r'([0-9A-Fa-f]{2}:[0-9A-Fa-f]{2})', body)
+                            has_ip = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|ип\s+\d{1,3})', body)
+                            has_name = re.search(r'[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+', body)
+                            looks_like_request = bool(has_mac or has_ip or has_name)
+                    else:
+                        # LLM выключен — regex
+                        has_mac = re.search(r'([0-9A-Fa-f]{2}:[0-9A-Fa-f]{2})', body)
+                        has_ip = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|ип\s+\d{1,3})', body)
+                        has_name = re.search(r'[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+', body)
+                        looks_like_request = bool(has_mac or has_ip or has_name)
+
+                    if not looks_like_request:
+                        continue
+
+                    # Этап 2: полный парсинг
                     parsed = None
                     if self.config.get('llm_enabled', False):
                         try:
                             from plugins.llm.parser import parse_with_llm
+                            log.info("🤖 Matrix: запрос к LLM...")
                             parsed = await asyncio.wait_for(
-                                parse_with_llm(body, LLM_SYSTEM_PROMPT), timeout=10
+                                parse_with_llm(body, LLM_SYSTEM_PROMPT, timeout=None), timeout=120
                             )
-                            log.debug("Matrix: LLM парсинг успешен")
-                        except Exception:
-                            log.debug("Matrix: LLM ошибка, использую regex")
+                            log.info("🤖 Matrix: LLM парсинг успешен")
+                        except Exception as e:
+                            log.warning("🤖 Matrix: LLM ошибка (%s: %s), использую regex", type(e).__name__, e)
 
                     if not parsed:
                         parsed = parse_message(body)
+
+                    # Гарантируем наличие id (LLM не генерирует)
+                    if not parsed.get('id'):
+                        import uuid
+                        parsed['id'] = str(uuid.uuid4())
 
                     # Пропускаем сообщения без полезных данных (не заявки)
                     if not parsed.get('mac') and not parsed.get('ip') and not parsed.get('full_name'):
@@ -311,7 +377,13 @@ class MatrixListener:
 
                     parsed['event_id'] = event_id
                     parsed['sender'] = event.sender
-                    parsed['received_at'] = datetime.datetime.now().isoformat()
+                    # Используем timestamp сообщения из Matrix, а не время обработки
+                    src = getattr(event, 'source', {}) or {}
+                    origin_ts = src.get('origin_server_ts', 0)
+                    if origin_ts:
+                        parsed['received_at'] = datetime.datetime.fromtimestamp(origin_ts / 1000).isoformat()
+                    else:
+                        parsed['received_at'] = datetime.datetime.now().isoformat()
                     state.pending_requests.append(parsed)
                     log.info("📋 Заявка добавлена: ID=%s, ФИО=%s, IP=%s, MAC=%s",
                              parsed['id'], parsed.get('full_name'),

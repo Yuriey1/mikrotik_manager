@@ -1,4 +1,4 @@
-"""Низкоуровневый клиент Ollama API"""
+"""LLM-клиент: DeepSeek API"""
 
 import json
 import logging
@@ -16,19 +16,31 @@ def load_config():
 
 
 async def generate(prompt: str, model: str = None, timeout: int = None) -> dict:
-    """Отправить запрос в Ollama и вернуть JSON-ответ"""
+    """Отправить запрос в DeepSeek и вернуть JSON-ответ"""
     config = load_config()
-    model = model or config.get('model', 'qwen2.5:3b')
-    timeout = timeout or config.get('timeout', 10)
-    url = config.get('url', 'http://localhost:11434') + '/api/generate'
+    timeout_val = timeout if timeout is not None else config.get('timeout', 30)
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(url, json={
-            'model': model,
-            'prompt': prompt,
-            'stream': False,
-            'format': 'json',
-        }, timeout=timeout)
+    api_key = config.get('api_key', '')
+    url = config.get('url', 'https://api.deepseek.com/v1/chat/completions')
+    model = model or config.get('model', 'deepseek-chat')
+
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'Content-Type': 'application/json',
+    }
+    body = {
+        'model': model,
+        'messages': [
+            {'role': 'system', 'content': 'Ты парсер. Верни ТОЛЬКО JSON, без пояснений.'},
+            {'role': 'user', 'content': prompt},
+        ],
+        'temperature': 0,
+        'response_format': {'type': 'json_object'},
+    }
+
+    async with httpx.AsyncClient(timeout=timeout_val) as client:
+        resp = await client.post(url, headers=headers, json=body)
         resp.raise_for_status()
         data = resp.json()
-        return json.loads(data['response'])
+        content = data['choices'][0]['message']['content']
+        return json.loads(content)

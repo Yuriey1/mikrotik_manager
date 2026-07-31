@@ -71,17 +71,35 @@ app.component('matrix-bell', {
         async function openRequest(req) {
             store.showPendingList = false;
 
-            // 1. Переключаемся на нужное устройство (по 3 октетам IP)
+            // 1. Переключаемся на нужное устройство (по IP через NetBox)
             var targetDevice = null;
+            var siteData = null;
+
             if (req.ip) {
-                var ip3 = req.ip.split('.').slice(0, 3).join('.');
-                var devices = Object.values(store.devices || {});
-                for (var i = 0; i < devices.length; i++) {
-                    if ((devices[i].ip || '').startsWith(ip3)) {
-                        targetDevice = devices[i];
-                        break;
+                try {
+                    siteData = await getSiteForIp(req.ip);
+                    if (siteData && siteData.success && siteData.site) {
+                        var devices = Object.values(store.devices || {});
+                        for (var i = 0; i < devices.length; i++) {
+                            if (devices[i].name.toLowerCase().indexOf(siteData.site.toLowerCase()) !== -1) {
+                                targetDevice = devices[i];
+                                break;
+                            }
+                        }
                     }
+                } catch (e) {}
+            }
+
+            if (!targetDevice && req.ip) {
+                var msg = '⚠️ Не удалось найти устройство для IP ' + req.ip;
+                if (siteData && siteData.site) {
+                    msg += '\nNetBox определил площадку: «' + siteData.site + '»';
+                    msg += '\nУстройств с такой площадкой не найдено.';
+                } else {
+                    msg += '\nNetBox не вернул площадку для этого IP.';
                 }
+                msg += '\nПодключитесь вручную через сайдбар.';
+                store.error = msg;
             }
 
             if (targetDevice && (!store.connected || store.currentDevice !== targetDevice.name)) {
@@ -94,9 +112,6 @@ app.component('matrix-bell', {
                     await connectDevice(targetDevice.name, '', '');
                 } catch (e) {
                     store.error = 'Не удалось подключиться к ' + targetDevice.name;
-                    store.loading = false;
-                    store.loadingMessage = '';
-                    return;
                 }
                 store.loading = false;
                 store.loadingMessage = '';
@@ -496,13 +511,19 @@ app.component('subscriber-modal', {
                     findQueues(ip).catch(() => null),
                 ]);
                 if (channels?.success && queues?.success) {
+                    console.log('loadTrafficForIp: building chains, allQueues=', store.allQueues?.length || 0);
                     const data = buildTrafficChains(channels, store.allQueues, queues, ip);
+                    console.log('loadTrafficForIp: result=', data);
                     store.trafficChains = data;
                     if (data?.selectedQueues) {
                         store.trafficQueues = data.selectedQueues;
                     }
+                } else {
+                    console.log('loadTrafficForIp: FAILED ch=', channels?.success, 'q=', queues?.success);
                 }
-            } catch (e) {} finally {
+            } catch (e) {
+                console.error('loadTrafficForIp error:', e);
+            } finally {
                 store.trafficLoading = false;
             }
         }

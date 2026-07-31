@@ -70,6 +70,7 @@ GET_ROUTES = {
     '/api/users':             auth_routes.handle_list_users,
     '/api/profile':           auth_routes.handle_get_profile,
     '/api/device_credentials': get_routes.handle_device_credentials,
+    '/api/netbox/site_for_ip': get_routes.handle_site_for_ip,
 }
 
 POST_ROUTES = {

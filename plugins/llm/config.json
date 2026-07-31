@@ -1,5 +1,6 @@
 {
-    "model": "qwen2.5:3b",
-    "url": "http://localhost:11434",
-    "timeout": 10
+    "model": "deepseek-chat",
+    "api_key": "SK_REPLACED",
+    "url": "https://api.deepseek.com/v1/chat/completions",
+    "timeout": 30
 }
