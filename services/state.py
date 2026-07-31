@@ -5,3 +5,4 @@ netbox_client = None
 
 # Matrix-интеграция (плагин)
 pending_requests = []
+matrix_available = False  # True только если LLM доступен

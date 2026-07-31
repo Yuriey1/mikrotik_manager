@@ -153,10 +153,29 @@ class MatrixListener:
             # Авто-доверие: отложим до первого sync в _listen()
             log.info("🤝 Matrix: авто-доверие будет выполнено после первого sync")
 
+            # Проверка доступности LLM
+            self._check_llm()
+
         except Exception as e:
             log.warning("⚠️ Matrix: ошибка инициализации E2EE — %s", e)
 
         return True
+
+    def _check_llm(self):
+        """Проверить доступен ли LLM — если нет, скрыть колокольчик"""
+        try:
+            llm_config = os.path.join(os.path.dirname(__file__), '..', 'llm', 'config.json')
+            if os.path.exists(llm_config):
+                with open(llm_config) as f:
+                    cfg = json.load(f)
+                if cfg.get('api_key'):
+                    state.matrix_available = True
+                    log.info("✅ Matrix: LLM доступен, колокольчик активен")
+                    return
+        except Exception:
+            pass
+        state.matrix_available = False
+        log.info("🔕 Matrix: LLM недоступен, колокольчик отключён")
 
     async def _auto_trust_devices(self):
         """Авто-доверие всех устройств этого же пользователя"""

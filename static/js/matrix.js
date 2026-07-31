@@ -4,10 +4,10 @@ async function getPendingRequests() {
         if (data.success) {
             store.pendingRequests = data.requests || [];
             store.pendingCount = data.count || 0;
-            store.matrixEnabled = true;
+            store.matrixEnabled = data.available !== false;
         }
     } catch (e) {
-        // Плагин не загружен — тихо пропускаем
+        store.matrixEnabled = false;
     }
 }
 

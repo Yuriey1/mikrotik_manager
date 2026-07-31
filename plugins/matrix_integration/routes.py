@@ -18,6 +18,7 @@ def handle_get_pending(handler, parsed):
         'success': True,
         'requests': requests,
         'count': len(requests),
+        'available': state.matrix_available,
     })
 
 
