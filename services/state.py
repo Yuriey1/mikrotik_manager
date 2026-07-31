@@ -1,4 +1,8 @@
 import time
+import threading
+import logging
+
+log = logging.getLogger(__name__)
 
 # Глобальный кэш (общий для всех сессий)
 netbox_client = None
@@ -88,3 +92,33 @@ def get_session_ctx(handler) -> SessionContext:
         @property
         def user(self): return None  # default-сессия не имеет пользователя
     return DefaultContext()
+
+
+SESSION_TTL = 7200  # 2 часа простоя → удаление сессии
+CLEANUP_INTERVAL = 300  # проверка каждые 5 минут
+
+
+def _cleanup_sessions():
+    """Фоновый поток: удаление старых сессий"""
+    while True:
+        time.sleep(CLEANUP_INTERVAL)
+        now = time.time()
+        for token in list(session_data.keys()):
+            s = session_data.get(token)
+            if not s:
+                continue
+            age = now - s.get('last_access', 0)
+            if age > SESSION_TTL:
+                try:
+                    if s.get('mikrotik_manager'):
+                        s['mikrotik_manager'].disconnect()
+                except Exception:
+                    pass
+                del session_data[token]
+                log.info("🗑️ Session cleanup: удалена сессия %s (возраст %.0f мин)", token[:8], age / 60)
+
+
+def start_cleanup():
+    """Запустить фоновый поток очистки сессий"""
+    t = threading.Thread(target=_cleanup_sessions, daemon=True, name='session-cleanup')
+    t.start()

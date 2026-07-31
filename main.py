@@ -72,6 +72,13 @@ def main():
         except Exception:
             logging.warning("⚠️ Не удалось загрузить плагин Matrix", exc_info=True)
 
+    # Запуск очистки сессий
+    try:
+        from services.state import start_cleanup
+        start_cleanup()
+    except Exception:
+        pass
+
     # Запуск HTTP сервера
     start_server(port=args.port, host=args.host)
 
