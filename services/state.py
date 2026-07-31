@@ -53,6 +53,10 @@ class SessionContext:
     def current_device_name(self, val):
         self._data['current_device_name'] = val
 
+    @property
+    def user(self):
+        return self._data.get('user')
+
 
 def get_session_ctx(handler) -> SessionContext:
     """
@@ -81,4 +85,6 @@ def get_session_ctx(handler) -> SessionContext:
         def current_device_name(self): return mod.current_device_name
         @current_device_name.setter
         def current_device_name(self, v): setattr(mod, 'current_device_name', v)
+        @property
+        def user(self): return None  # default-сессия не имеет пользователя
     return DefaultContext()

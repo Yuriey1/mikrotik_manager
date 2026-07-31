@@ -101,7 +101,8 @@ def handle_connect(handler, parsed):
             handler._send_json({'error': f'Устройство "{device_name}" не найдено в NetBox'}, 404)
             return
 
-        saved = ConfigManager.get_credentials(device_name)
+        web_user = ctx.user.username if ctx.user else None
+        saved = ConfigManager.get_credentials(device_name, web_user)
         default_user = ConfigManager.get_default_username()
         final_user = username or saved['username'] or default_user
         final_pass = password or saved['password']
@@ -127,7 +128,7 @@ def handle_connect(handler, parsed):
 
         if ctx.mikrotik_manager.connect():
             if final_user or final_pass:
-                ConfigManager.save_credentials(device_name, final_user, final_pass)
+                ConfigManager.save_credentials(device_name, final_user, final_pass, web_user)
             ctx.current_device_name = device_name
             ctx.tree_builder = QueueTreeBuilder(ctx.mikrotik_manager)
             ctx.tree_builder.build_tree()

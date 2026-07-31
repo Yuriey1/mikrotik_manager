@@ -135,39 +135,65 @@ class ConfigManager:
             logging.error("❌ Ошибка сохранения учетных данных: %s", e)
     
     @staticmethod
-    def get_credentials(device_name):
-        """Получить логин и пароль устройства"""
+    def get_credentials(device_name, web_user=None):
+        """Получить логин и пароль устройства.
+        Если web_user указан — сначала ищем в БД (сессионные учётки).
+        Если нет — JSON (общие учётки).
+        """
+        # Сессионные учётки из БД
+        if web_user:
+            try:
+                from services.auth import get_mikrotik_creds
+                db_creds = get_mikrotik_creds(web_user, device_name)
+                if db_creds.get('password'):
+                    return {
+                        'username': db_creds['username'] or ConfigManager.get_default_username(),
+                        'password': ConfigManager.decrypt_password(db_creds['password'] or '')
+                    }
+            except Exception as e:
+                logging.debug("DB creds lookup failed for %s/%s: %s", web_user, device_name, e)
+
+        # Fallback: общие учётки из JSON
         credentials = ConfigManager.load_credentials()
         device_creds = credentials.get(device_name, {'username': '', 'password': ''})
-        
-        # Если нашли учетные данные
         if device_creds:
             return {
                 'username': device_creds.get('username', ConfigManager.get_default_username()),
                 'password': ConfigManager.decrypt_password(device_creds.get('password', ''))
             }
-        
-        # Если ничего не нашли
         return {
             'username': ConfigManager.get_default_username(),
             'password': ''
         }
     
     @staticmethod
-    def save_credentials(device_name, username, password):
-        """Сохранить логин и пароль устройства"""
+    def save_credentials(device_name, username, password, web_user=None):
+        """Сохранить логин и пароль устройства.
+        Если web_user указан — сохраняем в БД (сессионные учётки).
+        Всегда сохраняем в JSON (общие учётки).
+        """
+        # Сохраняем в JSON (общие)
         credentials = ConfigManager.load_credentials()
-        
         if username or password:
             credentials[device_name] = {
                 'username': username if username else ConfigManager.get_default_username(),
                 'password': ConfigManager.encrypt_password(password) if password else ''
             }
         else:
-            # Если оба пустые - удаляем запись
             credentials.pop(device_name, None)
-        
         ConfigManager.save_credentials_dict(credentials)
+
+        # Сохраняем в БД (сессионные)
+        if web_user:
+            try:
+                from services.auth import save_mikrotik_creds
+                save_mikrotik_creds(
+                    web_user, device_name, username,
+                    ConfigManager.encrypt_password(password) if password else ''
+                )
+            except Exception as e:
+                logging.warning("DB creds save failed: %s", e)
+
         logging.info("💾 Сохранены учетные данные для %s: логин=%s", device_name, username)
     
     # ↓↓↓ Старые методы для обратной совместимости ↓↓↓

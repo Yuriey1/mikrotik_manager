@@ -504,7 +504,8 @@ def handle_save_credentials(handler, data):
 
     try:
         from config.config_manager import ConfigManager
-        ConfigManager.save_credentials(device, username, password)
+        web_user = ctx.user.username if ctx.user else None
+        ConfigManager.save_credentials(device, username, password, web_user)
         handler._send_json({'success': True, 'message': f'Учётные данные для {device} сохранены'})
     except Exception as e:
         logging.error("Ошибка сохранения учётных данных: %s", e, exc_info=True)
