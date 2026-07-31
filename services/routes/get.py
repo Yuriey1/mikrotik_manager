@@ -33,13 +33,13 @@ def _init_netbox():
 
 # ── Device helpers ────────────────────────────────────────────
 
-def _disconnect_current():
+def _disconnect_current(ctx):
     try:
-        if state.mikrotik_manager:
-            state.mikrotik_manager.disconnect()
-            state.mikrotik_manager = None
-        state.tree_builder = None
-        state.current_device_name = None
+        if ctx.mikrotik_manager:
+            ctx.mikrotik_manager.disconnect()
+            ctx.mikrotik_manager = None
+        ctx.tree_builder = None
+        ctx.current_device_name = None
     except Exception:
         pass
 
@@ -49,6 +49,7 @@ def _disconnect_current():
 # ══════════════════════════════════════════════════════════════
 
 def handle_devices(handler, parsed):
+    ctx = handler.session_ctx
     _init_netbox()
     if not state.netbox_client:
         handler._send_json({'devices': {}, 'netbox_configured': False, 'error': 'NetBox не настроен'})
@@ -74,6 +75,7 @@ def handle_devices(handler, parsed):
 # ══════════════════════════════════════════════════════════════
 
 def handle_connect(handler, parsed):
+    ctx = handler.session_ctx
     qs = parse_qs(parsed.query)
     device_name = qs.get('device', [''])[0]
     username = qs.get('username', [''])[0]
@@ -113,29 +115,29 @@ def handle_connect(handler, parsed):
             }, 401)
             return
 
-        if state.mikrotik_manager and state.mikrotik_manager.connected and state.current_device_name:
-            _disconnect_current()
+        if ctx.mikrotik_manager and ctx.mikrotik_manager.connected and ctx.current_device_name:
+            _disconnect_current(ctx)
 
         dev = MikroTikDevice.from_dict({
             'name': target.name, 'ip': target.ip_address, 'port': target.port,
             'username': final_user, 'password': final_pass,
             'description': f"{target.device_type} - {target.site}",
         })
-        state.mikrotik_manager = MikroTikManager(dev)
+        ctx.mikrotik_manager = MikroTikManager(dev)
 
-        if state.mikrotik_manager.connect():
+        if ctx.mikrotik_manager.connect():
             if final_user or final_pass:
                 ConfigManager.save_credentials(device_name, final_user, final_pass)
-            state.current_device_name = device_name
-            state.tree_builder = QueueTreeBuilder(state.mikrotik_manager)
-            state.tree_builder.build_tree()
+            ctx.current_device_name = device_name
+            ctx.tree_builder = QueueTreeBuilder(ctx.mikrotik_manager)
+            ctx.tree_builder.build_tree()
             handler._send_json({
                 'success': True, 'device': device_name,
                 'message': f"Подключено к {dev.ip}:{dev.port}",
                 'action': 'connected', 'username': final_user,
             })
         else:
-            state.current_device_name = None
+            ctx.current_device_name = None
             handler._send_json({'success': False, 'error': 'Не удалось подключиться к устройству'})
     except Exception as e:
         handler._send_json({'error': str(e)}, 500)
@@ -146,10 +148,11 @@ def handle_connect(handler, parsed):
 # ══════════════════════════════════════════════════════════════
 
 def handle_disconnect(handler, parsed):
-    if not state.current_device_name:
+    ctx = handler.session_ctx
+    if not ctx.current_device_name:
         handler._send_json({'success': True, 'message': 'Нет активных подключений', 'action': 'already_disconnected'})
         return
-    name = state.current_device_name
+    name = ctx.current_device_name
     _disconnect_current()
     handler._send_json({'success': True, 'message': f'Отключено от {name}', 'action': 'disconnected'})
 
@@ -159,13 +162,14 @@ def handle_disconnect(handler, parsed):
 # ══════════════════════════════════════════════════════════════
 
 def handle_tree(handler, parsed):
-    if not state.tree_builder or not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.tree_builder or not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
     handler._send_json({
         'success': True,
-        'tree': state.tree_builder.get_tree_json(),
-        'stats': state.tree_builder.get_stats(),
+        'tree': ctx.tree_builder.get_tree_json(),
+        'stats': ctx.tree_builder.get_stats(),
     })
 
 
@@ -174,10 +178,11 @@ def handle_tree(handler, parsed):
 # ══════════════════════════════════════════════════════════════
 
 def handle_stats(handler, parsed):
-    if not state.tree_builder or not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.tree_builder or not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
-    handler._send_json(state.tree_builder.get_stats())
+    handler._send_json(ctx.tree_builder.get_stats())
 
 
 # ══════════════════════════════════════════════════════════════
@@ -185,35 +190,36 @@ def handle_stats(handler, parsed):
 # ══════════════════════════════════════════════════════════════
 
 def handle_sync(handler, parsed):
-    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
     try:
         resp = {'success': True}
-        if state.tree_builder:
-            resp['queue_tree'] = state.tree_builder.get_tree_json()
-            resp['queue_stats'] = state.tree_builder.get_stats()
-            resp['all_queues'] = [n.to_dict() for n in state.tree_builder.nodes.values()]
+        if ctx.tree_builder:
+            resp['queue_tree'] = ctx.tree_builder.get_tree_json()
+            resp['queue_stats'] = ctx.tree_builder.get_stats()
+            resp['all_queues'] = [n.to_dict() for n in ctx.tree_builder.nodes.values()]
         else:
             resp['queue_tree'] = []; resp['queue_stats'] = {}; resp['all_queues'] = []
 
         resp['dhcp_pools'] = []
         try:
-            pools = state.mikrotik_manager.get_dhcp_pools()
+            pools = ctx.mikrotik_manager.get_dhcp_pools()
             resp['dhcp_pools'] = [{'name': p.get('name',''), 'ranges': p.get('ranges',''), 'id': p.get('.id','')} for p in pools]
         except Exception as e:
             logging.warning("⚠️ sync dhcp_pools: %s", e)
 
         resp['subscribers'] = []
         try:
-            resp['subscribers'] = state.mikrotik_manager.get_dhcp_subscribers(include_all=True)
+            resp['subscribers'] = ctx.mikrotik_manager.get_dhcp_subscribers(include_all=True)
         except Exception as e:
             logging.warning("⚠️ sync subscribers: %s", e)
 
         resp['internet_access'] = []
         resp['internet_timeouts'] = {}
         try:
-            entries = state.mikrotik_manager.get_internet_access_list()
+            entries = ctx.mikrotik_manager.get_internet_access_list()
             resp['internet_access'] = [e['ip'] for e in entries]
             resp['internet_timeouts'] = {e['ip']: e['timeout'] for e in entries}
         except Exception as e:
@@ -221,13 +227,13 @@ def handle_sync(handler, parsed):
 
         resp['channels'] = None
         try:
-            resp['channels'] = state.mikrotik_manager.analyze_channels()
+            resp['channels'] = ctx.mikrotik_manager.analyze_channels()
         except Exception as e:
             logging.warning("⚠️ sync channels: %s", e)
 
         resp['interfaces'] = []
         try:
-            resp['interfaces'] = state.mikrotik_manager.get_interfaces()
+            resp['interfaces'] = ctx.mikrotik_manager.get_interfaces()
         except Exception as e:
             logging.warning("⚠️ sync interfaces: %s", e)
 
@@ -242,14 +248,15 @@ def handle_sync(handler, parsed):
 # ══════════════════════════════════════════════════════════════
 
 def handle_find_queues(handler, parsed):
-    if not state.tree_builder:
+    ctx = handler.session_ctx
+    if not ctx.tree_builder:
         handler._send_json({'success': False, 'error': 'Не подключено к устройству'}, 400)
         return
     qs = parse_qs(parsed.query)
     ip = qs.get('ip', [''])[0].strip()
     if not ip:
         try:
-            nodes = list(state.tree_builder.nodes.values())
+            nodes = list(ctx.tree_builder.nodes.values())
             handler._send_json({'success': True, 'queues': [n.to_dict() for n in nodes], 'count': len(nodes)})
         except Exception as e:
             handler._send_json({'success': False, 'error': str(e)})
@@ -264,10 +271,10 @@ def handle_find_queues(handler, parsed):
         return
     try:
         existing = []
-        for node in state.tree_builder.nodes.values():
+        for node in ctx.tree_builder.nodes.values():
             if node.has_ip(ip):
                 existing.append(node.name)
-        suitable = state.tree_builder.find_suitable_queues_for_ip(ip)
+        suitable = ctx.tree_builder.find_suitable_queues_for_ip(ip)
         handler._send_json({
             'success': True, 'ip': ip,
             'existing': existing,
@@ -283,7 +290,8 @@ def handle_find_queues(handler, parsed):
 # ══════════════════════════════════════════════════════════════
 
 def handle_check_ip(handler, parsed):
-    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'success': False, 'error': 'Не подключено к устройству'}, 400)
         return
     qs = parse_qs(parsed.query)
@@ -297,7 +305,7 @@ def handle_check_ip(handler, parsed):
         handler._send_json({'success': False, 'error': f'Неверный формат IP: {e}'}, 400)
         return
     try:
-        belongs, iface = state.mikrotik_manager.is_ip_in_mikrotik_networks(ip)
+        belongs, iface = ctx.mikrotik_manager.is_ip_in_mikrotik_networks(ip)
         if belongs:
             handler._send_json({'success': True, 'message': f'IP {ip} принадлежит сетям микротика', 'interface': iface})
         else:
@@ -311,6 +319,7 @@ def handle_check_ip(handler, parsed):
 # ══════════════════════════════════════════════════════════════
 
 def handle_netbox_config(handler, parsed):
+    ctx = handler.session_ctx
     try:
         cfg = ConfigManager.load_netbox_config()
         handler._send_json({'success': True, 'config': cfg})
@@ -323,6 +332,7 @@ def handle_netbox_config(handler, parsed):
 # ══════════════════════════════════════════════════════════════
 
 def handle_netbox_test(handler, parsed):
+    ctx = handler.session_ctx
     try:
         qs = parse_qs(parsed.query)
         url = qs.get('url', [''])[0]
@@ -345,7 +355,8 @@ def handle_netbox_test(handler, parsed):
 # ══════════════════════════════════════════════════════════════
 
 def handle_find_dhcp_lease(handler, parsed):
-    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'success': False, 'error': 'Не подключено к устройству'}, 400)
         return
     try:
@@ -354,7 +365,7 @@ def handle_find_dhcp_lease(handler, parsed):
         if not ip:
             handler._send_json({'success': False, 'error': 'Не указан IP адрес'}, 400)
             return
-        lease = state.mikrotik_manager.find_dhcp_lease(ip=ip)
+        lease = ctx.mikrotik_manager.find_dhcp_lease(ip=ip)
         if lease:
             mac = None
             for key in ['mac-address', 'mac_address', 'mac.address', 'mac']:
@@ -374,11 +385,12 @@ def handle_find_dhcp_lease(handler, parsed):
 # ══════════════════════════════════════════════════════════════
 
 def handle_free_ips(handler, parsed):
-    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
     try:
-        free = state.mikrotik_manager.get_free_dhcp_ips()
+        free = ctx.mikrotik_manager.get_free_dhcp_ips()
         handler._send_json({'success': True, 'free_ips': free, 'count': len(free)})
     except Exception as e:
         logging.error("Ошибка получения свободных IP: %s", e, exc_info=True)
@@ -390,11 +402,12 @@ def handle_free_ips(handler, parsed):
 # ══════════════════════════════════════════════════════════════
 
 def handle_dhcp_pools(handler, parsed):
-    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
     try:
-        pools = state.mikrotik_manager.get_dhcp_pools()
+        pools = ctx.mikrotik_manager.get_dhcp_pools()
         pools_list = [{'name': p.get('name',''), 'ranges': p.get('ranges',''), 'id': p.get('.id','')} for p in pools]
         handler._send_json({'success': True, 'pools': pools_list, 'count': len(pools_list)})
     except Exception as e:
@@ -406,14 +419,15 @@ def handle_dhcp_pools(handler, parsed):
 # ══════════════════════════════════════════════════════════════
 
 def handle_dhcp_subscribers(handler, parsed):
-    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
     try:
         qs = parse_qs(parsed.query)
         pool_name = qs.get('pool', [''])[0] or None
         include_all = qs.get('all', [''])[0].lower() == 'true'
-        subs = state.mikrotik_manager.get_dhcp_subscribers(pool_name=pool_name, include_all=include_all)
+        subs = ctx.mikrotik_manager.get_dhcp_subscribers(pool_name=pool_name, include_all=include_all)
         handler._send_json({'success': True, 'subscribers': subs, 'count': len(subs)})
     except Exception as e:
         logging.error("Ошибка получения абонентов: %s", e, exc_info=True)
@@ -425,11 +439,12 @@ def handle_dhcp_subscribers(handler, parsed):
 # ══════════════════════════════════════════════════════════════
 
 def handle_internet_access(handler, parsed):
-    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
     try:
-        entries = state.mikrotik_manager.get_internet_access_list()
+        entries = ctx.mikrotik_manager.get_internet_access_list()
         ips = [e['ip'] for e in entries]
         timeouts = {e['ip']: e['timeout'] for e in entries}
         handler._send_json({'success': True, 'ips': ips, 'entries': entries, 'timeouts': timeouts, 'count': len(ips)})
@@ -443,11 +458,12 @@ def handle_internet_access(handler, parsed):
 # ══════════════════════════════════════════════════════════════
 
 def handle_analyze_channels(handler, parsed):
-    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'success': False, 'error': 'Не подключено к устройству'}, 400)
         return
     try:
-        result = state.mikrotik_manager.analyze_channels()
+        result = ctx.mikrotik_manager.analyze_channels()
         handler._send_json(result)
     except Exception as e:
         logging.error("Ошибка анализа каналов: %s", e, exc_info=True)
@@ -459,7 +475,8 @@ def handle_analyze_channels(handler, parsed):
 # ══════════════════════════════════════════════════════════════
 
 def handle_check_mac(handler, parsed):
-    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'success': False, 'error': 'Не подключено к устройству'}, 400)
         return
     qs = parse_qs(parsed.query)
@@ -469,7 +486,7 @@ def handle_check_mac(handler, parsed):
         handler._send_json({'success': False, 'error': 'Не указан MAC адрес'}, 400)
         return
     try:
-        result = state.mikrotik_manager.check_mac_exists(mac, exclude_ip)
+        result = ctx.mikrotik_manager.check_mac_exists(mac, exclude_ip)
         handler._send_json({
             'success': True, 'exists': result['exists'],
             'lease_ip': result.get('lease_ip'), 'arp_ip': result.get('arp_ip'),
@@ -485,7 +502,8 @@ def handle_check_mac(handler, parsed):
 # ══════════════════════════════════════════════════════════════
 
 def handle_old_leases(handler, parsed):
-    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
     qs = parse_qs(parsed.query)
@@ -498,7 +516,7 @@ def handle_old_leases(handler, parsed):
         except (ValueError, TypeError):
             age = 30
     try:
-        old = state.mikrotik_manager.get_old_leases(age, include_never=include_never)
+        old = ctx.mikrotik_manager.get_old_leases(age, include_never=include_never)
         handler._send_json({'success': True, 'leases': old, 'count': len(old), 'age_days': age})
     except Exception as e:
         logging.error("Ошибка поиска устаревших лизов: %s", e, exc_info=True)

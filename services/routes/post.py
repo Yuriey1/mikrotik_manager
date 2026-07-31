@@ -33,6 +33,7 @@ def _init_netbox():
 # ══════════════════════════════════════════════════════════════
 
 def handle_save_netbox(handler, data):
+    ctx = handler.session_ctx
     try:
         cfg = {
             'url': data.get('url', '').strip(),
@@ -55,6 +56,7 @@ def handle_save_netbox(handler, data):
 # ══════════════════════════════════════════════════════════════
 
 def handle_add_device(handler, data):
+    ctx = handler.session_ctx
     try:
         name = data.get('name', '').strip()
         ip = data.get('ip', '').strip()
@@ -87,7 +89,8 @@ def handle_add_device(handler, data):
 # ══════════════════════════════════════════════════════════════
 
 def handle_add_employee(handler, data):
-    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
 
@@ -115,7 +118,7 @@ def handle_add_employee(handler, data):
 
         if not mac:
             try:
-                lease = state.mikrotik_manager.find_dhcp_lease(ip=ip)
+                lease = ctx.mikrotik_manager.find_dhcp_lease(ip=ip)
                 if lease:
                     mac = lease.get('mac-address') or lease.get('mac_address') or lease.get('mac.address', '')
             except Exception:
@@ -127,7 +130,7 @@ def handle_add_employee(handler, data):
             if not mac_pattern.match(mac):
                 handler._send_json({'error': 'Неверный формат MAC'}, 400)
                 return
-            mac_check = state.mikrotik_manager.check_mac_exists(mac, exclude_ip=ip)
+            mac_check = ctx.mikrotik_manager.check_mac_exists(mac, exclude_ip=ip)
             if mac_check['exists']:
                 conflict_ip = mac_check.get('lease_ip') or mac_check.get('arp_ip')
                 handler._send_json({
@@ -142,14 +145,14 @@ def handle_add_employee(handler, data):
 
         # 1. DHCP
         if mac:
-            results['dhcp'] = state.mikrotik_manager.create_static_lease(ip, mac, comment)
+            results['dhcp'] = ctx.mikrotik_manager.create_static_lease(ip, mac, comment)
         else:
-            lease = state.mikrotik_manager.find_dhcp_lease(ip=ip)
+            lease = ctx.mikrotik_manager.find_dhcp_lease(ip=ip)
             if lease:
                 lease_id = lease.get('.id')
                 if lease_id:
                     is_dynamic = lease.get('dynamic') == 'true'
-                    dhcp_cmd = state.mikrotik_manager.api.path('/ip/dhcp-server/lease')
+                    dhcp_cmd = ctx.mikrotik_manager.api.path('/ip/dhcp-server/lease')
                     if is_dynamic:
                         try:
                             tuple(dhcp_cmd('make-static', **{'.id': lease_id}))
@@ -172,7 +175,7 @@ def handle_add_employee(handler, data):
 
         # 2. ARP
         if mac:
-            results['arp'] = state.mikrotik_manager.add_static_arp(ip, mac, comment)
+            results['arp'] = ctx.mikrotik_manager.add_static_arp(ip, mac, comment)
         else:
             results['arp'] = True
 
@@ -181,12 +184,12 @@ def handle_add_employee(handler, data):
         if 'queues' in data:
             for queue_name in queues:
                 queue_id = None
-                for node in state.tree_builder.nodes.values():
+                for node in ctx.tree_builder.nodes.values():
                     if node.name == queue_name:
                         queue_id = node.id
                         break
                 if queue_id:
-                    success = state.mikrotik_manager.add_ip_to_queue(queue_id, ip)
+                    success = ctx.mikrotik_manager.add_ip_to_queue(queue_id, ip)
                     queue_results.append({'name': queue_name, 'success': success, 'id': queue_id})
                 else:
                     queue_results.append({'name': queue_name, 'success': False, 'error': 'Очередь не найдена'})
@@ -194,15 +197,15 @@ def handle_add_employee(handler, data):
         else:
             results['queues'] = []
 
-        if state.tree_builder and state.mikrotik_manager.connected:
+        if ctx.tree_builder and ctx.mikrotik_manager.connected:
             try:
-                state.tree_builder.build_tree()
+                ctx.tree_builder.build_tree()
             except Exception:
                 pass
 
         # 4. Firewall
         if internet_access:
-            results['firewall'] = state.mikrotik_manager.add_to_address_list('internet_access', f"{ip}/32", comment, internet_timeout)
+            results['firewall'] = ctx.mikrotik_manager.add_to_address_list('internet_access', f"{ip}/32", comment, internet_timeout)
         else:
             results['firewall'] = True
 
@@ -236,7 +239,8 @@ def handle_add_employee(handler, data):
 # ══════════════════════════════════════════════════════════════
 
 def handle_replace_mac(handler, data):
-    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
 
@@ -254,7 +258,7 @@ def handle_replace_mac(handler, data):
             except ValueError as e:
                 handler._send_json({'error': f'Неверный формат IP: {e}'}, 400)
                 return
-            result = state.mikrotik_manager.replace_mac_address(old_ip, new_ip)
+            result = ctx.mikrotik_manager.replace_mac_address(old_ip, new_ip)
         elif mode == 'by-mac':
             ip = data.get('ip', '').strip()
             new_mac = data.get('new_mac', '').strip()
@@ -271,7 +275,7 @@ def handle_replace_mac(handler, data):
             if not mac_re.match(new_mac):
                 handler._send_json({'error': 'Неверный формат MAC. Используйте AA:BB:CC:DD:EE:FF'}, 400)
                 return
-            result = state.mikrotik_manager.replace_mac_manual(ip, new_mac, client_id)
+            result = ctx.mikrotik_manager.replace_mac_manual(ip, new_mac, client_id)
         else:
             handler._send_json({'error': f'Неизвестный режим: {mode}'}, 400)
             return
@@ -290,7 +294,8 @@ def handle_replace_mac(handler, data):
 # ══════════════════════════════════════════════════════════════
 
 def handle_toggle_internet(handler, data):
-    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
 
@@ -305,7 +310,7 @@ def handle_toggle_internet(handler, data):
 
     try:
         ipaddress.ip_address(ip)
-        result = state.mikrotik_manager.toggle_internet_access(ip, enable, comment, timeout)
+        result = ctx.mikrotik_manager.toggle_internet_access(ip, enable, comment, timeout)
         if result['success']:
             handler._send_json({'success': True, 'message': result.get('message', 'Статус изменён'), 'ip': ip, 'enabled': enable})
         else:
@@ -322,7 +327,8 @@ def handle_toggle_internet(handler, data):
 # ══════════════════════════════════════════════════════════════
 
 def handle_delete_subscriber(handler, data):
-    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
 
@@ -335,15 +341,15 @@ def handle_delete_subscriber(handler, data):
     details = {'dhcp': False, 'arp': False, 'queues': [], 'firewall': []}
 
     try:
-        dhcp_ok = state.mikrotik_manager.delete_dhcp_lease(ip)
+        dhcp_ok = ctx.mikrotik_manager.delete_dhcp_lease(ip)
         details['dhcp'] = dhcp_ok
         steps.append(f"{'✅' if dhcp_ok else '⚠️'} DHCP: {'удалён' if dhcp_ok else 'не найден'}")
 
-        arp_ok = state.mikrotik_manager.delete_arp_entry(ip)
+        arp_ok = ctx.mikrotik_manager.delete_arp_entry(ip)
         details['arp'] = arp_ok
         steps.append(f"{'✅' if arp_ok else '⚠️'} ARP: {'удалён' if arp_ok else 'не найден'}")
 
-        qr = state.mikrotik_manager.remove_ip_from_all_queues(ip)
+        qr = ctx.mikrotik_manager.remove_ip_from_all_queues(ip)
         details['queues'] = qr
         if qr:
             for q in qr:
@@ -352,7 +358,7 @@ def handle_delete_subscriber(handler, data):
         else:
             steps.append("ℹ️ Очереди: IP не найден в очередях")
 
-        fw = state.mikrotik_manager.remove_from_all_address_lists(ip)
+        fw = ctx.mikrotik_manager.remove_from_all_address_lists(ip)
         details['firewall'] = fw
         if fw:
             for fr in fw:
@@ -361,9 +367,9 @@ def handle_delete_subscriber(handler, data):
         else:
             steps.append("ℹ️ Firewall: IP не найден в address-list'ах")
 
-        if state.tree_builder and state.mikrotik_manager.connected:
+        if ctx.tree_builder and ctx.mikrotik_manager.connected:
             try:
-                state.tree_builder.build_tree()
+                ctx.tree_builder.build_tree()
             except Exception:
                 pass
 
@@ -378,7 +384,8 @@ def handle_delete_subscriber(handler, data):
 # ══════════════════════════════════════════════════════════════
 
 def handle_edit_subscriber(handler, data):
-    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
 
@@ -388,11 +395,11 @@ def handle_edit_subscriber(handler, data):
         return
 
     try:
-        result = state.mikrotik_manager.update_subscriber(old_ip, data)
+        result = ctx.mikrotik_manager.update_subscriber(old_ip, data)
 
-        if state.tree_builder and state.mikrotik_manager.connected:
+        if ctx.tree_builder and ctx.mikrotik_manager.connected:
             try:
-                state.tree_builder.build_tree()
+                ctx.tree_builder.build_tree()
             except Exception:
                 pass
 
@@ -410,7 +417,8 @@ def handle_edit_subscriber(handler, data):
 # ══════════════════════════════════════════════════════════════
 
 def handle_move_ip(handler, data):
-    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
 
@@ -423,11 +431,11 @@ def handle_move_ip(handler, data):
         return
 
     try:
-        result = state.mikrotik_manager.move_ip_between_queues(from_queue_id, to_queue_id, ip)
+        result = ctx.mikrotik_manager.move_ip_between_queues(from_queue_id, to_queue_id, ip)
 
-        if state.tree_builder and state.mikrotik_manager.connected:
+        if ctx.tree_builder and ctx.mikrotik_manager.connected:
             try:
-                state.tree_builder.build_tree()
+                ctx.tree_builder.build_tree()
             except Exception:
                 pass
 
@@ -445,7 +453,8 @@ def handle_move_ip(handler, data):
 # ══════════════════════════════════════════════════════════════
 
 def handle_reset_queue_traffic(handler, data):
-    if not state.mikrotik_manager or not state.mikrotik_manager.connected:
+    ctx = handler.session_ctx
+    if not ctx.mikrotik_manager or not ctx.mikrotik_manager.connected:
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
 
@@ -457,11 +466,11 @@ def handle_reset_queue_traffic(handler, data):
         return
 
     try:
-        result = state.mikrotik_manager.reset_queue_traffic(queue_id, int(new_value))
+        result = ctx.mikrotik_manager.reset_queue_traffic(queue_id, int(new_value))
 
-        if state.tree_builder and state.mikrotik_manager.connected:
+        if ctx.tree_builder and ctx.mikrotik_manager.connected:
             try:
-                state.tree_builder.build_tree()
+                ctx.tree_builder.build_tree()
             except Exception:
                 pass
 
@@ -484,6 +493,7 @@ def handle_reset_queue_traffic(handler, data):
 # ══════════════════════════════════════════════════════════════
 
 def handle_save_credentials(handler, data):
+    ctx = handler.session_ctx
     device = data.get('device', '').strip()
     username = data.get('username', '').strip()
     password = data.get('password', '')
