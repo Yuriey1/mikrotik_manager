@@ -13,6 +13,7 @@ import os
 from services.routes import get as get_routes
 from services.routes import post as post_routes
 from services.routes import delete as delete_routes
+from routes import auth as auth_routes
 
 
 # ══════════════════════════════════════════════════════════════
@@ -79,6 +80,8 @@ POST_ROUTES = {
     '/api/move_ip':                post_routes.handle_move_ip,
     '/api/reset_queue_traffic':    post_routes.handle_reset_queue_traffic,
     '/api/save_credentials':       post_routes.handle_save_credentials,
+    '/api/login':                  auth_routes.handle_login,
+    '/api/register':               auth_routes.handle_register,
 }
 
 DELETE_ROUTES = {
@@ -114,7 +117,7 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', f'{content_type}; charset=utf-8')
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Session-Token')
         self.send_header('Access-Control-Allow-Credentials', 'true')
         self.end_headers()
 
@@ -190,6 +193,12 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             parsed = urlparse(self.path)
             path = parsed.path
 
+            # Извлечение сессионного контекста
+            import services.state as state
+            ctx = state.get_session_ctx(self)
+            if ctx:
+                self.session_ctx = ctx
+
             if path == '/' or path == '/index.html':
                 self._serve_html()
             elif path == '/favicon.ico':
@@ -212,6 +221,12 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
 
             parsed = urlparse(self.path)
             path = parsed.path
+
+            # Извлечение сессионного контекста
+            import services.state as state
+            ctx = state.get_session_ctx(self)
+            if ctx:
+                self.session_ctx = ctx
 
             if path in POST_ROUTES:
                 POST_ROUTES[path](self, data)
