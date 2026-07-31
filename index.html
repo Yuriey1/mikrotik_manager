@@ -209,12 +209,15 @@
 
                 <!-- Микротик-учётки -->
                 <h3 style="margin-top: 16px;"><i class="fas fa-router"></i> Учётки микротиков</h3>
-                <div v-for="c in creds" :key="c.device_name" class="admin-user-row">
+                <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 4px;">
+                <div v-for="c in creds" :key="c.device_name" class="admin-user-row" style="cursor: pointer;" @click="openCreds(c.device_name)">
                     <span class="admin-user-name">{{ c.device_name }}</span>
                     <span style="font-size: 11px; color: var(--text-muted); margin-right: 8px;">{{ c.username }}</span>
+                    <span style="font-size: 10px; color: var(--primary);">⚙</span>
                 </div>
                 <div v-if="!creds.length" style="color: var(--text-muted); font-size: 12px; padding: 8px 0;">
                     Сохраняются автоматически при подключении к устройству
+                </div>
                 </div>
 
                 <div class="modal-footer" style="margin-top: 16px;">

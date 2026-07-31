@@ -522,3 +522,16 @@ def handle_old_leases(handler, parsed):
     except Exception as e:
         logging.error("Ошибка поиска устаревших лизов: %s", e, exc_info=True)
         handler._send_json({'success': False, 'error': str(e)}, 500)
+
+
+def handle_device_credentials(handler, parsed):
+    """GET /api/device_credentials?device=X — сохранённый логин для текущего пользователя"""
+    ctx = handler.session_ctx
+    qs = parse_qs(parsed.query)
+    device_name = qs.get('device', [''])[0]
+    if not device_name:
+        handler._send_json({'error': 'Укажите device'}, 400)
+        return
+    web_user = ctx.user.username if ctx.user else None
+    creds = ConfigManager.get_credentials(device_name, web_user)
+    handler._send_json({'success': True, 'username': creds['username']})

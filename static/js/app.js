@@ -215,9 +215,14 @@ app.component('profile-modal', {
 
         function close() { store.showProfileModal = false; msg.value = ''; }
 
+        function openCreds(deviceName) {
+            store.credentialsDevice = deviceName;
+            store.showCredentialsModal = true;
+        }
+
         Vue.watch(show, function(v) { if (v) loadProfile(); });
 
-        return { show, m, creds, newPassword, msg, msgType, saving, doSave, doChangePassword, close, store };
+        return { show, m, creds, newPassword, msg, msgType, saving, doSave, doChangePassword, close, openCreds, store };
     },
 });
 
@@ -1064,8 +1069,18 @@ app.component('ip-selector-modal', {
 app.component('credentials-modal', {
     template: '#credentials-modal',
     setup() {
-        const username = Vue.ref(store.defaultUsername);
+        const username = Vue.ref('');
         const password = Vue.ref('');
+
+        // При открытии загружаем сохранённый логин для этого устройства
+        Vue.watch(() => store.showCredentialsModal, async function(val) {
+            if (val && store.credentialsDevice) {
+                try {
+                    var d = await apiGet('/api/device_credentials?device=' + encodeURIComponent(store.credentialsDevice));
+                    if (d.success) username.value = d.username || store.defaultUsername;
+                } catch (e) {}
+            }
+        });
 
         function connectAndClose() {
             store.showCredentialsModal = false;
