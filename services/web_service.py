@@ -189,8 +189,10 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             path = parsed.path
             import services.state as state
             ctx = state.get_session_ctx(self)
-            if ctx:
-                self.session_ctx = ctx
+            self.session_ctx = ctx
+            if not ctx:
+                self._send_json({'error': 'Требуется авторизация'}, 401)
+                return
             if path in DELETE_ROUTES:
                 DELETE_ROUTES[path](self, parsed)
             else:
@@ -207,8 +209,14 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             # Извлечение сессионного контекста
             import services.state as state
             ctx = state.get_session_ctx(self)
-            if ctx:
-                self.session_ctx = ctx
+            self.session_ctx = ctx
+
+            # Проверка авторизации для защищённых GET-путей
+            SKIP = {'/', '/index.html', '/favicon.ico', '/api/login', '/api/register',
+                    '/api/devices', '/api/netbox/config', '/api/netbox/test'}
+            if path not in SKIP and not path.startswith('/static/') and not ctx:
+                self._send_json({'error': 'Требуется авторизация'}, 401)
+                return
 
             if path == '/' or path == '/index.html':
                 self._serve_html()
@@ -236,8 +244,13 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             # Извлечение сессионного контекста
             import services.state as state
             ctx = state.get_session_ctx(self)
-            if ctx:
-                self.session_ctx = ctx
+            self.session_ctx = ctx
+
+            # Проверка авторизации для защищённых POST-путей
+            SKIP = {'/api/login', '/api/register'}
+            if path not in SKIP and not ctx:
+                self._send_json({'error': 'Требуется авторизация'}, 401)
+                return
 
             if path in POST_ROUTES:
                 POST_ROUTES[path](self, data)

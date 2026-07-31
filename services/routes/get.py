@@ -76,6 +76,9 @@ def handle_devices(handler, parsed):
 
 def handle_connect(handler, parsed):
     ctx = handler.session_ctx
+    if not ctx:
+        handler._send_json({'error': 'Требуется авторизация'}, 401)
+        return
     qs = parse_qs(parsed.query)
     device_name = qs.get('device', [''])[0]
     username = qs.get('username', [''])[0]
@@ -527,6 +530,9 @@ def handle_old_leases(handler, parsed):
 def handle_device_credentials(handler, parsed):
     """GET /api/device_credentials?device=X — сохранённый логин для текущего пользователя"""
     ctx = handler.session_ctx
+    if not ctx:
+        handler._send_json({'error': 'Требуется авторизация'}, 401)
+        return
     qs = parse_qs(parsed.query)
     device_name = qs.get('device', [''])[0]
     if not device_name:

@@ -34,10 +34,12 @@ def setup_logging():
 def signal_handler(signum, frame):
     """Обработчик сигналов для корректного завершения"""
     try:
-        from services.state import mikrotik_manager, current_device_name
-        if mikrotik_manager and mikrotik_manager.connected:
-            logging.info("Отключаемся от %s...", current_device_name)
-            mikrotik_manager.disconnect()
+        from services.state import session_data
+        for token, s in list(session_data.items()):
+            mgr = s.get('mikrotik_manager')
+            if mgr and mgr.connected:
+                logging.info("Отключаемся от %s...", s.get('current_device_name', '?'))
+                mgr.disconnect()
     except Exception:
         pass
     logging.warning("Получен сигнал %s, завершаю работу...", signum)

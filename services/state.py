@@ -11,11 +11,6 @@ netbox_client = None
 pending_requests = []
 matrix_available = False
 
-# Старые переменные — обратная совместимость (default-сессия)
-mikrotik_manager = None
-tree_builder = None
-current_device_name = None
-
 # Сессионные данные — {token: session_dict}
 session_data = {}
 
@@ -37,88 +32,54 @@ class SessionContext:
         self._data = data
 
     @property
-    def mikrotik_manager(self):
-        return self._data['mikrotik_manager']
+    def mikrotik_manager(self): return self._data['mikrotik_manager']
     @mikrotik_manager.setter
-    def mikrotik_manager(self, val):
-        self._data['mikrotik_manager'] = val
+    def mikrotik_manager(self, val): self._data['mikrotik_manager'] = val
 
     @property
-    def tree_builder(self):
-        return self._data['tree_builder']
+    def tree_builder(self): return self._data['tree_builder']
     @tree_builder.setter
-    def tree_builder(self, val):
-        self._data['tree_builder'] = val
+    def tree_builder(self, val): self._data['tree_builder'] = val
 
     @property
-    def current_device_name(self):
-        return self._data['current_device_name']
+    def current_device_name(self): return self._data['current_device_name']
     @current_device_name.setter
-    def current_device_name(self, val):
-        self._data['current_device_name'] = val
+    def current_device_name(self, val): self._data['current_device_name'] = val
 
     @property
-    def user(self):
-        return self._data.get('user')
+    def user(self): return self._data.get('user')
 
 
-def get_session_ctx(handler) -> SessionContext:
-    """
-    Получить контекст сессии.
-    Если есть X-Session-Token → вернуть сессионный.
-    Если нет → вернуть контекст default-сессии (глобальные переменные).
-    """
+def get_session_ctx(handler) -> SessionContext | None:
+    """Получить контекст сессии по токену. Без токена → None."""
     token = handler.headers.get('X-Session-Token', '')
     if token and token in session_data:
         s = session_data[token]
         s['last_access'] = time.time()
         return SessionContext(s)
-    # Default-сессия: прокси к глобальным переменным
-    import sys
-    mod = sys.modules[__name__]
-    class DefaultContext:
-        @property
-        def mikrotik_manager(self): return mod.mikrotik_manager
-        @mikrotik_manager.setter
-        def mikrotik_manager(self, v): setattr(mod, 'mikrotik_manager', v)
-        @property
-        def tree_builder(self): return mod.tree_builder
-        @tree_builder.setter
-        def tree_builder(self, v): setattr(mod, 'tree_builder', v)
-        @property
-        def current_device_name(self): return mod.current_device_name
-        @current_device_name.setter
-        def current_device_name(self, v): setattr(mod, 'current_device_name', v)
-        @property
-        def user(self): return None  # default-сессия не имеет пользователя
-    return DefaultContext()
+    return None
 
 
-SESSION_TTL = 7200  # 2 часа простоя → удаление сессии
-CLEANUP_INTERVAL = 300  # проверка каждые 5 минут
+SESSION_TTL = 7200
+CLEANUP_INTERVAL = 300
 
 
 def _cleanup_sessions():
-    """Фоновый поток: удаление старых сессий"""
     while True:
         time.sleep(CLEANUP_INTERVAL)
         now = time.time()
         for token in list(session_data.keys()):
             s = session_data.get(token)
-            if not s:
-                continue
-            age = now - s.get('last_access', 0)
-            if age > SESSION_TTL:
+            if not s: continue
+            if now - s.get('last_access', 0) > SESSION_TTL:
                 try:
                     if s.get('mikrotik_manager'):
                         s['mikrotik_manager'].disconnect()
-                except Exception:
-                    pass
+                except Exception: pass
                 del session_data[token]
-                log.info("🗑️ Session cleanup: удалена сессия %s (возраст %.0f мин)", token[:8], age / 60)
+                log.info("🗑️ Session cleanup: удалена сессия %s", token[:8])
 
 
 def start_cleanup():
-    """Запустить фоновый поток очистки сессий"""
     t = threading.Thread(target=_cleanup_sessions, daemon=True, name='session-cleanup')
     t.start()

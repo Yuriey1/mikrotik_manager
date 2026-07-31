@@ -89,7 +89,9 @@ class ConfigManager:
     def get_credentials(device_name, web_user=None):
         """Получить учётные данные устройства из БД"""
         default_user = ConfigManager.get_default_username()
-        username = web_user or 'nur001'
+        username = web_user or None
+        if not username:
+            return {'username': ConfigManager.get_default_username(), 'password': ''}
         try:
             from models.user import MikroTikCred, User
             user = User.get_or_none(User.username == username)
@@ -110,7 +112,9 @@ class ConfigManager:
     @staticmethod
     def save_credentials(device_name, username, password, web_user=None):
         """Сохранить учётные данные в БД"""
-        web_user = web_user or 'nur001'
+        web_user = web_user or None
+        if not web_user:
+            return
         try:
             from models.user import MikroTikCred, User
             user = User.get(User.username == web_user)
