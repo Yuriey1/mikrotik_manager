@@ -187,10 +187,19 @@ class ConfigManager:
         if web_user:
             try:
                 from services.auth import save_mikrotik_creds
-                save_mikrotik_creds(
-                    web_user, device_name, username,
-                    ConfigManager.encrypt_password(password) if password else ''
-                )
+                if username or password:
+                    save_mikrotik_creds(
+                        web_user, device_name, username,
+                        ConfigManager.encrypt_password(password) if password else ''
+                    )
+                else:
+                    # Удалить учётку из БД
+                    from models.user import MikroTikCred, User
+                    user = User.get(User.username == web_user)
+                    MikroTikCred.delete().where(
+                        MikroTikCred.user == user,
+                        MikroTikCred.device_name == device_name
+                    ).execute()
             except Exception as e:
                 logging.warning("DB creds save failed: %s", e)
 

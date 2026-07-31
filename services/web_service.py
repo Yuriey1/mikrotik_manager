@@ -187,6 +187,10 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
         try:
             parsed = urlparse(self.path)
             path = parsed.path
+            import services.state as state
+            ctx = state.get_session_ctx(self)
+            if ctx:
+                self.session_ctx = ctx
             if path in DELETE_ROUTES:
                 DELETE_ROUTES[path](self, parsed)
             else:

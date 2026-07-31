@@ -19,7 +19,9 @@ def handle_forget_credentials(handler, parsed):
     if not device_name:
         handler._send_json({'error': 'Не указано устройство'}, 400)
         return
-    ConfigManager.save_credentials(device_name, '', '')
+    ctx = handler.session_ctx
+    web_user = ctx.user.username if ctx.user else None
+    ConfigManager.save_credentials(device_name, '', '', web_user)
     handler._send_json({'success': True, 'message': f'Учетные данные для {device_name} удалены'})
 
 
