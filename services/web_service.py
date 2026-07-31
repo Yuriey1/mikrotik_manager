@@ -68,6 +68,7 @@ GET_ROUTES = {
     '/api/check_mac':         get_routes.handle_check_mac,
     '/api/old_leases':        get_routes.handle_old_leases,
     '/api/users':             auth_routes.handle_list_users,
+    '/api/profile':           auth_routes.handle_get_profile,
 }
 
 POST_ROUTES = {
@@ -85,6 +86,8 @@ POST_ROUTES = {
     '/api/register':               auth_routes.handle_register,
     '/api/users/delete':            auth_routes.handle_delete_user,
     '/api/users/password':          auth_routes.handle_change_password,
+    '/api/profile':                 auth_routes.handle_save_profile,
+    '/api/profile/creds':           auth_routes.handle_save_mikrotik_creds,
 }
 
 DELETE_ROUTES = {

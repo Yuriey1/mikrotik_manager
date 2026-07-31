@@ -50,7 +50,16 @@ app.component('app-header', {
             await disconnectDevice();
         }
 
-        return { store, queueCount, deviceTitle, netboxLabel, refreshDevices, doDisconnect };
+        function doLogout() {
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('current_user');
+            store.loggedIn = false;
+            store.authToken = '';
+            store.currentUser = '';
+            location.reload();
+        }
+
+        return { store, queueCount, deviceTitle, netboxLabel, refreshDevices, doDisconnect, doLogout };
     },
 });
 
@@ -158,6 +167,57 @@ app.component('admin-panel', {
         Vue.watch(show, function(v) { if (v) loadUsers(); });
 
         return { show, users, newUser, newPass, msg, msgType, doAdd, doDelete, close, store };
+    },
+});
+
+app.component('profile-modal', {
+    template: '#profile-modal',
+    setup() {
+        const show = Vue.computed(() => store.showProfileModal);
+        const m = reactive({ token: '', room_id: '', homeserver: '', llm_enabled: false, llm_key: '' });
+        const creds = ref([]);
+        const newPassword = ref('');
+        const msg = ref('');
+        const msgType = ref('');
+        const saving = ref(false);
+
+        async function loadProfile() {
+            try {
+                var d = await apiGet('/api/profile');
+                if (d.success) {
+                    Object.assign(m, d.matrix || {});
+                    creds.value = d.mikrotik_creds || [];
+                }
+            } catch (e) {}
+        }
+
+        async function doSave() {
+            saving.value = true; msg.value = '';
+            try {
+                var r = await apiPost('/api/profile', {
+                    matrix_token: m.token, matrix_room: m.room_id,
+                    matrix_homeserver: m.homeserver,
+                    llm_enabled: m.llm_enabled, llm_key: m.llm_key,
+                });
+                if (r.success) { msg.value = r.message; msgType.value = ''; }
+                else { msg.value = r.error; msgType.value = 'err'; }
+            } catch (e) { msg.value = e.message; msgType.value = 'err'; }
+            saving.value = false;
+        }
+
+        async function doChangePassword() {
+            try {
+                var r = await apiPost('/api/users/password', { username: store.currentUser, password: newPassword.value });
+                if (r.success) { msg.value = r.message; msgType.value = ''; newPassword.value = ''; }
+                else { msg.value = r.error; msgType.value = 'err'; }
+            } catch (e) { msg.value = e.message; msgType.value = 'err'; }
+        }
+
+        function close() { store.showProfileModal = false; msg.value = ''; }
+
+        Vue.watch(show, function(v) { if (v) loadProfile(); });
+
+        return { show, m, creds, newPassword, msg, msgType, saving, doSave, doChangePassword, close, store };
     },
 });
 

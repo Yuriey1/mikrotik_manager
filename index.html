@@ -22,6 +22,7 @@
         </div>
         <login-form></login-form>
         <admin-panel v-if="store.currentUser === 'admin'"></admin-panel>
+        <profile-modal></profile-modal>
         <loading-overlay></loading-overlay>
         <error-modal></error-modal>
         <netbox-config-modal></netbox-config-modal>
@@ -91,6 +92,13 @@
                     <span>{{ netboxLabel }}</span>
                 </div>
                 <matrix-bell v-if="store.matrixEnabled"></matrix-bell>
+                <div class="status-item" v-if="store.loggedIn" style="cursor: pointer;" @click="store.showProfileModal = true" title="Профиль">
+                    <i class="fas fa-user-circle"></i>
+                    <span>{{ store.currentUser }}</span>
+                </div>
+                <div class="status-item" v-if="store.loggedIn" style="cursor: pointer;" @click="doLogout" title="Выйти">
+                    <i class="fas fa-sign-out-alt"></i>
+                </div>
             </div>
         </div>
     </template>
@@ -154,6 +162,65 @@
                 </div>
                 <div v-if="msg" :class="msgType === 'err' ? 'login-error' : ''" style="margin-top: 8px; font-size: 13px; color: var(--success);">{{ msg }}</div>
                 <div class="modal-footer" style="margin-top: 12px;">
+                    <button class="btn btn-secondary" @click="close">Закрыть</button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- ====== PROFILE MODAL ====== -->
+    <template id="profile-modal">
+        <div v-if="show" class="modal-overlay" @click.self="close">
+            <div class="modal-content" style="max-width: 500px;">
+                <h2><i class="fas fa-user-circle"></i> Профиль: {{ store.currentUser }}</h2>
+                
+                <!-- Matrix -->
+                <h3 style="margin-top: 16px;"><i class="fab fa-elementor"></i> Matrix</h3>
+                <div class="form-group">
+                    <label>Токен доступа</label>
+                    <input type="text" v-model="m.token" placeholder="syt_...">
+                </div>
+                <div class="form-group">
+                    <label>ID комнаты</label>
+                    <input type="text" v-model="m.room_id" placeholder="!abc:matrix...">
+                </div>
+
+                <!-- LLM -->
+                <h3 style="margin-top: 16px;"><i class="fas fa-brain"></i> LLM (нейронка)</h3>
+                <div class="form-group">
+                    <label class="checkbox-group">
+                        <input type="checkbox" v-model="m.llm_enabled">
+                        <span>Включить LLM</span>
+                    </label>
+                </div>
+                <div class="form-group" v-if="m.llm_enabled">
+                    <label>API ключ DeepSeek</label>
+                    <input type="text" v-model="m.llm_key" placeholder="sk-...">
+                </div>
+
+                <!-- Смена пароля -->
+                <h3 style="margin-top: 16px;"><i class="fas fa-key"></i> Смена пароля</h3>
+                <div class="form-group">
+                    <input type="password" v-model="newPassword" placeholder="Новый пароль (мин 4 символа)">
+                </div>
+                <button class="btn btn-warning btn-sm" @click="doChangePassword" style="margin-bottom: 12px;" :disabled="!newPassword || newPassword.length < 4">Сменить пароль</button>
+
+                <div v-if="msg" :class="msgType === 'err' ? 'login-error' : ''" style="font-size: 13px; color: var(--success); margin-bottom: 8px;">{{ msg }}</div>
+
+                <!-- Микротик-учётки -->
+                <h3 style="margin-top: 16px;"><i class="fas fa-router"></i> Учётки микротиков</h3>
+                <div v-for="c in creds" :key="c.device_name" class="admin-user-row">
+                    <span class="admin-user-name">{{ c.device_name }}</span>
+                    <span style="font-size: 11px; color: var(--text-muted); margin-right: 8px;">{{ c.username }}</span>
+                </div>
+                <div v-if="!creds.length" style="color: var(--text-muted); font-size: 12px; padding: 8px 0;">
+                    Сохраняются автоматически при подключении к устройству
+                </div>
+
+                <div class="modal-footer" style="margin-top: 16px;">
+                    <button class="btn btn-primary" @click="doSave" :disabled="saving">
+                        <i v-if="saving" class="fas fa-spinner fa-spin"></i> Сохранить
+                    </button>
                     <button class="btn btn-secondary" @click="close">Закрыть</button>
                 </div>
             </div>

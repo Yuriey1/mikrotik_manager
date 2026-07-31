@@ -69,3 +69,42 @@ def handle_change_password(handler, data):
         return
     result = auth_service.change_password(username, password)
     handler._send_json(result)
+
+
+def handle_get_profile(handler, parsed):
+    """GET /api/profile — получить профиль текущего пользователя"""
+    ctx = handler.session_ctx
+    if not ctx.user:
+        handler._send_json({'error': 'Не авторизован'}, 401)
+        return
+    result = auth_service.get_profile(ctx.user.username)
+    handler._send_json(result)
+
+
+def handle_save_profile(handler, data):
+    """POST /api/profile — сохранить Matrix/LLM конфиг"""
+    ctx = handler.session_ctx
+    if not ctx.user:
+        handler._send_json({'error': 'Не авторизован'}, 401)
+        return
+    result = auth_service.save_profile(ctx.user.username, data)
+    handler._send_json(result)
+
+
+def handle_save_mikrotik_creds(handler, data):
+    """POST /api/profile/creds — сохранить учётку микротика"""
+    ctx = handler.session_ctx
+    if not ctx.user:
+        handler._send_json({'error': 'Не авторизован'}, 401)
+        return
+    device_name = data.get('device_name', '').strip()
+    mk_username = data.get('mk_username', '').strip()
+    mk_password = data.get('mk_password', '')
+    if not device_name:
+        handler._send_json({'error': 'Укажите device_name'}, 400)
+        return
+    auth_service.save_mikrotik_creds(
+        ctx.user.username, device_name, mk_username,
+        mk_password
+    )
+    handler._send_json({'success': True, 'message': f'Учётка для {device_name} сохранена'})

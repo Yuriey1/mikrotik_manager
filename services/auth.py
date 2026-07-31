@@ -90,3 +90,44 @@ def change_password(username: str, password: str) -> dict:
     user.password = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     user.save()
     return {'success': True, 'message': f'Пароль для {username} изменён'}
+
+
+def get_profile(username: str) -> dict:
+    """Получить профиль пользователя (Matrix/LLM конфиг + учётки микротиков)"""
+    from models.user import MatrixConfig, MikroTikCred
+    user = User.get(User.username == username)
+
+    mc, _ = MatrixConfig.get_or_create(user=user)
+    matrix = {
+        'enabled': mc.enabled, 'token': mc.token, 'room_id': mc.room_id,
+        'homeserver': mc.homeserver, 'llm_enabled': mc.llm_enabled, 'llm_key': mc.llm_key,
+    }
+
+    creds = []
+    for c in MikroTikCred.select().where(MikroTikCred.user == user):
+        creds.append({'device_name': c.device_name, 'username': c.username})
+
+    return {'success': True, 'username': username, 'matrix': matrix, 'mikrotik_creds': creds}
+
+
+def save_profile(username: str, data: dict) -> dict:
+    """Сохранить Matrix/LLM конфиг пользователя"""
+    from models.user import MatrixConfig
+    user = User.get(User.username == username)
+    mc, _ = MatrixConfig.get_or_create(user=user)
+
+    if 'matrix_enabled' in data:
+        mc.enabled = bool(data['matrix_enabled'])
+    if 'matrix_token' in data:
+        mc.token = data['matrix_token']
+    if 'matrix_room' in data:
+        mc.room_id = data['matrix_room']
+    if 'matrix_homeserver' in data:
+        mc.homeserver = data['matrix_homeserver']
+    if 'llm_enabled' in data:
+        mc.llm_enabled = bool(data['llm_enabled'])
+    if 'llm_key' in data:
+        mc.llm_key = data['llm_key']
+
+    mc.save()
+    return {'success': True, 'message': 'Профиль сохранён'}

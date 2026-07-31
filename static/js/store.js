@@ -75,6 +75,7 @@ const store = Vue.reactive({
     matrixPendingId: null,
     showPendingList: false,
     deviceSearchQuery: '',
+    showProfileModal: false,
 });
 
 store.menuEdit = function(sub) {
