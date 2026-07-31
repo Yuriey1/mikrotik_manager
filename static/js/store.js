@@ -65,6 +65,10 @@ const store = Vue.reactive({
     autoSavePassword: false,
     defaultUsername: 'admin',
 
+    loggedIn: false,
+    authToken: localStorage.getItem('auth_token') || '',
+    currentUser: localStorage.getItem('current_user') || '',
+
     matrixEnabled: false,
     pendingRequests: [],
     pendingCount: 0,

@@ -1,4 +1,4 @@
-const { createApp, onMounted, computed } = Vue;
+const { createApp, onMounted, computed, ref, reactive } = Vue;
 
 window.addEventListener('error', function(e) {
     var el = document.getElementById('app');
@@ -13,7 +13,11 @@ try {
 const app = createApp({
     setup() {
         onMounted(async () => {
-            await loadDevices();
+            // Авто-вход если токен сохранён — но только если не первый запуск
+            if (store.authToken) {
+                store.loggedIn = true;
+                await loadDevices();
+            }
             try {
                 const nc = await loadNetBoxConfig();
                 if (nc.success) {
@@ -111,6 +115,37 @@ app.component('matrix-bell', {
             store.showSubscriberModal = true;
         }
         return { store, toggleList, openRequest };
+    },
+});
+
+app.component('login-form', {
+    template: '#login-form',
+    setup() {
+        const username = ref(store.currentUser || '');
+        const password = ref('');
+        const loading = ref(false);
+        const error = ref(null);
+
+        async function doLogin() {
+            error.value = null;
+            loading.value = true;
+            try {
+                var result = await loginUser(username.value, password.value);
+                if (!result.success) {
+                    error.value = result.error || 'Ошибка входа';
+                }
+            } catch (e) {
+                error.value = e.message;
+            } finally {
+                loading.value = false;
+            }
+        }
+
+        function onEnter(event, callback) {
+            if (event.key === 'Enter') callback();
+        }
+
+        return { username, password, loading, error, doLogin, onEnter, store };
     },
 });
 
@@ -935,6 +970,10 @@ app.component('credentials-modal', {
                 .catch(e => { store.error = e.message; });
         }
 
+        function onCredsEnter(event) {
+            if (event.key === 'Enter') connectAndClose();
+        }
+
         async function saveAndClose() {
             store.showCredentialsModal = false;
             try {
@@ -958,7 +997,7 @@ app.component('credentials-modal', {
             store.credentialsDevice = null;
         }
 
-        return { store, username, password, connectAndClose, saveAndClose, forgetAndClose, cancel };
+        return { store, username, password, connectAndClose, saveAndClose, forgetAndClose, cancel, onCredsEnter };
     },
 });
 

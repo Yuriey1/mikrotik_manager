@@ -1,5 +1,9 @@
 async function apiFetch(url, options = {}) {
     try {
+        options.headers = options.headers || {};
+        if (store.authToken) {
+            options.headers['X-Session-Token'] = store.authToken;
+        }
         const resp = await fetch(url, options);
         if (!resp.ok) {
             const data = await resp.json().catch(() => ({}));
@@ -439,4 +443,16 @@ function formatBandwidth(maxLimit) {
     if (up) return up;
     if (down) return down;
     return '';
+}
+
+async function loginUser(username, password) {
+    var result = await apiPost('/api/login', { username: username, password: password });
+    if (result.success) {
+        store.authToken = result.token;
+        store.currentUser = result.username;
+        store.loggedIn = true;
+        localStorage.setItem('auth_token', result.token);
+        localStorage.setItem('current_user', result.username);
+    }
+    return result;
 }
