@@ -2429,3 +2429,17 @@ textarea {
 .matrix-pending-name { font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px; }
 .matrix-pending-details { font-size: 11px; color: var(--text-muted); display: flex; gap: 8px; flex-wrap: wrap; }
 .matrix-pending-access { font-size: 11px; margin-top: 4px; }
+
+/* ===== ADMIN PANEL ===== */
+.admin-toggle {
+    position: fixed; top: 12px; right: 12px; z-index: 5000;
+    cursor: pointer; color: var(--text-muted); font-size: 18px;
+    padding: 6px 10px; border-radius: 4px; transition: color 0.15s;
+}
+.admin-toggle:hover { color: var(--accent-primary); }
+.admin-user-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-bottom: 1px solid var(--border-color);
+}
+.admin-user-name { font-weight: 500; color: var(--text-primary); flex: 1; }
+.admin-user-date { font-size: 11px; color: var(--text-muted); }

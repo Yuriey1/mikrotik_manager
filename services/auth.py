@@ -58,3 +58,35 @@ def save_mikrotik_creds(username: str, device_name: str, mk_username: str, mk_pa
         cred.username = mk_username
         cred.password = mk_password
         cred.save()
+
+
+def list_users() -> dict:
+    """Список всех пользователей"""
+    users = []
+    for u in User.select():
+        users.append({
+            'username': u.username,
+            'created_at': u.created_at.strftime('%Y-%m-%d %H:%M') if u.created_at else '',
+        })
+    return {'success': True, 'users': users}
+
+
+def delete_user(username: str) -> dict:
+    """Удалить пользователя"""
+    if username == 'admin':
+        return {'success': False, 'error': 'Нельзя удалить администратора'}
+    user = User.get_or_none(User.username == username)
+    if not user:
+        return {'success': False, 'error': 'Пользователь не найден'}
+    user.delete_instance()
+    return {'success': True, 'message': f'Пользователь {username} удалён'}
+
+
+def change_password(username: str, password: str) -> dict:
+    """Сменить пароль пользователя"""
+    user = User.get_or_none(User.username == username)
+    if not user:
+        return {'success': False, 'error': 'Пользователь не найден'}
+    user.password = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    user.save()
+    return {'success': True, 'message': f'Пароль для {username} изменён'}

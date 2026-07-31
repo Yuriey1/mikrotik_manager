@@ -118,6 +118,49 @@ app.component('matrix-bell', {
     },
 });
 
+app.component('admin-panel', {
+    template: '#admin-panel',
+    setup() {
+        const show = ref(false);
+        const users = ref([]);
+        const newUser = ref('');
+        const newPass = ref('');
+        const msg = ref('');
+        const msgType = ref('');
+
+        async function loadUsers() {
+            try {
+                var d = await apiGet('/api/users');
+                if (d.success) users.value = d.users;
+            } catch (e) {}
+        }
+
+        async function doAdd() {
+            msg.value = '';
+            try {
+                var r = await apiPost('/api/register', { username: newUser.value, password: newPass.value });
+                if (r.success) { msg.value = r.message; msgType.value = ''; newUser.value = ''; newPass.value = ''; await loadUsers(); }
+                else { msg.value = r.error; msgType.value = 'err'; }
+            } catch (e) { msg.value = e.message; msgType.value = 'err'; }
+        }
+
+        async function doDelete(username) {
+            if (!confirm('Удалить пользователя ' + username + '?')) return;
+            try {
+                var r = await apiPost('/api/users/delete', { username: username });
+                if (r.success) { msg.value = r.message; msgType.value = ''; await loadUsers(); }
+                else { msg.value = r.error; msgType.value = 'err'; }
+            } catch (e) { msg.value = e.message; msgType.value = 'err'; }
+        }
+
+        function close() { show.value = false; msg.value = ''; }
+
+        Vue.watch(show, function(v) { if (v) loadUsers(); });
+
+        return { show, users, newUser, newPass, msg, msgType, doAdd, doDelete, close, store };
+    },
+});
+
 app.component('login-form', {
     template: '#login-form',
     setup() {

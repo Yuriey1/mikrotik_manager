@@ -67,6 +67,7 @@ GET_ROUTES = {
     '/api/analyze_channels':  get_routes.handle_analyze_channels,
     '/api/check_mac':         get_routes.handle_check_mac,
     '/api/old_leases':        get_routes.handle_old_leases,
+    '/api/users':             auth_routes.handle_list_users,
 }
 
 POST_ROUTES = {
@@ -82,6 +83,8 @@ POST_ROUTES = {
     '/api/save_credentials':       post_routes.handle_save_credentials,
     '/api/login':                  auth_routes.handle_login,
     '/api/register':               auth_routes.handle_register,
+    '/api/users/delete':            auth_routes.handle_delete_user,
+    '/api/users/password':          auth_routes.handle_change_password,
 }
 
 DELETE_ROUTES = {
