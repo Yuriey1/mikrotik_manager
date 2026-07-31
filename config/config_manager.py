@@ -10,8 +10,8 @@ import traceback
 import logging
 
 CONFIG_FILE = 'mikrotik_manager.conf'
-NETBOX_CONFIG_FILE = 'netbox_config.json'  # Новый файл только для настроек NetBox
-PASSWORDS_FILE = 'device_passwords.json'
+NETBOX_CONFIG_FILE = 'netbox_config.json'
+
 
 class ConfigManager:
     """Менеджер конфигурации"""
@@ -20,41 +20,34 @@ class ConfigManager:
     def load_config():
         """Загрузить конфигурацию (старый формат)"""
         config = configparser.ConfigParser()
-        
         if os.path.exists(CONFIG_FILE):
             config.read(CONFIG_FILE)
         else:
             config['DEFAULT'] = {
                 'last_device': '',
                 'auto_save_password': 'false',
-                'default_username': 'nur001'  # ← ИЗМЕНЕНО: теперь nur001 по умолчанию
+                'default_username': 'nur001'
             }
             with open(CONFIG_FILE, 'w') as f:
                 config.write(f)
-        
         return config
     
     @staticmethod
     def get_default_username():
-        """Получить имя пользователя по умолчанию из конфига"""
+        """Получить имя пользователя по умолчанию"""
         config = ConfigManager.load_config()
         return config['DEFAULT'].get('default_username', 'nur001')
     
     @staticmethod
     def save_config(config):
-        """Сохранить конфигурацию (старый формат)"""
+        """Сохранить конфигурацию"""
         with open(CONFIG_FILE, 'w') as f:
             config.write(f)
     
     @staticmethod
     def load_netbox_config():
         """Загрузить конфигурацию NetBox"""
-        default_config = {
-            'url': 'http://localhost:8000',
-            'token': '',
-            'verify_ssl': True
-        }
-        
+        default_config = {'url': 'http://localhost:8000', 'token': '', 'verify_ssl': True}
         if os.path.exists(NETBOX_CONFIG_FILE):
             try:
                 with open(NETBOX_CONFIG_FILE, 'r', encoding='utf-8') as f:
@@ -64,7 +57,6 @@ class ConfigManager:
                         default_config.update(loaded_config)
             except Exception as e:
                 logging.warning("⚠️  Ошибка загрузки конфигурации NetBox: %s", e)
-        
         return default_config
     
     @staticmethod
@@ -94,157 +86,46 @@ class ConfigManager:
             return ''
 
     @staticmethod
-    def load_credentials():
-        """Загрузить логины и пароли устройств"""
-        if os.path.exists(PASSWORDS_FILE):
-            try:
-                with open(PASSWORDS_FILE, 'r', encoding='utf-8') as f:
-                    content = f.read().strip()
-                    if content:
-                        data = json.loads(content)
-                        
-                        # Проверяем старый формат (только пароли в виде строк)
-                        if isinstance(data, dict) and all(isinstance(v, str) for v in data.values()):
-                            # Конвертируем старый формат в новый
-                            new_data = {}
-                            default_username = ConfigManager.get_default_username()
-                            
-                            for device_name, password in data.items():
-                                new_data[device_name] = {
-                                    'username': default_username,
-                                    'password': password
-                                }
-                            
-                            # Сохраняем в новом формате
-                            ConfigManager.save_credentials_dict(new_data)
-                            logging.info("🔄 Конвертирован старый формат паролей в новый (логины: %s)", default_username)
-                            return new_data
-                        
-                        return data
-            except Exception as e:
-                logging.warning("⚠️  Ошибка загрузки учетных данных: %s", e, exc_info=True)
-        return {}
-    
-    @staticmethod
-    def save_credentials_dict(credentials):
-        """Сохранить словарь учетных данных"""
-        try:
-            with open(PASSWORDS_FILE, 'w', encoding='utf-8') as f:
-                json.dump(credentials, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logging.error("❌ Ошибка сохранения учетных данных: %s", e)
-    
-    @staticmethod
     def get_credentials(device_name, web_user=None):
-        """Получить логин и пароль устройства.
-        Если web_user указан — сначала ищем в БД (сессионные учётки).
-        Если нет — JSON (общие учётки).
-        """
-        # Сессионные учётки из БД
-        if web_user:
-            try:
-                from services.auth import get_mikrotik_creds
-                db_creds = get_mikrotik_creds(web_user, device_name)
-                if db_creds.get('password'):
+        """Получить учётные данные устройства из БД"""
+        default_user = ConfigManager.get_default_username()
+        username = web_user or 'nur001'
+        try:
+            from models.user import MikroTikCred, User
+            user = User.get_or_none(User.username == username)
+            if user:
+                cred = MikroTikCred.get_or_none(
+                    MikroTikCred.user == user,
+                    MikroTikCred.device_name == device_name,
+                )
+                if cred and cred.password:
                     return {
-                        'username': db_creds['username'] or ConfigManager.get_default_username(),
-                        'password': ConfigManager.decrypt_password(db_creds['password'] or '')
+                        'username': cred.username or default_user,
+                        'password': ConfigManager.decrypt_password(cred.password)
                     }
-            except Exception as e:
-                logging.debug("DB creds lookup failed for %s/%s: %s", web_user, device_name, e)
+        except Exception as e:
+            logging.warning("DB creds lookup failed for %s/%s: %s", username, device_name, e)
+        return {'username': default_user, 'password': ''}
 
-        # Fallback: общие учётки из JSON
-        credentials = ConfigManager.load_credentials()
-        device_creds = credentials.get(device_name, {'username': '', 'password': ''})
-        if device_creds:
-            return {
-                'username': device_creds.get('username', ConfigManager.get_default_username()),
-                'password': ConfigManager.decrypt_password(device_creds.get('password', ''))
-            }
-        return {
-            'username': ConfigManager.get_default_username(),
-            'password': ''
-        }
-    
     @staticmethod
     def save_credentials(device_name, username, password, web_user=None):
-        """Сохранить логин и пароль устройства.
-        Если web_user указан — сохраняем в БД (сессионные учётки).
-        Всегда сохраняем в JSON (общие учётки).
-        """
-        # Сохраняем в JSON (общие)
-        credentials = ConfigManager.load_credentials()
-        if username or password:
-            credentials[device_name] = {
-                'username': username if username else ConfigManager.get_default_username(),
-                'password': ConfigManager.encrypt_password(password) if password else ''
-            }
-        else:
-            credentials.pop(device_name, None)
-        ConfigManager.save_credentials_dict(credentials)
-
-        # Сохраняем в БД (сессионные)
-        if web_user:
-            try:
-                from services.auth import save_mikrotik_creds
-                if username or password:
-                    save_mikrotik_creds(
-                        web_user, device_name, username,
-                        ConfigManager.encrypt_password(password) if password else ''
-                    )
-                else:
-                    # Удалить учётку из БД
-                    from models.user import MikroTikCred, User
-                    user = User.get(User.username == web_user)
-                    MikroTikCred.delete().where(
-                        MikroTikCred.user == user,
-                        MikroTikCred.device_name == device_name
-                    ).execute()
-            except Exception as e:
-                logging.warning("DB creds save failed: %s", e)
-
-        logging.info("💾 Сохранены учетные данные для %s: логин=%s", device_name, username)
-    
-    # ↓↓↓ Старые методы для обратной совместимости ↓↓↓
-    
-    @staticmethod
-    def load_passwords():
-        """Загрузить пароли устройств (старый метод для обратной совместимости)"""
-        credentials = ConfigManager.load_credentials()
-        passwords = {}
-        
-        for device_name, creds in credentials.items():
-            passwords[device_name] = creds.get('password', '')
-        
-        return passwords
-    
-    @staticmethod
-    def save_passwords(passwords):
-        """Сохранить пароли устройств (старый метод для обратной совместимости)"""
-        credentials = ConfigManager.load_credentials()
-        default_username = ConfigManager.get_default_username()
-        
-        for device_name, password in passwords.items():
-            if device_name in credentials:
-                # Обновляем только пароль
-                credentials[device_name]['password'] = password
+        """Сохранить учётные данные в БД"""
+        web_user = web_user or 'nur001'
+        try:
+            from models.user import MikroTikCred, User
+            user = User.get(User.username == web_user)
+            if username or password:
+                cred, created = MikroTikCred.get_or_create(
+                    user=user, device_name=device_name,
+                    defaults={'username': username or 'nur001', 'password': ''}
+                )
+                cred.username = username if username else cred.username
+                cred.password = ConfigManager.encrypt_password(password) if password else cred.password
+                cred.save()
             else:
-                # Создаем новую запись с дефолтным логином
-                credentials[device_name] = {
-                    'username': default_username,
-                    'password': password
-                }
-        
-        ConfigManager.save_credentials_dict(credentials)
-    
-    @staticmethod
-    def get_password(device_name):
-        """Получить пароль устройства (старый метод для обратной совместимости)"""
-        creds = ConfigManager.get_credentials(device_name)
-        return creds['password']
-    
-    @staticmethod
-    def save_password(device_name, password):
-        """Сохранить пароль устройства (старый метод для обратной совместимости)"""
-        creds = ConfigManager.get_credentials(device_name)
-        ConfigManager.save_credentials(device_name, creds['username'], password)
+                MikroTikCred.delete().where(
+                    MikroTikCred.user == user,
+                    MikroTikCred.device_name == device_name
+                ).execute()
+        except Exception as e:
+            logging.warning("DB creds save failed: %s", e)

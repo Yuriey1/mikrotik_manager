@@ -35,5 +35,8 @@ def handle_forget_password(handler, parsed):
     if not device_name:
         handler._send_json({'error': 'Не указано устройство'}, 400)
         return
-    ConfigManager.save_password(device_name, '')
+    ctx = handler.session_ctx
+    web_user = ctx.user.username if ctx.user else None
+    # Сохраняем пустой пароль (удаляем) для этого устройства
+    ConfigManager.save_credentials(device_name, '', '', web_user)
     handler._send_json({'success': True, 'message': f'Пароль для {device_name} удален'})
