@@ -7,6 +7,7 @@ import datetime
 import ipaddress
 import logging
 import re
+import time
 from typing import Dict, List, Optional, Tuple
 
 from models.device import MikroTikDevice
@@ -61,46 +62,39 @@ class MikroTikManager:
                 logging.info("✅ Соединение с %s закрыто", self.device.name)
         except Exception as e:
             logging.warning("⚠️  Ошибка при отключении: %s", e)
+        finally:
+            self.api = None
+            self.connected = False
 
     # ========== ПРОВЕРКА IP ==========
     def is_ip_in_mikrotik_networks(self, ip: str) -> Tuple[bool, Optional[str]]:
         """
         Проверить, принадлежит ли IP сетям микротика
-
-        Возвращает:
-            (принадлежит, интерфейс) или (False, None) если не принадлежит
+        Возвращает: (принадлежит, интерфейс) или (False, None)
+        При ошибке API: возвращает (False, None) — но логирует предупреждение
         """
         try:
-            logging.debug("🔍 Проверка IP %s на принадлежность сетям микротика...", ip)
-
-            # Получаем все адреса интерфейсов
             ipaddr_cmd = self.api.path("/ip/address")
             addresses = list(ipaddr_cmd)
+        except Exception as e:
+            logging.warning("⚠️ Не удалось проверить IP %s (API недоступен: %s)", ip, e)
+            return False, None
 
-            # Преобразуем IP в объект для проверки
+        try:
             try:
                 ip_obj = ipaddress.ip_address(ip)
             except ValueError:
                 logging.error("Неверный формат IP: %s", ip)
                 return False, None
 
-            # Проверяем каждый адрес интерфейса
             for addr in addresses:
                 try:
-                    network_str = addr["address"]  # Формат: 192.168.1.1/24
+                    network_str = addr["address"]
                     interface = addr["interface"]
-
-                    # Создаем объект сети
                     network = ipaddress.ip_network(network_str, strict=False)
-
-                    # Проверяем принадлежность IP к сети
                     if ip_obj in network:
-                        logging.info(
-                            "✅ IP %s принадлежит сети %s на интерфейсе '%s'",
-                            ip, network, interface
-                        )
+                        logging.info("✅ IP %s принадлежит сети %s на интерфейсе '%s'", ip, network, interface)
                         return True, interface
-
                 except (ValueError, KeyError) as e:
                     logging.warning("⚠️  Ошибка обработки адреса %s: %s", addr, e)
                     continue
@@ -476,12 +470,30 @@ class MikroTikManager:
             logging.info("🔧 ARP: Начинаем работу с %s -> %s", ip, mac)
 
             if interface is None:
-                belongs, found_interface = self.is_ip_in_mikrotik_networks(ip)
-                if not belongs:
-                    raise ValueError(
-                        f"IP {ip} не принадлежит сетям микротика! ARP запись не может быть добавлена."
-                    )
-                interface = found_interface
+                # Пробуем определить интерфейс — 2 попытки на случай таймаута
+                belongs = False
+                found_interface = None
+                api_ok = False
+                for attempt in (1, 2):
+                    try:
+                        belongs, found_interface = self.is_ip_in_mikrotik_networks(ip)
+                        api_ok = True
+                        break
+                    except Exception as e:
+                        if attempt == 1:
+                            logging.warning("⚠️ ARP: попытка %d проверки сети для %s не удалась (%s), пробую ещё раз", attempt, ip, e)
+                            import time; time.sleep(2)
+                        else:
+                            logging.warning("⚠️ ARP: не удалось проверить сеть для %s после 2 попыток (%s), пропускаю проверку", ip, e)
+
+                if api_ok:
+                    if belongs:
+                        interface = found_interface
+                    else:
+                        raise ValueError(
+                            f"IP {ip} не принадлежит сетям микротика! ARP запись не может быть добавлена."
+                        )
+                # else: API оба раза упал — пропускаем проверку, пробуем без интерфейса
 
             arp_cmd = self.api.path("/ip/arp")
 
@@ -495,22 +507,20 @@ class MikroTikManager:
 
             # Добавляем новую запись
             logging.info("➕ ARP: Добавляем новую запись")
-            logging.info("   📍 Интерфейс: %s", interface)
+            logging.info("   📍 Интерфейс: %s", interface or 'авто')
             mikrotik_comment = russian_to_mikrotik_comment(comment) if comment else ""
 
+            arp_params = {
+                "address": ip,
+                "mac-address": mac.upper(),
+                "disabled": "no",
+                "comment": mikrotik_comment,
+            }
+            if interface:
+                arp_params["interface"] = interface
+
             try:
-                tuple(
-                    arp_cmd(
-                        "add",
-                        **{
-                            "address": ip,
-                            "mac-address": mac.upper(),
-                            "interface": interface,
-                            "disabled": "no",
-                            "comment": mikrotik_comment,
-                        },
-                    )
-                )
+                tuple(arp_cmd("add", **arp_params))
                 logging.info("✅ ARP: Запись успешно добавлена")
                 return True
 
@@ -540,14 +550,18 @@ class MikroTikManager:
 
             for addr in addresses:
                 if addr.get("list") == list_name and addr.get("address") == address:
-                    # Если timeout отличается — обновляем
-                    if timeout:
-                        addr_id = addr.get(".id")
-                        if addr_id:
+                    addr_id = addr.get(".id")
+                    if addr_id:
+                        update = {}
+                        if timeout:
+                            update["timeout"] = timeout
+                        if comment and addr.get("comment", "") != comment:
+                            mikrotik_comment = russian_to_mikrotik_comment(comment) if comment else ""
+                            update["comment"] = mikrotik_comment
+                        if update:
                             try:
-                                tuple(fw_cmd("set", **{".id": addr_id, "timeout": timeout}))
-                                logging.info("   ✅ Timeout обновлён на %s", timeout)
-                                return True
+                                tuple(fw_cmd("set", **{".id": addr_id, **update}))
+                                logging.info("   ✅ Firewall: обновлено %s", list(update.keys()))
                             except Exception:
                                 pass
                     logging.debug("   ⚠️ Firewall: Адрес %s уже в списке %s", address, list_name)
@@ -782,6 +796,8 @@ class MikroTikManager:
         """Записать список target'ов в очередь (IP сортируются по возрастанию)"""
         queue_cmd = self.api.path("/queue/simple")
 
+        logging.info("📋 Queue %s: было  %s", queue_id, targets)
+
         def _sort_key(t):
             ip_part = t.strip().split('/')[0]
             try:
@@ -790,6 +806,8 @@ class MikroTikManager:
                 return (1, t)
 
         targets.sort(key=_sort_key)
+        logging.info("📋 Queue %s: стало %s", queue_id, targets)
+
         new_target = ",".join(targets)
         try:
             tuple(queue_cmd("set", **{".id": queue_id, "target": new_target}))
@@ -1629,7 +1647,7 @@ class MikroTikManager:
                             except Exception as e:
                                 result['steps'].append(f"   ⚠️ Ошибка обновления MAC в DHCP: {e}")
 
-            # --- ARP: обновление MAC ---
+            # --- ARP: обновление MAC и комментария ---
             if new_mac:
                 result['steps'].append("📝 ARP: обновление...")
                 arp_entries = self.get_arp_table()
@@ -1639,10 +1657,15 @@ class MikroTikManager:
                         arp_id = entry.get('.id')
                         break
 
+                mikrotik_comment = russian_to_mikrotik_comment(comment) if comment else ""
+
                 if arp_id:
                     try:
                         arp_cmd = self.api.path('/ip/arp')
-                        tuple(arp_cmd('set', **{'.id': arp_id, 'mac-address': new_mac}))
+                        arp_data = {'.id': arp_id, 'mac-address': new_mac}
+                        if comment:
+                            arp_data['comment'] = mikrotik_comment
+                        tuple(arp_cmd('set', **arp_data))
                         result['steps'].append("   ✅ ARP обновлён")
                         result['details']['arp'] = True
                     except Exception as e:

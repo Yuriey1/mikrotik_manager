@@ -119,3 +119,34 @@ class NetBoxClient:
             return response.status_code == 200
         except:
             return False
+
+    def get_site_for_ip(self, ip: str) -> Optional[str]:
+        """Найти площадку по IP через NetBox IPAM (префиксы → scope)"""
+        try:
+            # Ищем префикс, содержащий IP
+            url = urljoin(self.base_url, '/api/ipam/prefixes/')
+            params = {'q': '.'.join(ip.split('.')[:3]), 'limit': 1}
+            response = self.session.get(url, params=params, verify=self.verify_ssl, timeout=10)
+            response.raise_for_status()
+            results = response.json().get('results', [])
+            if not results:
+                return None
+
+            prefix = results[0]
+            # scope — основное поле площадки в NetBox
+            scope = prefix.get('scope') or {}
+            if scope.get('name'):
+                return scope['name']
+            # fallback: site (устаревшее)
+            site = prefix.get('site') or {}
+            if site.get('name'):
+                return site['name']
+            # fallback: первый тег (часто содержит площадку)
+            tags = prefix.get('tags', [])
+            if tags:
+                return tags[0].get('name')
+
+            return None
+        except requests.RequestException as e:
+            logging.error("❌ Ошибка поиска площадки по IP в NetBox: %s", e)
+            return None
