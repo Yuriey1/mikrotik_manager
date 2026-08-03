@@ -13,6 +13,9 @@ try {
 const app = createApp({
     setup() {
         onMounted(async () => {
+            if (store.authToken) {
+                store.loggedIn = true;
+            }
             await loadDevices();
             try {
                 const nc = await loadNetBoxConfig();
@@ -47,6 +50,8 @@ app.component('app-header', {
         }
 
         function doLogout() {
+            sessionStorage.removeItem('auth_token');
+            sessionStorage.removeItem('current_user');
             store.loggedIn = false;
             store.authToken = '';
             store.currentUser = '';

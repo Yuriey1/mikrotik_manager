@@ -66,8 +66,8 @@ const store = Vue.reactive({
     defaultUsername: 'admin',
 
     loggedIn: false,
-    authToken: '',
-    currentUser: '',
+    authToken: sessionStorage.getItem('auth_token') || '',
+    currentUser: sessionStorage.getItem('current_user') || '',
 
     matrixEnabled: false,
     pendingRequests: [],

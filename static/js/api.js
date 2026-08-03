@@ -451,6 +451,8 @@ async function loginUser(username, password) {
         store.authToken = result.token;
         store.currentUser = result.username;
         store.loggedIn = true;
+        sessionStorage.setItem('auth_token', result.token);
+        sessionStorage.setItem('current_user', result.username);
     }
     return result;
 }
