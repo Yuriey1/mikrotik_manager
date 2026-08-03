@@ -350,7 +350,10 @@
                 <div class="subscribers-toolbar">
                     <div class="subscribers-search">
                         <i class="fas fa-search"></i>
-                        <input type="text" v-model="searchText" placeholder="Поиск абонента (IP или ФИО)...">
+                        <input type="text" v-model="searchText" placeholder="Поиск абонента (IP, MAC или ФИО)...">
+                        <button v-if="searchText" class="device-search-clear" @click="searchText = ''">
+                            <i class="fas fa-times"></i>
+                        </button>
                     </div>
                     <div class="subscribers-filters">
                         <button class="btn btn-primary" @click="openAddModal">
