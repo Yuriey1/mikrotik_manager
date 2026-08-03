@@ -13,11 +13,7 @@ try {
 const app = createApp({
     setup() {
         onMounted(async () => {
-            // Авто-вход если токен сохранён — но только если не первый запуск
-            if (store.authToken) {
-                store.loggedIn = true;
-                await loadDevices();
-            }
+            await loadDevices();
             try {
                 const nc = await loadNetBoxConfig();
                 if (nc.success) {
@@ -51,8 +47,6 @@ app.component('app-header', {
         }
 
         function doLogout() {
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('current_user');
             store.loggedIn = false;
             store.authToken = '';
             store.currentUser = '';
