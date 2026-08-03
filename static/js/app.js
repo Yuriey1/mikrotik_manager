@@ -188,12 +188,16 @@ app.component('profile-modal', {
     template: '#profile-modal',
     setup() {
         const show = Vue.computed(() => store.showProfileModal);
-        const m = reactive({ token: '', room_id: '', homeserver: '', llm_enabled: false, llm_key: '' });
+        const m = reactive({ enabled: false, token: '', room_id: '', homeserver: '',
+                             parsing_mode: 'regex', classify_enabled: false,
+                             llm_enabled: false, llm_key: '', llm_url: '' });
         const creds = ref([]);
         const newPassword = ref('');
         const msg = ref('');
         const msgType = ref('');
         const saving = ref(false);
+        const testing = ref(false);
+        const matrixTestResult = ref(null);
 
         async function loadProfile() {
             try {
@@ -209,9 +213,10 @@ app.component('profile-modal', {
             saving.value = true; msg.value = '';
             try {
                 var r = await apiPost('/api/profile', {
-                    matrix_token: m.token, matrix_room: m.room_id,
+                    matrix_enabled: m.enabled, matrix_token: m.token, matrix_room: m.room_id,
                     matrix_homeserver: m.homeserver,
-                    llm_enabled: m.llm_enabled, llm_key: m.llm_key,
+                    parsing_mode: m.parsing_mode, classify_enabled: m.classify_enabled,
+                    llm_enabled: m.parsing_mode !== 'regex', llm_key: m.llm_key, llm_url: m.llm_url,
                 });
                 if (r.success) { msg.value = r.message; msgType.value = ''; }
                 else { msg.value = r.error; msgType.value = 'err'; }
@@ -227,6 +232,16 @@ app.component('profile-modal', {
             } catch (e) { msg.value = e.message; msgType.value = 'err'; }
         }
 
+        async function doMatrixTest() {
+            testing.value = true; matrixTestResult.value = null;
+            try {
+                var r = await apiPost('/api/matrix/test', { token: m.token, homeserver: m.homeserver || 'https://matrix.krasintegra.ru' });
+                if (r.success) { matrixTestResult.value = r.user_id; }
+                else { matrixTestResult.value = null; store.error = r.error; }
+            } catch (e) { matrixTestResult.value = null; store.error = e.message; }
+            testing.value = false;
+        }
+
         function close() { store.showProfileModal = false; msg.value = ''; }
 
         function openCreds(deviceName) {
@@ -236,7 +251,8 @@ app.component('profile-modal', {
 
         Vue.watch(show, function(v) { if (v) loadProfile(); });
 
-        return { show, m, creds, newPassword, msg, msgType, saving, doSave, doChangePassword, close, openCreds, store };
+        return { show, m, creds, newPassword, msg, msgType, saving, testing, matrixTestResult,
+                 doSave, doChangePassword, doMatrixTest, close, openCreds, store };
     },
 });
 

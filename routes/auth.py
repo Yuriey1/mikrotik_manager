@@ -108,3 +108,27 @@ def handle_save_mikrotik_creds(handler, data):
         mk_password
     )
     handler._send_json({'success': True, 'message': f'Учётка для {device_name} сохранена'})
+
+
+def handle_matrix_test(handler, data):
+    """POST /api/matrix/test — проверить подключение к Matrix"""
+    import asyncio
+    token = data.get('token', '').strip()
+    homeserver = data.get('homeserver', 'https://matrix.krasintegra.ru').strip()
+    if not token:
+        handler._send_json({'error': 'Укажите токен'}, 400)
+        return
+
+    async def _test():
+        from nio import AsyncClient
+        client = AsyncClient(homeserver, 'nur001')
+        client.access_token = token
+        resp = await client.whoami()
+        await client.close()
+        return resp
+
+    try:
+        result = asyncio.run(_test())
+        handler._send_json({'success': True, 'user_id': result.user_id, 'message': 'Подключение успешно'})
+    except Exception as e:
+        handler._send_json({'success': False, 'error': str(e)})

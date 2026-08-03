@@ -90,6 +90,7 @@ POST_ROUTES = {
     '/api/users/password':          auth_routes.handle_change_password,
     '/api/profile':                 auth_routes.handle_save_profile,
     '/api/profile/creds':           auth_routes.handle_save_mikrotik_creds,
+    '/api/matrix/test':             auth_routes.handle_matrix_test,
 }
 
 DELETE_ROUTES = {

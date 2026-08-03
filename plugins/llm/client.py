@@ -1,33 +1,16 @@
-"""LLM-клиент: DeepSeek API"""
+"""LLM-клиент: DeepSeek API (OpenAI Chat Completions)"""
 
 import json
-import logging
-import os
-
 import httpx
 
-log = logging.getLogger(__name__)
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.json')
 
+async def generate(prompt: str, api_key: str, model: str = "deepseek-chat",
+                   url: str = "https://api.deepseek.com/v1/chat/completions",
+                   timeout: int = 30) -> dict:
+    """Отправить запрос в LLM и вернуть JSON-ответ"""
+    if not api_key:
+        raise ValueError("LLM API key required")
 
-def load_config():
-    with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-        return json.load(f)
-
-
-async def generate(prompt: str, model: str = None, timeout: int = None) -> dict:
-    """Отправить запрос в DeepSeek и вернуть JSON-ответ"""
-    config = load_config()
-    timeout_val = timeout if timeout is not None else config.get('timeout', 30)
-
-    api_key = config.get('api_key', '')
-    url = config.get('url', 'https://api.deepseek.com/v1/chat/completions')
-    model = model or config.get('model', 'deepseek-chat')
-
-    headers = {
-        'Authorization': f'Bearer {api_key}',
-        'Content-Type': 'application/json',
-    }
     body = {
         'model': model,
         'messages': [
@@ -38,9 +21,11 @@ async def generate(prompt: str, model: str = None, timeout: int = None) -> dict:
         'response_format': {'type': 'json_object'},
     }
 
-    async with httpx.AsyncClient(timeout=timeout_val) as client:
-        resp = await client.post(url, headers=headers, json=body)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        resp = await client.post(url, headers={
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json',
+        }, json=body)
         resp.raise_for_status()
         data = resp.json()
-        content = data['choices'][0]['message']['content']
-        return json.loads(content)
+        return json.loads(data['choices'][0]['message']['content'])

@@ -36,12 +36,15 @@ class MikroTikCred(BaseModel):
 class MatrixConfig(BaseModel):
     """Настройки Matrix + LLM (на пользователя)"""
     user = ForeignKeyField(User, backref='matrix_config', unique=True)
-    enabled = BooleanField(default=False)
-    token = CharField(max_length=256, default='')
-    room_id = CharField(max_length=128, default='')
-    homeserver = CharField(max_length=128, default='https://matrix.krasintegra.ru')
-    llm_enabled = BooleanField(default=False)
-    llm_key = CharField(max_length=256, default='')
+    enabled = BooleanField()
+    token = CharField(max_length=256)
+    room_id = CharField(max_length=128)
+    homeserver = CharField(max_length=128)
+    llm_enabled = BooleanField()
+    llm_key = CharField(max_length=256)
+    llm_url = CharField(max_length=256)
+    parsing_mode = CharField(max_length=16)  # regex | hybrid | llm
+    classify_enabled = BooleanField()
 
 
 def init_db():

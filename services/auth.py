@@ -101,6 +101,7 @@ def get_profile(username: str) -> dict:
     matrix = {
         'enabled': mc.enabled, 'token': mc.token, 'room_id': mc.room_id,
         'homeserver': mc.homeserver, 'llm_enabled': mc.llm_enabled, 'llm_key': mc.llm_key,
+        'llm_url': mc.llm_url, 'parsing_mode': mc.parsing_mode, 'classify_enabled': mc.classify_enabled,
     }
 
     creds = []
@@ -128,6 +129,12 @@ def save_profile(username: str, data: dict) -> dict:
         mc.llm_enabled = bool(data['llm_enabled'])
     if 'llm_key' in data:
         mc.llm_key = data['llm_key']
+    if 'llm_url' in data:
+        mc.llm_url = data['llm_url']
+    if 'parsing_mode' in data:
+        mc.parsing_mode = data['parsing_mode']
+    if 'classify_enabled' in data:
+        mc.classify_enabled = bool(data['classify_enabled'])
 
     mc.save()
     return {'success': True, 'message': 'Профиль сохранён'}

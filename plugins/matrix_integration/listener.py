@@ -199,19 +199,28 @@ class MatrixListener:
         return True
 
     def _check_llm(self):
-        """Проверить доступен ли LLM — если нет, скрыть колокольчик"""
+        """Проверить доступность LLM из БД для пользователя nur001"""
         try:
-            llm_config = os.path.join(os.path.dirname(__file__), '..', 'llm', 'config.json')
-            if os.path.exists(llm_config):
-                with open(llm_config) as f:
-                    cfg = json.load(f)
-                if cfg.get('api_key'):
+            from models.user import MatrixConfig, User
+            user = User.get_or_none(User.username == 'nur001')
+            if user:
+                mc = MatrixConfig.get_or_none(MatrixConfig.user == user)
+                if mc and mc.enabled and mc.llm_enabled and mc.llm_key:
                     state.matrix_available = True
-                    log.info("✅ Matrix: LLM доступен, колокольчик активен")
+                    self.llm_api_key = mc.llm_key
+                    self.llm_url = mc.llm_url or 'https://api.deepseek.com/v1/chat/completions'
+                    self.parsing_mode = mc.parsing_mode or 'regex'
+                    self.classify_enabled = bool(mc.classify_enabled)
+                    log.info("✅ Matrix: LLM из БД (mode=%s, classify=%s), колокольчик активен",
+                             self.parsing_mode, self.classify_enabled)
                     return
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("Matrix: ошибка чтения LLM из БД — %s", e)
+
         state.matrix_available = False
+        self.llm_api_key = None
+        self.parsing_mode = 'regex'
+        self.classify_enabled = False
         log.info("🔕 Matrix: LLM недоступен, колокольчик отключён")
 
     async def _auto_trust_devices(self):
@@ -245,7 +254,7 @@ class MatrixListener:
         try:
             from plugins.llm.client import generate
             prompt = CLASSIFY_PROMPT.format(text=text)
-            result = await generate(prompt)
+            result = await generate(prompt, api_key=self.llm_api_key)
             # DeepSeek возвращает JSON, извлекаем ответ
             answer = str(result).strip().upper()
             is_request = 'ДА' in answer and len(answer) < 10
@@ -326,21 +335,19 @@ class MatrixListener:
 
                     log.info("📩 Matrix: новое сообщение от %s — %s", event.sender, body[:80])
 
-                    # Этап 1: LLM-классификация — похоже ли на заявку?
-                    looks_like_request = False
-                    if self.config.get('llm_enabled', False):
+                    # Этап 1: LLM-классификация (только если включена)
+                    looks_like_request = True
+                    if self.classify_enabled and self.llm_api_key:
                         try:
                             looks_like_request = await asyncio.wait_for(
                                 self._classify_request(body), timeout=10
                             )
+                            if not looks_like_request:
+                                continue
                         except Exception:
-                            # Таймаут — fallback на regex
-                            has_mac = re.search(r'([0-9A-Fa-f]{2}:[0-9A-Fa-f]{2})', body)
-                            has_ip = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|ип\s+\d{1,3})', body)
-                            has_name = re.search(r'[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+', body)
-                            looks_like_request = bool(has_mac or has_ip or has_name)
-                    else:
-                        # LLM выключен — regex
+                            pass  # падение классификации — пропускаем сообщение дальше
+                    elif not self.classify_enabled:
+                        # Без классификации — regex префильтр
                         has_mac = re.search(r'([0-9A-Fa-f]{2}:[0-9A-Fa-f]{2})', body)
                         has_ip = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|ип\s+\d{1,3})', body)
                         has_name = re.search(r'[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+', body)
@@ -349,20 +356,22 @@ class MatrixListener:
                     if not looks_like_request:
                         continue
 
-                    # Этап 2: полный парсинг
+                    # Этап 2: парсинг согласно parsing_mode
                     parsed = None
-                    if self.config.get('llm_enabled', False):
+                    use_llm = self.parsing_mode in ('hybrid', 'llm') and self.llm_api_key
+
+                    if use_llm:
                         try:
                             from plugins.llm.parser import parse_with_llm
                             log.info("🤖 Matrix: запрос к LLM...")
                             parsed = await asyncio.wait_for(
-                                parse_with_llm(body, LLM_SYSTEM_PROMPT, timeout=None), timeout=120
+                                parse_with_llm(body, LLM_SYSTEM_PROMPT, api_key=self.llm_api_key, timeout=None), timeout=120
                             )
                             log.info("🤖 Matrix: LLM парсинг успешен")
                         except Exception as e:
                             log.warning("🤖 Matrix: LLM ошибка (%s: %s), использую regex", type(e).__name__, e)
 
-                    if not parsed:
+                    if not parsed or self.parsing_mode == 'regex':
                         parsed = parse_message(body)
 
                     # Гарантируем наличие id (LLM не генерирует)

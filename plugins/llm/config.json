@@ -1,6 +1,0 @@
-{
-    "model": "deepseek-chat",
-    "api_key": "sk-d2ae475e455c46478ac921357b870625",
-    "url": "https://api.deepseek.com/v1/chat/completions",
-    "timeout": 30
-}
