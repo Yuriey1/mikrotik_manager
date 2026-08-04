@@ -244,6 +244,8 @@ app.component('profile-modal', {
             testing.value = false;
         }
 
+        function clearToken() { m.token = ''; m.matrix_password = ''; }
+
         function close() { store.showProfileModal = false; msg.value = ''; }
 
         function openCreds(deviceName) {
@@ -254,7 +256,7 @@ app.component('profile-modal', {
         Vue.watch(show, function(v) { if (v) loadProfile(); });
 
         return { show, m, creds, newPassword, msg, msgType, saving, testing, matrixTestResult,
-                 doSave, doChangePassword, doMatrixTest, close, openCreds, store };
+                 doSave, doChangePassword, doMatrixTest, clearToken, close, openCreds, store };
     },
 });
 

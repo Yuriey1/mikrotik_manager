@@ -171,11 +171,11 @@
     <!-- ====== PROFILE MODAL ====== -->
     <template id="profile-modal">
         <div v-if="show" class="modal-overlay" @click.self="close">
-            <div class="modal-content" style="max-width: 440px;">
+            <div class="modal-content" style="max-width: 440px; max-height: 90vh; overflow-y: auto;">
                 <h2><i class="fas fa-user-circle"></i> Профиль: {{ store.currentUser }}</h2>
                 
                 <!-- Matrix -->
-                <h3 style="margin-top: 12px;"><i class="fab fa-elementor"></i> Matrix</h3>
+                <h3 style="margin-top: 10px;"><i class="fab fa-elementor"></i> Matrix</h3>
                 <div class="form-group">
                     <label class="checkbox-group">
                         <input type="checkbox" v-model="m.enabled">
@@ -185,34 +185,41 @@
                 <div v-if="m.enabled">
                     <div style="display: flex; gap: 8px;">
                         <div class="form-group" style="flex: 1;">
-                            <label>Токен *</label>
-                            <input type="text" v-model="m.token" :placeholder="m.token ? 'syt_...' : 'получить автоматически'">
-                        </div>
-                        <div class="form-group" style="flex: 1;">
                             <label>Пользователь Matrix</label>
                             <input type="text" v-model="m.matrix_user" placeholder="nur001">
                         </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label>Комната *</label>
+                            <input type="text" v-model="m.room_id" placeholder="!OSxqok...">
+                        </div>
                     </div>
                     <div class="form-group" v-if="!m.token">
-                        <label>Пароль Matrix (для получения токена)</label>
+                        <label>Пароль Matrix (токен будет получен автоматически)</label>
                         <input type="password" v-model="m.matrix_password" placeholder="••••••">
                     </div>
-                    <div class="form-group">
-                        <label>Комната *</label>
-                        <input type="text" v-model="m.room_id" placeholder="!OSxqok...">
+                    <div class="form-group" v-else>
+                        <label>Токен (получен автоматически)</label>
+                        <div style="display: flex; gap: 6px;">
+                            <input type="text" :value="m.token.substring(0,16)+'...'" readonly style="flex: 1; opacity: 0.7;">
+                            <button class="btn btn-danger btn-sm" @click="clearToken" title="Сбросить токен">✕</button>
+                        </div>
                     </div>
-                    <button class="btn btn-info btn-sm" @click="doMatrixTest" :disabled="!m.token || testing" style="margin-bottom: 10px;">
-                        <i :class="matrixTestResult ? 'fas fa-check' : (testing ? 'fas fa-spinner fa-spin' : 'fas fa-plug')"></i>
-                        {{ matrixTestResult ? 'OK: ' + matrixTestResult : 'Проверить' }}
-                    </button>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <button class="btn btn-info btn-sm" @click="doMatrixTest" :disabled="!m.token || testing">
+                            <i v-if="testing" class="fas fa-spinner fa-spin"></i>
+                            <i v-else-if="matrixTestResult" class="fas fa-check"></i>
+                            <i v-else class="fas fa-plug"></i>
+                            {{ testing ? 'Проверка...' : (matrixTestResult ? 'OK: ' + matrixTestResult : 'Проверить') }}
+                        </button>
+                    </div>
 
-                    <h3 style="margin-top: 12px;"><i class="fas fa-cog"></i> Режим парсинга</h3>
+                    <h3 style="margin-top: 10px;"><i class="fas fa-cog"></i> Режим парсинга</h3>
                     <div class="form-group" style="display: flex; gap: 8px; font-size: 13px;">
                         <label><input type="radio" v-model="m.parsing_mode" value="regex"> Regex</label>
                         <label><input type="radio" v-model="m.parsing_mode" value="hybrid"> Hybrid</label>
                         <label><input type="radio" v-model="m.parsing_mode" value="llm"> LLM</label>
                     </div>
-                    <div v-if="m.parsing_mode !== 'regex'" style="border-left: 2px solid var(--border-color); padding-left: 12px; margin-top: 8px;">
+                    <div v-if="m.parsing_mode !== 'regex'" style="border-left: 2px solid var(--border-color); padding-left: 12px; margin-top: 6px;">
                         <div class="form-group">
                             <label class="checkbox-group">
                                 <input type="checkbox" v-model="m.classify_enabled">
@@ -227,17 +234,17 @@
                 </div>
 
                 <!-- Смена пароля -->
-                <h3 style="margin-top: 16px;"><i class="fas fa-key"></i> Смена пароля</h3>
-                <div class="form-group">
-                    <input type="password" v-model="newPassword" placeholder="Новый пароль (мин 4 символа)">
+                <h3 style="margin-top: 10px;"><i class="fas fa-key"></i> Смена пароля</h3>
+                <div style="display: flex; gap: 8px;">
+                    <input type="password" v-model="newPassword" placeholder="Новый пароль" style="flex: 1;">
+                    <button class="btn btn-warning btn-sm" @click="doChangePassword" :disabled="!newPassword || newPassword.length < 4">Сменить</button>
                 </div>
-                <button class="btn btn-warning btn-sm" @click="doChangePassword" style="margin-bottom: 12px;" :disabled="!newPassword || newPassword.length < 4">Сменить пароль</button>
 
-                <div v-if="msg" :class="msgType === 'err' ? 'login-error' : ''" style="font-size: 13px; color: var(--success); margin-bottom: 8px;">{{ msg }}</div>
+                <div v-if="msg" :class="msgType === 'err' ? 'login-error' : ''" style="font-size: 13px; color: var(--success); margin: 8px 0;">{{ msg }}</div>
 
                 <!-- Микротик-учётки -->
-                <h3 style="margin-top: 16px;"><i class="fas fa-router"></i> Учётки микротиков</h3>
-                <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 4px;">
+                <h3 style="margin-top: 10px;"><i class="fas fa-router"></i> Учётки микротиков</h3>
+                <div style="max-height: 120px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 4px;">
                 <div v-for="c in creds" :key="c.device_name" class="admin-user-row" style="cursor: pointer;" @click="openCreds(c.device_name)">
                     <span class="admin-user-name">{{ c.device_name }}</span>
                     <span style="font-size: 11px; color: var(--text-muted); margin-right: 8px;">{{ c.username }}</span>
@@ -248,7 +255,7 @@
                 </div>
                 </div>
 
-                <div class="modal-footer" style="margin-top: 16px;">
+                <div class="modal-footer" style="margin-top: 12px;">
                     <button class="btn btn-primary" @click="doSave" :disabled="saving">
                         <i v-if="saving" class="fas fa-spinner fa-spin"></i> Сохранить
                     </button>
