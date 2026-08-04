@@ -107,83 +107,21 @@ class MatrixListener:
             return
 
         self.client = None
-        self._seen_txn_ids = set()  # дедупликация верификации
 
     async def _on_to_device(self, event):
-        """Обработка to-device событий — авто-подтверждение верификации"""
+        """Обработка to-device событий"""
         import nio
-        log.info("📨 Matrix: to_device %s от %s", type(event).__name__,
-                 getattr(event, 'sender', '?'))
         try:
-            txn_id = getattr(event, 'transaction_id', None)
-            etype = type(event).__name__
-
-            # Дедупликация: пропускаем повтор того же типа с тем же txn
-            dedup_key = f"{etype}:{txn_id}"
-            if txn_id and dedup_key in self._seen_txn_ids:
-                return
-            if txn_id:
-                self._seen_txn_ids.add(dedup_key)
-
-            if isinstance(event, nio.UnknownToDeviceEvent):
-                etype = getattr(event, 'type', '?')
-                log.info("📨 Matrix: неизвестный to_device type=%s sender=%s", etype, event.sender)
-                # Верификация: ответить на m.key.verification.request → m.key.verification.ready
-                if etype == 'm.key.verification.request':
-                    txn_id = event.source.get('content', {}).get('transaction_id', '')
-                    from_dev = event.source.get('content', {}).get('from_device', '')
-                    if txn_id:
-                        log.info("🔐 Matrix: отвечаю ready на запрос верификации txn=%s от устройства %s", txn_id, from_dev)
-                        ready_msg = {
-                            'transaction_id': txn_id,
-                            'from_device': self.client.device_id,
-                            'methods': ['m.sas.v1'],
-                        }
-                        await self.client.to_device(nio.ToDeviceMessage(
-                            type='m.key.verification.ready',
-                            recipient=event.sender,
-                            recipient_device=from_dev,
-                            content=ready_msg,
-                        ))
-                        log.info("✅ Matrix: ready отправлен")
-
-            elif isinstance(event, nio.KeyVerificationStart):
-                log.info("🔐 Matrix: запрос верификации от %s (txn=%s)", 
-                         event.sender, event.transaction_id)
-
-                resp = await self.client.accept_key_verification(event.transaction_id)
-                if isinstance(resp, nio.ToDeviceError):
-                    log.warning("⚠️ Matrix: ошибка accept — %s", resp)
-                    return
-                log.info("✅ Matrix: верификация принята, отправляю ключ")
-
-                sas = self.client.key_verifications[event.transaction_id]
-                todevice_msg = sas.share_key()
-                await self.client.to_device(todevice_msg)
-                log.info("🔑 Matrix: ключ отправлен, жду подтверждения")
-
-            elif isinstance(event, nio.KeyVerificationKey):
-                log.info("🔑 Matrix: ключ получен (txn=%s), подтверждаю", event.transaction_id)
-                resp = await self.client.confirm_short_auth_string(event.transaction_id)
-                if isinstance(resp, nio.ToDeviceError):
-                    log.warning("⚠️ Matrix: ошибка confirm — %s", resp)
-
-            elif isinstance(event, nio.KeyVerificationMac):
-                log.info("🎉 Matrix: верификация УСПЕШНО завершена (txn=%s)", event.transaction_id)
-                import services.state as state
-                state.matrix_verified = True
-                log.info("🔒 Matrix: сессия верифицирована")
-                sas = self.client.key_verifications.get(event.transaction_id)
-                if sas:
-                    todevice_msg = sas.get_mac()
-                    await self.client.to_device(todevice_msg)
-
+            if isinstance(event, nio.KeyVerificationStart):
+                log.info("🔐 Matrix: запрос верификации от %s (игнорирован)", getattr(event, 'sender', '?'))
+                try:
+                    await self.client.cancel_key_verification(event.transaction_id, reject=False)
+                except Exception:
+                    pass
             elif isinstance(event, nio.KeyVerificationCancel):
-                log.warning("⚠️ Matrix: верификация отменена — %s: %s",
-                             getattr(event, 'code', '?'), getattr(event, 'reason', '?'))
-                import services.state as state
-                state.matrix_verified = False
-
+                log.info("ℹ️ Matrix: верификация отменена")
+            else:
+                log.info("📨 Matrix: to_device %s", type(event).__name__)
         except Exception as e:
             log.warning("⚠️ Matrix: ошибка в _on_to_device — %s", e)
 
@@ -331,17 +269,8 @@ class MatrixListener:
             return
 
         log.info("🔔 Matrix: начинаю слушать комнату %s", self.room_id)
-        # Попытаться загрузить сохранённый токен
-        since_token = None
-        try:
-            loaded = self.client.store.load_sync_token()
-            if loaded:
-                since_token = loaded
-                log.info("📌 Matrix: синк-токен загружен: %s...", loaded[:20])
-        except Exception:
-            pass
+        since_token = None  # None = с нуля (только первый раз)
         first_sync = True
-        token_retry = True  # если загруженный токен невалиден — пробуем since=None
 
         while True:
             if stop_event and stop_event.is_set():
@@ -350,27 +279,10 @@ class MatrixListener:
             try:
                 resp = await self.client.sync(timeout=30000, since=since_token)
                 if isinstance(resp, nio.SyncError):
-                    if token_retry and since_token:
-                        log.warning("Matrix: загруженный токен невалиден, пробую since=None")
-                        since_token = None
-                        token_retry = False
-                        continue
                     log.error("Matrix: ошибка синка — %s (код=%s)", resp.message, resp.status_code)
                     await asyncio.sleep(10)
                     continue
                 since_token = resp.next_batch
-
-                # Обработать to-device события (верификация, ключи)
-                try:
-                    await self.client._handle_to_device(resp)
-                except Exception:
-                    pass
-
-                # Сохраняем токен синхронизации (чтобы не качать всю историю при рестарте)
-                try:
-                    self.client.store.save_sync_token(since_token)
-                except Exception:
-                    pass
 
                 # Авто-доверие после первого sync
                 if first_sync:
@@ -379,6 +291,18 @@ class MatrixListener:
                     try:
                         await self.client.keys_query()
                         await self._auto_trust_devices()
+                        # Проверить, доверяют ли боту (ручное доверие в Element)
+                        olm = getattr(self.client, 'olm', None)
+                        if olm:
+                            my_devs = getattr(olm, 'device_store', {})
+                            try:
+                                my_dev = my_devs[self.client.user_id][self.client.device_id]
+                                if getattr(my_dev, 'verified', False):
+                                    import services.state as state
+                                    state.matrix_verified = True
+                                    log.info("🔒 Matrix: устройство бота верифицировано (кросс-подпись)")
+                            except (KeyError, TypeError):
+                                pass
                     except Exception as e:
                         log.warning("⚠️ Matrix: ошибка авто-доверия — %s", e)
 
