@@ -390,31 +390,34 @@ class MatrixListener:
                             log.warning("🤖 Matrix: LLM ошибка (%s: %s), использую regex", type(e).__name__, e)
 
                     if not parsed or self.parsing_mode == 'regex':
-                        parsed = parse_message(body)
-
-                    # Гарантируем наличие id (LLM не генерирует)
-                    if not parsed.get('id'):
-                        import uuid
-                        parsed['id'] = str(uuid.uuid4())
-
-                    # Пропускаем сообщения без полезных данных (не заявки)
-                    if not parsed.get('mac') and not parsed.get('ip') and not parsed.get('full_name'):
-                        log.debug("Matrix: сообщение не является заявкой, пропускаю")
-                        continue
-
-                    parsed['event_id'] = event_id
-                    parsed['sender'] = event.sender
-                    # Используем timestamp сообщения из Matrix, а не время обработки
-                    src = getattr(event, 'source', {}) or {}
-                    origin_ts = src.get('origin_server_ts', 0)
-                    if origin_ts:
-                        parsed['received_at'] = datetime.datetime.fromtimestamp(origin_ts / 1000).isoformat()
+                        from plugins.matrix_integration.parser import parse_all
+                        parsed_list = parse_all(body)
                     else:
-                        parsed['received_at'] = datetime.datetime.now().isoformat()
-                    state.pending_requests.append(parsed)
-                    log.info("📋 Заявка добавлена: ID=%s, ФИО=%s, IP=%s, MAC=%s",
-                             parsed['id'], parsed.get('full_name'),
-                             parsed.get('ip'), parsed.get('mac'))
+                        parsed_list = [parsed] if parsed else []
+
+                    for parsed in parsed_list:
+                        if not parsed.get('id'):
+                            import uuid
+                            parsed['id'] = str(uuid.uuid4())
+
+                        # Пропускаем сообщения без полезных данных (не заявки)
+                        if not parsed.get('mac') and not parsed.get('ip') and not parsed.get('full_name'):
+                            log.debug("Matrix: сообщение не является заявкой, пропускаю")
+                            continue
+
+                        parsed['event_id'] = event_id
+                        parsed['sender'] = event.sender
+                        # Используем timestamp сообщения из Matrix, а не время обработки
+                        src = getattr(event, 'source', {}) or {}
+                        origin_ts = src.get('origin_server_ts', 0)
+                        if origin_ts:
+                            parsed['received_at'] = datetime.datetime.fromtimestamp(origin_ts / 1000).isoformat()
+                        else:
+                            parsed['received_at'] = datetime.datetime.now().isoformat()
+                        state.pending_requests.append(parsed)
+                        log.info("📋 Заявка добавлена: ID=%s, ФИО=%s, IP=%s, MAC=%s",
+                                 parsed['id'], parsed.get('full_name'),
+                                 parsed.get('ip'), parsed.get('mac'))
 
             except asyncio.CancelledError:
                 break
