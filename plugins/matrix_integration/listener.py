@@ -78,26 +78,34 @@ def _remove_replied_request(event):
 
 
 def load_config() -> Dict:
-    with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    """Больше не используется — всё в БД"""
+    return {}
 
 
 class MatrixListener:
     def __init__(self):
-        self.config = load_config()
-        if not self.config.get('enabled', False):
-            log.info("Matrix-интеграция отключена в конфиге")
+        # Читаем настройки из БД (MatrixConfig для nur001)
+        self.enabled = False
+        try:
+            from models.user import MatrixConfig, User
+            user = User.get_or_none(User.username == 'nur001')
+            if user:
+                mc = MatrixConfig.get_or_none(MatrixConfig.user == user)
+                if mc and mc.enabled and mc.token and mc.room_id:
+                    self.enabled = True
+                    self.homeserver = mc.homeserver or 'https://matrix.krasintegra.ru'
+                    self.username = mc.matrix_user or 'nur001'
+                    self.access_token = mc.token
+                    self.user_id = mc.matrix_user or '@nur001:matrix.krasintegra.ru'
+                    self.room_id = mc.room_id
+                    log.info("Matrix: конфиг загружен из БД для %s", self.username)
+        except Exception as e:
+            log.warning("Matrix: не удалось загрузить конфиг из БД — %s", e)
+
+        if not self.enabled:
+            log.info("Matrix-интеграция отключена (нет конфига в БД)")
             return
 
-        self.homeserver = self.config['homeserver_url']
-        self.username = self.config['username']
-        self.password = self.config.get('password', '')
-        self.access_token = self.config.get('access_token', '')
-        self.user_id = self.config.get(
-            'user_id',
-            f"@{self.username}:{self.homeserver.replace('https://', '').replace('http://', '')}"
-        )
-        self.room_id = self.config['room_id']
         self.client = None
 
     async def _on_to_device(self, event):
@@ -153,23 +161,18 @@ class MatrixListener:
             store_path=STORE_PATH, config=config,
         )
 
-        if self.access_token:
-            self.client.access_token = self.access_token
-            self.client.user_id = self.user_id
-            if self.config.get('device_id'):
-                self.client.device_id = self.config['device_id']
-            log.info("✅ Matrix: подключён по токену как %s", self.user_id)
-        else:
-            password = self.password
-            if not password:
-                log.error("❌ Matrix: не указан ни токен, ни пароль")
-                return False
-            resp = await self.client.login(password, device_name="mikrotik-manager")
-            if isinstance(resp, nio.LoginResponse):
-                log.info("✅ Matrix: вход выполнен как %s", resp.user_id)
-            else:
-                log.error("❌ Matrix: ошибка входа — %s", resp)
-                return False
+        if not self.access_token:
+            log.error("❌ Matrix: не указан токен доступа")
+            return False
+
+        self.client = nio.AsyncClient(
+            self.homeserver, self.username,
+            store_path=STORE_PATH, config=config,
+        )
+
+        self.client.access_token = self.access_token
+        self.client.user_id = self.user_id
+        log.info("✅ Matrix: подключён по токену как %s", self.user_id)
 
         log.info("🔐 Matrix: загружаю хранилище ключей...")
         try:
@@ -266,7 +269,7 @@ class MatrixListener:
             log.warning("🔍 Matrix: ошибка классификации (%s), пропускаю", e)
             return False
 
-    async def _listen(self):
+    async def _listen(self, stop_event=None):
         if not self.client:
             return
 
@@ -275,6 +278,9 @@ class MatrixListener:
         first_sync = True
 
         while True:
+            if stop_event and stop_event.is_set():
+                log.info("🛑 Matrix: остановка бота")
+                break
             try:
                 resp = await self.client.sync(timeout=30000, since=since_token)
                 since_token = resp.next_batch
@@ -406,17 +412,20 @@ class MatrixListener:
                 log.error("Matrix: ошибка sync — %s", e, exc_info=True)
                 await asyncio.sleep(10)
 
-    async def _run(self):
-        if not self.config.get('enabled', False):
+    async def _run(self, stop_event=None):
+        if not self.enabled:
             return
         if not await self._connect():
             return
-        await self._listen()
+        await self._listen(stop_event)
 
     def start(self):
-        if not self.config.get('enabled', False):
+        if not self.enabled:
             return
         log.info("🚀 Matrix-слушатель запускается...")
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(self._run())
+        # Настроить проверку stop_event
+        import plugins.matrix_integration.plugin as plugin
+        loop.call_soon_threadsafe(lambda: None)
+        loop.run_until_complete(self._run(plugin._stop_event))

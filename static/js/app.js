@@ -189,7 +189,8 @@ app.component('profile-modal', {
     setup() {
         const show = Vue.computed(() => store.showProfileModal);
         const m = reactive({ enabled: false, token: '', room_id: '', homeserver: '',
-                             matrix_user: '', parsing_mode: 'regex', classify_enabled: false,
+                             matrix_user: '', matrix_password: '',
+                             parsing_mode: 'regex', classify_enabled: false,
                              llm_enabled: false, llm_key: '', llm_url: '' });
         const creds = ref([]);
         const newPassword = ref('');
@@ -215,6 +216,7 @@ app.component('profile-modal', {
                 var r = await apiPost('/api/profile', {
                     matrix_enabled: m.enabled, matrix_token: m.token, matrix_room: m.room_id,
                     matrix_homeserver: m.homeserver, matrix_user: m.matrix_user,
+                    matrix_password: m.matrix_password,
                     parsing_mode: m.parsing_mode, classify_enabled: m.classify_enabled,
                     llm_enabled: m.parsing_mode !== 'regex', llm_key: m.llm_key, llm_url: m.llm_url,
                 });

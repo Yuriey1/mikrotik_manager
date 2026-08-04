@@ -138,6 +138,26 @@ def save_profile(username: str, data: dict) -> dict:
         mc.classify_enabled = bool(data['classify_enabled'])
     if 'matrix_user' in data:
         mc.matrix_user = data['matrix_user']
+    if 'matrix_password' in data:
+        mc.matrix_password = data['matrix_password']
+
+    # Если пароль указан, а токена нет — логинимся в Matrix
+    if mc.matrix_password and not mc.token:
+        try:
+            import asyncio
+            async def _login():
+                from nio import AsyncClient, LoginResponse
+                client = AsyncClient(mc.homeserver or 'https://matrix.krasintegra.ru', mc.matrix_user or 'nur001')
+                resp = await client.login(mc.matrix_password, device_name='mikrotik-manager')
+                await client.close()
+                return resp
+            resp = asyncio.run(_login())
+            from nio import LoginResponse
+            if isinstance(resp, LoginResponse):
+                mc.token = resp.access_token
+                mc.matrix_password = ''  # очищаем пароль после успешного входа
+        except Exception:
+            pass  # оставляем пароль для повторной попытки
 
     mc.save()
     return {'success': True, 'message': 'Профиль сохранён'}

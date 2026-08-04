@@ -186,12 +186,16 @@
                     <div style="display: flex; gap: 8px;">
                         <div class="form-group" style="flex: 1;">
                             <label>Токен *</label>
-                            <input type="text" v-model="m.token" placeholder="syt_...">
+                            <input type="text" v-model="m.token" :placeholder="m.token ? 'syt_...' : 'получить автоматически'">
                         </div>
                         <div class="form-group" style="flex: 1;">
                             <label>Пользователь Matrix</label>
                             <input type="text" v-model="m.matrix_user" placeholder="nur001">
                         </div>
+                    </div>
+                    <div class="form-group" v-if="!m.token">
+                        <label>Пароль Matrix (для получения токена)</label>
+                        <input type="password" v-model="m.matrix_password" placeholder="••••••">
                     </div>
                     <div class="form-group">
                         <label>Комната *</label>

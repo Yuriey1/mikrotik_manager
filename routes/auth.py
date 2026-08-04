@@ -82,12 +82,20 @@ def handle_get_profile(handler, parsed):
 
 
 def handle_save_profile(handler, data):
-    """POST /api/profile — сохранить Matrix/LLM конфиг"""
+    """POST /api/profile — сохранить Matrix/LLM конфиг и перезапустить бота"""
     ctx = handler.session_ctx
     if not ctx.user:
         handler._send_json({'error': 'Не авторизован'}, 401)
         return
     result = auth_service.save_profile(ctx.user.username, data)
+    # Перезапуск бота если Matrix включён
+    if data.get('matrix_enabled'):
+        try:
+            from plugins.matrix_integration.plugin import restart
+            import threading
+            threading.Thread(target=restart, daemon=True).start()
+        except Exception as e:
+            logging.warning("Не удалось перезапустить Matrix-бота: %s", e)
     handler._send_json(result)
 
 
@@ -129,6 +137,10 @@ def handle_matrix_test(handler, data):
 
     try:
         result = asyncio.run(_test())
-        handler._send_json({'success': True, 'user_id': result.user_id, 'message': 'Подключение успешно'})
+        from nio import WhoamiResponse
+        if isinstance(result, WhoamiResponse):
+            handler._send_json({'success': True, 'user_id': result.user_id, 'message': 'Подключение успешно'})
+        else:
+            handler._send_json({'success': False, 'error': str(result)})
     except Exception as e:
         handler._send_json({'success': False, 'error': str(e)})
