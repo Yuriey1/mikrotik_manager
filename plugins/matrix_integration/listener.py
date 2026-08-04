@@ -109,19 +109,63 @@ class MatrixListener:
         self.client = None
 
     async def _on_to_device(self, event):
-        """Обработка to-device событий"""
+        """Авто-верификация через SAS (эмодзи)"""
         import nio
         try:
+            txn_id = getattr(event, 'transaction_id', None)
+            etype = type(event).__name__
+
+            # Dedup по типу+txn — защита от повторных синков
+            if txn_id:
+                if not hasattr(self, '_seen_verify'):
+                    self._seen_verify = {}
+                key = f"{etype}:{txn_id}"
+                if key in self._seen_verify:
+                    return
+                self._seen_verify[key] = True
+
+            if isinstance(event, nio.UnknownToDeviceEvent):
+                raw = getattr(event, 'type', '')
+                if raw == 'm.key.verification.request':
+                    txn = event.source.get('content', {}).get('transaction_id', '')
+                    fdev = event.source.get('content', {}).get('from_device', '')
+                    if txn and fdev:
+                        await self.client.to_device(nio.ToDeviceMessage(
+                            type='m.key.verification.ready',
+                            recipient=event.sender,
+                            recipient_device=fdev,
+                            content={'transaction_id': txn, 'methods': ['m.sas.v1'],
+                                     'from_device': self.client.device_id},
+                        ))
+                return
+
             if isinstance(event, nio.KeyVerificationStart):
-                log.info("🔐 Matrix: запрос верификации от %s (игнорирован)", getattr(event, 'sender', '?'))
+                resp = await self.client.accept_key_verification(event.transaction_id)
+                if isinstance(resp, nio.ToDeviceError):
+                    log.warning("⚠️ Matrix: ошибка accept — %s", resp)
+                    return
+                sas = self.client.key_verifications[event.transaction_id]
+                await self.client.to_device(sas.share_key())
+                log.info("🔐 Matrix: верификация принята txn=%s", event.transaction_id[:12])
+
+            elif isinstance(event, nio.KeyVerificationKey):
                 try:
-                    await self.client.cancel_key_verification(event.transaction_id, reject=False)
-                except Exception:
-                    pass
-            elif isinstance(event, nio.KeyVerificationCancel):
-                log.info("ℹ️ Matrix: верификация отменена")
-            else:
-                log.info("📨 Matrix: to_device %s", type(event).__name__)
+                    await self.client.confirm_short_auth_string(event.transaction_id)
+                    log.info("🔑 Matrix: ключ подтверждён")
+                except Exception as e:
+                    log.warning("⚠️ Matrix: ошибка confirm — %s", e)
+
+            elif isinstance(event, nio.KeyVerificationMac):
+                log.info("🎉 Matrix: верификация ЗАВЕРШЕНА!")
+                import services.state as state
+                state.matrix_verified = True
+                sas = self.client.key_verifications.get(event.transaction_id)
+                if sas:
+                    try:
+                        await self.client.to_device(sas.get_mac())
+                    except Exception:
+                        pass
+
         except Exception as e:
             log.warning("⚠️ Matrix: ошибка в _on_to_device — %s", e)
 
@@ -283,6 +327,13 @@ class MatrixListener:
                     await asyncio.sleep(10)
                     continue
                 since_token = resp.next_batch
+
+                # Обрабатываем to_device всегда (dedup защищает от петель)
+                try:
+                    await self.client._handle_to_device(resp)
+                    await self.client.send_to_device_messages()
+                except Exception:
+                    pass
 
                 # Авто-доверие после первого sync
                 if first_sync:
