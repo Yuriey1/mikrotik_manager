@@ -172,6 +172,18 @@ class MatrixListener:
 
         self.client.access_token = self.access_token
         self.client.user_id = self.user_id
+        # Восстановить device_id из имени файла хранилища
+        try:
+            import glob
+            dbs = glob.glob(os.path.join(STORE_PATH, '*.db'))
+            if dbs:
+                name = os.path.basename(dbs[0]).replace('.db', '')
+                parts = name.rsplit('_', 1)
+                if len(parts) == 2:
+                    self.client.device_id = parts[1]
+                    log.info("📱 Matrix: device_id восстановлен: %s", parts[1])
+        except Exception:
+            pass
         log.info("✅ Matrix: подключён по токену как %s", self.user_id)
 
         log.info("🔐 Matrix: загружаю хранилище ключей...")
@@ -190,43 +202,41 @@ class MatrixListener:
             except Exception:
                 log.info("ℹ️ Matrix: ключи уже загружены (пропускаю)")
 
-            # Авто-доверие: отложим до первого sync в _listen()
-            log.info("🤝 Matrix: авто-доверие будет выполнено после первого sync")
-
-            # Проверка доступности LLM
-            self._check_llm()
-
         except Exception as e:
             log.warning("⚠️ Matrix: ошибка инициализации E2EE — %s", e)
+
+        # Проверка LLM (всегда, даже если E2EE не загрузился)
+        self._check_llm()
 
         return True
 
     def _check_llm(self):
-        """Проверить доступность LLM из БД для пользователя nur001"""
+        """Проверить Matrix/LLM из БД для пользователя nur001"""
         try:
             from models.user import MatrixConfig, User
             user = User.get_or_none(User.username == 'nur001')
             if user:
                 mc = MatrixConfig.get_or_none(MatrixConfig.user == user)
-                if mc and mc.enabled and mc.llm_enabled and mc.llm_key:
+                if mc and mc.enabled:
+                    # Колокольчик активен даже без LLM (режим regex)
                     state.matrix_available = True
-                    self.llm_api_key = mc.llm_key
+                    self.llm_api_key = mc.llm_key if mc.llm_enabled and mc.llm_key else None
                     self.matrix_user = mc.matrix_user or 'nur001'
                     self.llm_url = mc.llm_url or 'https://api.deepseek.com/v1/chat/completions'
                     self.parsing_mode = mc.parsing_mode or 'regex'
                     self.classify_enabled = bool(mc.classify_enabled)
-                    log.info("✅ Matrix: LLM из БД (mode=%s, classify=%s, user=%s)",
-                             self.parsing_mode, self.classify_enabled, self.matrix_user)
+                    log.info("✅ Matrix: активен (mode=%s, classify=%s, llm=%s)",
+                             self.parsing_mode, self.classify_enabled, bool(self.llm_api_key))
                     return
         except Exception as e:
-            log.warning("Matrix: ошибка чтения LLM из БД — %s", e)
+            log.warning("Matrix: ошибка чтения из БД — %s", e)
 
         state.matrix_available = False
         self.llm_api_key = None
         self.matrix_user = 'nur001'
         self.parsing_mode = 'regex'
         self.classify_enabled = False
-        log.info("🔕 Matrix: LLM недоступен, колокольчик отключён")
+        log.info("🔕 Matrix: недоступен, колокольчик отключён")
 
     async def _auto_trust_devices(self):
         """Авто-доверие всех устройств этого же пользователя"""
