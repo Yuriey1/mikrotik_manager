@@ -208,17 +208,19 @@ class MatrixListener:
                 if mc and mc.enabled and mc.llm_enabled and mc.llm_key:
                     state.matrix_available = True
                     self.llm_api_key = mc.llm_key
+                    self.matrix_user = mc.matrix_user or 'nur001'
                     self.llm_url = mc.llm_url or 'https://api.deepseek.com/v1/chat/completions'
                     self.parsing_mode = mc.parsing_mode or 'regex'
                     self.classify_enabled = bool(mc.classify_enabled)
-                    log.info("✅ Matrix: LLM из БД (mode=%s, classify=%s), колокольчик активен",
-                             self.parsing_mode, self.classify_enabled)
+                    log.info("✅ Matrix: LLM из БД (mode=%s, classify=%s, user=%s)",
+                             self.parsing_mode, self.classify_enabled, self.matrix_user)
                     return
         except Exception as e:
             log.warning("Matrix: ошибка чтения LLM из БД — %s", e)
 
         state.matrix_available = False
         self.llm_api_key = None
+        self.matrix_user = 'nur001'
         self.parsing_mode = 'regex'
         self.classify_enabled = False
         log.info("🔕 Matrix: LLM недоступен, колокольчик отключён")

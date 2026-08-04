@@ -171,11 +171,11 @@
     <!-- ====== PROFILE MODAL ====== -->
     <template id="profile-modal">
         <div v-if="show" class="modal-overlay" @click.self="close">
-            <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-content" style="max-width: 440px;">
                 <h2><i class="fas fa-user-circle"></i> Профиль: {{ store.currentUser }}</h2>
                 
                 <!-- Matrix -->
-                <h3 style="margin-top: 16px;"><i class="fab fa-elementor"></i> Matrix</h3>
+                <h3 style="margin-top: 12px;"><i class="fab fa-elementor"></i> Matrix</h3>
                 <div class="form-group">
                     <label class="checkbox-group">
                         <input type="checkbox" v-model="m.enabled">
@@ -183,43 +183,41 @@
                     </label>
                 </div>
                 <div v-if="m.enabled">
-                    <div class="form-group">
-                        <label>Токен доступа *</label>
-                        <input type="text" v-model="m.token" placeholder="syt_...">
+                    <div style="display: flex; gap: 8px;">
+                        <div class="form-group" style="flex: 1;">
+                            <label>Токен *</label>
+                            <input type="text" v-model="m.token" placeholder="syt_...">
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label>Пользователь Matrix</label>
+                            <input type="text" v-model="m.matrix_user" placeholder="nur001">
+                        </div>
                     </div>
                     <div class="form-group">
-                        <label>ID комнаты *</label>
-                        <input type="text" v-model="m.room_id" placeholder="!abc:matrix...">
+                        <label>Комната *</label>
+                        <input type="text" v-model="m.room_id" placeholder="!OSxqok...">
                     </div>
-                    <div class="form-group">
-                        <label>Сервер</label>
-                        <input type="text" v-model="m.homeserver" placeholder="https://matrix.krasintegra.ru">
-                    </div>
-                    <button class="btn btn-info btn-sm" @click="doMatrixTest" :disabled="!m.token || testing" style="margin-bottom: 12px;">
+                    <button class="btn btn-info btn-sm" @click="doMatrixTest" :disabled="!m.token || testing" style="margin-bottom: 10px;">
                         <i :class="matrixTestResult ? 'fas fa-check' : (testing ? 'fas fa-spinner fa-spin' : 'fas fa-plug')"></i>
-                        {{ matrixTestResult ? 'Подключено: ' + matrixTestResult : 'Проверить подключение' }}
+                        {{ matrixTestResult ? 'OK: ' + matrixTestResult : 'Проверить' }}
                     </button>
 
-                    <h3 style="margin-top: 16px;"><i class="fas fa-cog"></i> Режим парсинга</h3>
-                    <div class="form-group" style="display: flex; gap: 12px;">
+                    <h3 style="margin-top: 12px;"><i class="fas fa-cog"></i> Режим парсинга</h3>
+                    <div class="form-group" style="display: flex; gap: 8px; font-size: 13px;">
                         <label><input type="radio" v-model="m.parsing_mode" value="regex"> Regex</label>
-                        <label><input type="radio" v-model="m.parsing_mode" value="hybrid"> Regex + LLM</label>
-                        <label><input type="radio" v-model="m.parsing_mode" value="llm"> Только LLM</label>
+                        <label><input type="radio" v-model="m.parsing_mode" value="hybrid"> Hybrid</label>
+                        <label><input type="radio" v-model="m.parsing_mode" value="llm"> LLM</label>
                     </div>
-                    <div v-if="m.parsing_mode === 'hybrid' || m.parsing_mode === 'llm'">
+                    <div v-if="m.parsing_mode !== 'regex'" style="border-left: 2px solid var(--border-color); padding-left: 12px; margin-top: 8px;">
                         <div class="form-group">
                             <label class="checkbox-group">
                                 <input type="checkbox" v-model="m.classify_enabled">
-                                <span>Классифицировать заявки через LLM</span>
+                                <span>Классифицировать заявки (этап 1)</span>
                             </label>
                         </div>
                         <div class="form-group">
                             <label>API ключ LLM *</label>
                             <input type="text" v-model="m.llm_key" placeholder="sk-...">
-                        </div>
-                        <div class="form-group">
-                            <label>URL LLM</label>
-                            <input type="text" v-model="m.llm_url" placeholder="https://api.deepseek.com/v1/chat/completions">
                         </div>
                     </div>
                 </div>

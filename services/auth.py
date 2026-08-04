@@ -100,7 +100,8 @@ def get_profile(username: str) -> dict:
     mc, _ = MatrixConfig.get_or_create(user=user)
     matrix = {
         'enabled': mc.enabled, 'token': mc.token, 'room_id': mc.room_id,
-        'homeserver': mc.homeserver, 'llm_enabled': mc.llm_enabled, 'llm_key': mc.llm_key,
+        'homeserver': mc.homeserver, 'matrix_user': mc.matrix_user or '',
+        'llm_enabled': mc.llm_enabled, 'llm_key': mc.llm_key,
         'llm_url': mc.llm_url, 'parsing_mode': mc.parsing_mode, 'classify_enabled': mc.classify_enabled,
     }
 
@@ -135,6 +136,8 @@ def save_profile(username: str, data: dict) -> dict:
         mc.parsing_mode = data['parsing_mode']
     if 'classify_enabled' in data:
         mc.classify_enabled = bool(data['classify_enabled'])
+    if 'matrix_user' in data:
+        mc.matrix_user = data['matrix_user']
 
     mc.save()
     return {'success': True, 'message': 'Профиль сохранён'}

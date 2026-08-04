@@ -39,6 +39,7 @@ class MatrixConfig(BaseModel):
     enabled = BooleanField()
     token = CharField(max_length=256)
     room_id = CharField(max_length=128)
+    matrix_user = CharField(max_length=64)
     homeserver = CharField(max_length=128)
     llm_enabled = BooleanField()
     llm_key = CharField(max_length=256)
