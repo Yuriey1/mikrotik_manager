@@ -155,6 +155,8 @@ class MatrixListener:
             return False
 
         os.makedirs(STORE_PATH, exist_ok=True)
+        # Используем полный Matrix ID (как в старом хранилище)
+        full_user = '@' + self.username + ':matrix.krasintegra.ru'
         config = nio.AsyncClientConfig(encryption_enabled=True)
         self.client = nio.AsyncClient(
             self.homeserver, self.username,
@@ -165,13 +167,8 @@ class MatrixListener:
             log.error("❌ Matrix: не указан токен доступа")
             return False
 
-        self.client = nio.AsyncClient(
-            self.homeserver, self.username,
-            store_path=STORE_PATH, config=config,
-        )
-
         self.client.access_token = self.access_token
-        self.client.user_id = self.user_id
+        self.client.user_id = full_user
         # Восстановить device_id из имени файла хранилища
         try:
             import glob
@@ -284,7 +281,15 @@ class MatrixListener:
             return
 
         log.info("🔔 Matrix: начинаю слушать комнату %s", self.room_id)
+        # Попытаться загрузить сохранённый токен
         since_token = None
+        try:
+            loaded = self.client.store.load_sync_token()
+            if loaded:
+                since_token = loaded
+                log.info("📌 Matrix: синк-токен загружен из хранилища")
+        except Exception:
+            pass
         first_sync = True
 
         while True:
@@ -294,6 +299,12 @@ class MatrixListener:
             try:
                 resp = await self.client.sync(timeout=30000, since=since_token)
                 since_token = resp.next_batch
+
+                # Сохраняем токен синхронизации (чтобы не качать всю историю при рестарте)
+                try:
+                    self.client.store.save_sync_token(since_token)
+                except Exception:
+                    pass
 
                 # Авто-доверие после первого sync
                 if first_sync:
@@ -424,6 +435,9 @@ class MatrixListener:
             except Exception as e:
                 log.error("Matrix: ошибка sync — %s", e, exc_info=True)
                 await asyncio.sleep(10)
+
+            # Пульс — синк жив (раз в 30 сек)
+            # отладка, убрать после проверки
 
     async def _run(self, stop_event=None):
         if not self.enabled:
