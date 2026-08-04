@@ -111,30 +111,35 @@ class MatrixListener:
     async def _on_to_device(self, event):
         """Обработка to-device событий — авто-подтверждение верификации"""
         import nio
-        log.info("📨 _on_to_device: %s from %s", type(event).__name__, getattr(event, 'sender', '?'))
+        log.info("📨 Matrix: to_device %s от %s", type(event).__name__,
+                 getattr(event, 'sender', '?'))
         try:
             if isinstance(event, nio.KeyVerificationStart):
-                log.info("🔐 Matrix: запрос верификации от %s (txn %s)", event.sender, event.transaction_id)
+                log.info("🔐 Matrix: запрос верификации от %s (txn=%s)", 
+                         event.sender, event.transaction_id)
 
                 resp = await self.client.accept_key_verification(event.transaction_id)
                 if isinstance(resp, nio.ToDeviceError):
-                    log.warning("⚠️ Matrix: ошибка accept_key_verification — %s", resp)
+                    log.warning("⚠️ Matrix: ошибка accept — %s", resp)
                     return
-                log.info("✅ Matrix: верификация принята")
+                log.info("✅ Matrix: верификация принята, отправляю ключ")
 
                 sas = self.client.key_verifications[event.transaction_id]
                 todevice_msg = sas.share_key()
                 await self.client.to_device(todevice_msg)
-                log.info("🔑 Matrix: ключ отправлен")
+                log.info("🔑 Matrix: ключ отправлен, жду подтверждения")
 
             elif isinstance(event, nio.KeyVerificationKey):
-                log.info("🔑 Matrix: получен ключ верификации (txn %s), подтверждаю", event.transaction_id)
+                log.info("🔑 Matrix: ключ получен (txn=%s), подтверждаю", event.transaction_id)
                 resp = await self.client.confirm_short_auth_string(event.transaction_id)
                 if isinstance(resp, nio.ToDeviceError):
                     log.warning("⚠️ Matrix: ошибка confirm — %s", resp)
 
             elif isinstance(event, nio.KeyVerificationMac):
-                log.info("✅ Matrix: верификация завершена (txn %s)", event.transaction_id)
+                log.info("🎉 Matrix: верификация УСПЕШНО завершена (txn=%s)", event.transaction_id)
+                import services.state as state
+                state.matrix_verified = True
+                log.info("🔒 Matrix: сессия верифицирована")
                 sas = self.client.key_verifications.get(event.transaction_id)
                 if sas:
                     todevice_msg = sas.get_mac()
@@ -142,7 +147,9 @@ class MatrixListener:
 
             elif isinstance(event, nio.KeyVerificationCancel):
                 log.warning("⚠️ Matrix: верификация отменена — %s: %s",
-                            getattr(event, 'code', '?'), getattr(event, 'reason', '?'))
+                             getattr(event, 'code', '?'), getattr(event, 'reason', '?'))
+                import services.state as state
+                state.matrix_verified = False
 
         except Exception as e:
             log.warning("⚠️ Matrix: ошибка в _on_to_device — %s", e)

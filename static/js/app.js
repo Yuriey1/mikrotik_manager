@@ -199,6 +199,7 @@ app.component('profile-modal', {
         const saving = ref(false);
         const testing = ref(false);
         const matrixTestResult = ref(null);
+        const matrixVerified = ref(false);
 
         async function loadProfile() {
             try {
@@ -207,6 +208,13 @@ app.component('profile-modal', {
                     Object.assign(m, d.matrix || {});
                     creds.value = d.mikrotik_creds || [];
                 }
+            } catch (e) {}
+        }
+
+        async function loadMatrixStatus() {
+            try {
+                var s = await apiGet('/api/matrix/status');
+                matrixVerified.value = s.verified || false;
             } catch (e) {}
         }
 
@@ -253,10 +261,10 @@ app.component('profile-modal', {
             store.showCredentialsModal = true;
         }
 
-        Vue.watch(show, function(v) { if (v) loadProfile(); });
+        Vue.watch(show, function(v) { if (v) { loadProfile(); loadMatrixStatus(); } });
 
-        return { show, m, creds, newPassword, msg, msgType, saving, testing, matrixTestResult,
-                 doSave, doChangePassword, doMatrixTest, clearToken, close, openCreds, store };
+        return { show, m, creds, newPassword, msg, msgType, saving, testing, matrixTestResult, matrixVerified,
+                 doSave, doChangePassword, doMatrixTest, clearToken, close, openCreds, loadMatrixStatus, store };
     },
 });
 

@@ -71,6 +71,7 @@ GET_ROUTES = {
     '/api/profile':           auth_routes.handle_get_profile,
     '/api/device_credentials': get_routes.handle_device_credentials,
     '/api/netbox/site_for_ip': get_routes.handle_site_for_ip,
+    '/api/matrix/status':     auth_routes.handle_matrix_status,
 }
 
 POST_ROUTES = {

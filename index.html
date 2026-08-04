@@ -211,6 +211,13 @@
                             <i v-else class="fas fa-plug"></i>
                             {{ testing ? 'Проверка...' : (matrixTestResult ? 'OK: ' + matrixTestResult : 'Проверить') }}
                         </button>
+                        <button class="btn btn-sm" 
+                                :class="matrixVerified ? 'btn-success' : 'btn-secondary'"
+                                @click="loadMatrixStatus" title="Обновить статус">
+                            <i :class="matrixVerified ? 'fas fa-check-circle' : 'fas fa-question-circle'"
+                               style="font-size: 13px;"></i>
+                            {{ matrixVerified ? ' Верифицирован' : ' Не верифицирован' }}
+                        </button>
                     </div>
 
                     <h3 style="margin-top: 10px;"><i class="fas fa-cog"></i> Режим парсинга</h3>

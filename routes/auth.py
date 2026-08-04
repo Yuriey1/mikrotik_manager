@@ -144,3 +144,12 @@ def handle_matrix_test(handler, data):
             handler._send_json({'success': False, 'error': str(result)})
     except Exception as e:
         handler._send_json({'success': False, 'error': str(e)})
+
+
+def handle_matrix_status(handler, data):
+    """GET /api/matrix/status — статус Matrix: доступен ли и верифицирован ли"""
+    import services.state as state
+    handler._send_json({
+        'available': state.matrix_available,
+        'verified': state.matrix_verified,
+    })

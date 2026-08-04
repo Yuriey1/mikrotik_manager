@@ -10,6 +10,7 @@ netbox_client = None
 # Matrix-интеграция (плагин) — общий
 pending_requests = []
 matrix_available = False
+matrix_verified = False
 
 # Сессионные данные — {token: session_dict}
 session_data = {}
