@@ -137,6 +137,7 @@ class MatrixListener:
                             content={'transaction_id': txn, 'methods': ['m.sas.v1'],
                                      'from_device': self.client.device_id},
                         ))
+                        await self.client.send_to_device_messages()
                 return
 
             if isinstance(event, nio.KeyVerificationStart):
@@ -146,6 +147,7 @@ class MatrixListener:
                     return
                 sas = self.client.key_verifications[event.transaction_id]
                 await self.client.to_device(sas.share_key())
+                await self.client.send_to_device_messages()
                 log.info("🔐 Matrix: верификация принята txn=%s", event.transaction_id[:12])
 
             elif isinstance(event, nio.KeyVerificationKey):
@@ -163,8 +165,10 @@ class MatrixListener:
                 if sas:
                     try:
                         await self.client.to_device(sas.get_mac())
-                    except Exception:
-                        pass
+                        await self.client.send_to_device_messages()
+                        log.info("📤 Matrix: MAC отправлен")
+                    except Exception as e:
+                        log.warning("⚠️ Matrix: ошибка get_mac — %s", e)
 
         except Exception as e:
             log.warning("⚠️ Matrix: ошибка в _on_to_device — %s", e)
@@ -431,7 +435,7 @@ class MatrixListener:
 
         watcher = asyncio.create_task(_stop_watcher())
         try:
-            await self.client.sync_forever(timeout=30000)
+            await self.client.sync_forever(timeout=5000, loop_sleep_time=0)
         except asyncio.CancelledError:
             pass
         except Exception as e:
