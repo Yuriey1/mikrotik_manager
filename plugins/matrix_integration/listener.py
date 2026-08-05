@@ -169,6 +169,91 @@ class MatrixListener:
         except Exception as e:
             log.warning("⚠️ Matrix: ошибка в _on_to_device — %s", e)
 
+    async def _on_room_event(self, room, event):
+        """Обработка комнатных сообщений (заявки) — вызывается из sync_forever"""
+        body = getattr(event, 'body', None)
+        if not body or not body.strip():
+            return
+        if room.room_id != self.room_id:
+            return
+
+        body_stripped = body.strip()
+        event_id = getattr(event, 'event_id', None)
+
+        # Любой reply на заявку = удаляем её из pending (кроме "согласовано")
+        body_lower = body_stripped.lower()
+        if not body_lower.startswith('согласовано'):
+            if _remove_replied_request(event):
+                return
+
+        # Пропускаем подтверждения (+ / лс)
+        clean = re.sub(r'^[*>\s]+', '', body_stripped)
+        if clean.startswith('+') or clean.lower().startswith('лс'):
+            if not _remove_replied_request(event):
+                if len(state.pending_requests) == 1:
+                    removed = state.pending_requests.pop()
+                    log.info("🗑️ Matrix: удалена заявка по '+' (единственная) %s", removed.get('id', '?')[:8])
+            return
+
+        log.info("📩 Matrix: новое сообщение от %s — %s", event.sender, body[:80])
+
+        # Этап 1: LLM-классификация
+        looks_like_request = True
+        if self.classify_enabled and self.llm_api_key:
+            try:
+                looks_like_request = await asyncio.wait_for(
+                    self._classify_request(body), timeout=10
+                )
+                if not looks_like_request:
+                    return
+            except Exception:
+                pass
+        elif not self.classify_enabled:
+            has_mac = re.search(r'([0-9A-Fa-f]{2}:[0-9A-Fa-f]{2})', body)
+            has_ip = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|ип\s+\d{1,3})', body)
+            has_name = re.search(r'[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+', body)
+            looks_like_request = bool(has_mac or has_ip or has_name)
+
+        if not looks_like_request:
+            return
+
+        # Этап 2: парсинг
+        parsed = None
+        use_llm = self.parsing_mode in ('hybrid', 'llm') and self.llm_api_key
+        if use_llm:
+            try:
+                from plugins.llm.parser import parse_with_llm
+                parsed = await asyncio.wait_for(
+                    parse_with_llm(body, LLM_SYSTEM_PROMPT, api_key=self.llm_api_key, timeout=None), timeout=120
+                )
+            except Exception as e:
+                log.warning("🤖 Matrix: LLM ошибка (%s: %s), использую regex", type(e).__name__, e)
+
+        if not parsed or self.parsing_mode == 'regex':
+            from plugins.matrix_integration.parser import parse_all
+            parsed_list = parse_all(body)
+        else:
+            parsed_list = [parsed] if parsed else []
+
+        for parsed in parsed_list:
+            if not parsed.get('id'):
+                import uuid
+                parsed['id'] = str(uuid.uuid4())
+            if not parsed.get('mac') and not parsed.get('ip') and not parsed.get('full_name'):
+                continue
+            parsed['event_id'] = event_id
+            parsed['sender'] = event.sender
+            src = getattr(event, 'source', {}) or {}
+            origin_ts = src.get('origin_server_ts', 0)
+            parsed['received_at'] = (
+                datetime.datetime.fromtimestamp(origin_ts / 1000).isoformat()
+                if origin_ts else datetime.datetime.now().isoformat()
+            )
+            state.pending_requests.append(parsed)
+            log.info("📋 Заявка добавлена: ID=%s, ФИО=%s, IP=%s, MAC=%s",
+                     parsed['id'], parsed.get('full_name'),
+                     parsed.get('ip'), parsed.get('mac'))
+
     async def _connect(self):
         try:
             import nio
@@ -313,154 +398,48 @@ class MatrixListener:
             return
 
         log.info("🔔 Matrix: начинаю слушать комнату %s", self.room_id)
-        since_token = None  # None = с нуля (только первый раз)
-        first_sync = True
 
-        while True:
-            if stop_event and stop_event.is_set():
-                log.info("🛑 Matrix: остановка бота")
-                break
+        self.client.add_event_callback(self._on_room_event, nio.RoomMessageText)
+
+        # Первый синк — вручную с таймаутом (sync_forever использует timeout=0)
+        try:
+            first = await self.client.sync(timeout=30000)
+            if isinstance(first, nio.SyncError):
+                log.error("Matrix: ошибка первого синка — %s", first.message)
+                return
+            await self.client.run_response_callbacks([first])
+            await self.client.send_to_device_messages()
+            log.info("✅ Matrix: первый синк завершён")
+
+            # Авто-доверие после первого синка
+            log.info("🤝 Matrix: выполняю авто-доверие устройств...")
             try:
-                resp = await self.client.sync(timeout=30000, since=since_token)
-                if isinstance(resp, nio.SyncError):
-                    log.error("Matrix: ошибка синка — %s (код=%s)", resp.message, resp.status_code)
-                    await asyncio.sleep(10)
-                    continue
-                since_token = resp.next_batch
-
-                # Обрабатываем to_device всегда (dedup защищает от петель)
-                try:
-                    await self.client._handle_to_device(resp)
-                    await self.client.send_to_device_messages()
-                except Exception:
-                    pass
-
-                # Авто-доверие после первого sync
-                if first_sync:
-                    first_sync = False
-                    log.info("🤝 Matrix: выполняю авто-доверие устройств...")
-                    try:
-                        await self.client.keys_query()
-                        await self._auto_trust_devices()
-                        # Проверить, доверяют ли боту (ручное доверие в Element)
-                        olm = getattr(self.client, 'olm', None)
-                        if olm:
-                            my_devs = getattr(olm, 'device_store', {})
-                            try:
-                                my_dev = my_devs[self.client.user_id][self.client.device_id]
-                                if getattr(my_dev, 'verified', False):
-                                    import services.state as state
-                                    state.matrix_verified = True
-                                    log.info("🔒 Matrix: устройство бота верифицировано (кросс-подпись)")
-                            except (KeyError, TypeError):
-                                pass
-                    except Exception as e:
-                        log.warning("⚠️ Matrix: ошибка авто-доверия — %s", e)
-
-                if self.room_id not in resp.rooms.join:
-                    continue
-
-                room = resp.rooms.join[self.room_id]
-                for event in room.timeline.events:
-                    body = getattr(event, 'body', None)
-                    if not body or not body.strip():
-                        continue
-
-                    body_stripped = body.strip()
-                    event_id = getattr(event, 'event_id', None)
-
-                    # Любой reply на заявку = удаляем её из pending
-                    # Кроме "согласовано" — это не закрытие, а аппрув
-                    body_lower = body_stripped.lower()
-                    if not body_lower.startswith('согласовано'):
-                        if _remove_replied_request(event):
-                            continue
-
-                    # Пропускаем подтверждения (+ / лс) — не заявки
-                    clean = re.sub(r'^[*>\s]+', '', body_stripped)
-                    if clean.startswith('+') or clean.lower().startswith('лс'):
-                        if not _remove_replied_request(event):
-                            if len(state.pending_requests) == 1:
-                                removed = state.pending_requests.pop()
-                                log.info("🗑️ Matrix: удалена заявка по '+' (единственная) %s", removed.get('id', '?')[:8])
-                        continue
-
-                    log.info("📩 Matrix: новое сообщение от %s — %s", event.sender, body[:80])
-
-                    # Этап 1: LLM-классификация (только если включена)
-                    looks_like_request = True
-                    if self.classify_enabled and self.llm_api_key:
-                        try:
-                            looks_like_request = await asyncio.wait_for(
-                                self._classify_request(body), timeout=10
-                            )
-                            if not looks_like_request:
-                                continue
-                        except Exception:
-                            pass  # падение классификации — пропускаем сообщение дальше
-                    elif not self.classify_enabled:
-                        # Без классификации — regex префильтр
-                        has_mac = re.search(r'([0-9A-Fa-f]{2}:[0-9A-Fa-f]{2})', body)
-                        has_ip = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|ип\s+\d{1,3})', body)
-                        has_name = re.search(r'[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+', body)
-                        looks_like_request = bool(has_mac or has_ip or has_name)
-
-                    if not looks_like_request:
-                        continue
-
-                    # Этап 2: парсинг согласно parsing_mode
-                    parsed = None
-                    use_llm = self.parsing_mode in ('hybrid', 'llm') and self.llm_api_key
-
-                    if use_llm:
-                        try:
-                            from plugins.llm.parser import parse_with_llm
-                            log.info("🤖 Matrix: запрос к LLM...")
-                            parsed = await asyncio.wait_for(
-                                parse_with_llm(body, LLM_SYSTEM_PROMPT, api_key=self.llm_api_key, timeout=None), timeout=120
-                            )
-                            log.info("🤖 Matrix: LLM парсинг успешен")
-                        except Exception as e:
-                            log.warning("🤖 Matrix: LLM ошибка (%s: %s), использую regex", type(e).__name__, e)
-
-                    if not parsed or self.parsing_mode == 'regex':
-                        from plugins.matrix_integration.parser import parse_all
-                        parsed_list = parse_all(body)
-                    else:
-                        parsed_list = [parsed] if parsed else []
-
-                    for parsed in parsed_list:
-                        if not parsed.get('id'):
-                            import uuid
-                            parsed['id'] = str(uuid.uuid4())
-
-                        # Пропускаем сообщения без полезных данных (не заявки)
-                        if not parsed.get('mac') and not parsed.get('ip') and not parsed.get('full_name'):
-                            log.debug("Matrix: сообщение не является заявкой, пропускаю")
-                            continue
-
-                        parsed['event_id'] = event_id
-                        parsed['sender'] = event.sender
-                        # Используем timestamp сообщения из Matrix, а не время обработки
-                        src = getattr(event, 'source', {}) or {}
-                        origin_ts = src.get('origin_server_ts', 0)
-                        if origin_ts:
-                            parsed['received_at'] = datetime.datetime.fromtimestamp(origin_ts / 1000).isoformat()
-                        else:
-                            parsed['received_at'] = datetime.datetime.now().isoformat()
-                        state.pending_requests.append(parsed)
-                        log.info("📋 Заявка добавлена: ID=%s, ФИО=%s, IP=%s, MAC=%s",
-                                 parsed['id'], parsed.get('full_name'),
-                                 parsed.get('ip'), parsed.get('mac'))
-
-            except asyncio.CancelledError:
-                break
+                await self.client.keys_query()
+                await self._auto_trust_devices()
             except Exception as e:
-                log.error("Matrix: ошибка sync — %s", e, exc_info=True)
-                await asyncio.sleep(10)
+                log.warning("⚠️ Matrix: ошибка авто-доверия — %s", e)
+        except Exception as e:
+            log.error("Matrix: ошибка первого синка — %s", e, exc_info=True)
+            return
 
-            # Пульс — синк жив (раз в 30 сек)
-            # отладка, убрать после проверки
+        # Запускаем sync_forever для последующих циклов
+        async def _stop_watcher():
+            while stop_event and not stop_event.is_set():
+                await asyncio.sleep(1)
+            log.info("🛑 Matrix: остановка бота по сигналу")
+            self.client.stop_sync_forever()
+
+        watcher = asyncio.create_task(_stop_watcher())
+        try:
+            await self.client.sync_forever(timeout=30000)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            log.error("Matrix: ошибка sync_forever — %s", e, exc_info=True)
+        finally:
+            self.client.stop_sync_forever()
+            watcher.cancel()
+            log.info("🛑 Matrix: sync_forever остановлен")
 
     async def _run(self, stop_event=None):
         if not self.enabled:
