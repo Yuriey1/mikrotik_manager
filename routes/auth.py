@@ -152,4 +152,32 @@ def handle_matrix_status(handler, data):
     handler._send_json({
         'available': state.matrix_available,
         'verified': state.matrix_verified,
+        'pending_verify': state.pending_verification,
     })
+
+
+def handle_verify_confirm(handler, data):
+    """POST /api/matrix/verify/confirm — подтвердить эмодзи"""
+    import services.state as state
+    import asyncio, logging
+    log = logging.getLogger(__name__)
+    pv = state.pending_verification
+    if not pv or not pv.get('txn_id'):
+        handler._send_json({'error': 'Нет ожидающей верификации'}, 400)
+        return
+    txn_id = pv['txn_id']
+    try:
+        from plugins.matrix_integration.plugin import _listener_obj
+        if _listener_obj and _listener_obj.client and _listener_obj._loop:
+            async def _confirm():
+                try:
+                    resp = await _listener_obj.client.confirm_short_auth_string(txn_id)
+                    log.info("📤 Matrix: подтверждение отправлено, ответ=%s", type(resp).__name__)
+                except Exception as e:
+                    log.error("❌ Matrix: ошибка подтверждения — %s", e)
+            future = asyncio.run_coroutine_threadsafe(_confirm(), _listener_obj._loop)
+            log.info("🔧 Matrix: coroutine запланирована, future=%s", future)
+        state.pending_verification = None
+        handler._send_json({'success': True, 'message': 'Эмодзи подтверждены'})
+    except Exception as e:
+        handler._send_json({'error': str(e)}, 500)

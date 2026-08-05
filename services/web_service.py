@@ -92,6 +92,7 @@ POST_ROUTES = {
     '/api/profile':                 auth_routes.handle_save_profile,
     '/api/profile/creds':           auth_routes.handle_save_mikrotik_creds,
     '/api/matrix/test':             auth_routes.handle_matrix_test,
+    '/api/matrix/verify/confirm':   auth_routes.handle_verify_confirm,
 }
 
 DELETE_ROUTES = {

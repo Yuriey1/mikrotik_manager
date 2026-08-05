@@ -11,6 +11,7 @@ netbox_client = None
 pending_requests = []
 matrix_available = False
 matrix_verified = False
+pending_verification = None  # {txn_id, from_device, emojis, desc}
 
 # Сессионные данные — {token: session_dict}
 session_data = {}

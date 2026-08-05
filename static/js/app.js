@@ -200,6 +200,9 @@ app.component('profile-modal', {
         const testing = ref(false);
         const matrixTestResult = ref(null);
         const matrixVerified = ref(false);
+        const pendingVerify = ref(null);
+        const verifyConfirming = ref(false);
+        const verifyPollTimer = ref(null);
 
         async function loadProfile() {
             try {
@@ -215,7 +218,26 @@ app.component('profile-modal', {
             try {
                 var s = await apiGet('/api/matrix/status');
                 matrixVerified.value = s.verified || false;
+                pendingVerify.value = s.pending_verify || null;
             } catch (e) {}
+        }
+
+        function startVerifyPoll() {
+            if (verifyPollTimer.value) clearInterval(verifyPollTimer.value);
+            verifyPollTimer.value = setInterval(loadMatrixStatus, 3000);
+        }
+        function stopVerifyPoll() {
+            if (verifyPollTimer.value) { clearInterval(verifyPollTimer.value); verifyPollTimer.value = null; }
+        }
+
+        async function doConfirmVerify() {
+            verifyConfirming.value = true;
+            try {
+                var r = await apiPost('/api/matrix/verify/confirm', {});
+                if (r.success) { pendingVerify.value = null; msg.value = r.message; msgType.value = ''; }
+                else { msg.value = r.error; msgType.value = 'err'; }
+            } catch (e) { msg.value = e.message; msgType.value = 'err'; }
+            verifyConfirming.value = false;
         }
 
         async function doSave() {
@@ -261,10 +283,11 @@ app.component('profile-modal', {
             store.showCredentialsModal = true;
         }
 
-        Vue.watch(show, function(v) { if (v) { loadProfile(); loadMatrixStatus(); } });
+        Vue.watch(show, function(v) { if (v) { loadProfile(); loadMatrixStatus(); startVerifyPoll(); } else { stopVerifyPoll(); } });
 
         return { show, m, creds, newPassword, msg, msgType, saving, testing, matrixTestResult, matrixVerified,
-                 doSave, doChangePassword, doMatrixTest, clearToken, close, openCreds, loadMatrixStatus, store };
+                 pendingVerify, verifyConfirming, loadMatrixStatus, doConfirmVerify,
+                 doSave, doChangePassword, doMatrixTest, clearToken, close, openCreds, store };
     },
 });
 

@@ -216,8 +216,28 @@
                                 @click="loadMatrixStatus" title="Обновить статус">
                             <i :class="matrixVerified ? 'fas fa-check-circle' : 'fas fa-question-circle'"
                                style="font-size: 13px;"></i>
-                            {{ matrixVerified ? ' Верифицирован' : ' Не верифицирован' }}
+                             {{ matrixVerified ? ' Верифицирован' : ' Не верифицирован' }}
                         </button>
+                    </div>
+
+                    <!-- Пендинг верификация -->
+                    <div v-if="pendingVerify" style="margin-top: 10px; padding: 10px; border: 1px solid var(--warning); border-radius: 6px; background: var(--bg-secondary);">
+                        <div style="font-size: 14px; font-weight: bold; color: var(--warning); margin-bottom: 6px;">
+                            <i class="fas fa-shield-haltered"></i> Запрос верификации
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">
+                            Устройство: <strong>{{ pendingVerify.from_device }}</strong>
+                        </div>
+                        <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">
+                            Сравните эмодзи с Element:<br>
+                            <span style="font-size: 24px; letter-spacing: 4px;">{{ pendingVerify.emojis.join(' ') }}</span>
+                        </div>
+                        <div style="display: flex; gap: 6px;">
+                            <button class="btn btn-success btn-sm" @click="doConfirmVerify" :disabled="verifyConfirming">
+                                <i v-if="verifyConfirming" class="fas fa-spinner fa-spin"></i>
+                                <i v-else class="fas fa-check"></i> Совпадают
+                            </button>
+                        </div>
                     </div>
 
                     <h3 style="margin-top: 10px;"><i class="fas fa-cog"></i> Режим парсинга</h3>
