@@ -113,9 +113,11 @@ class MatrixListener:
         import nio
         try:
             txn_id = getattr(event, 'transaction_id', None)
+            if not txn_id:
+                src = getattr(event, 'source', {})
+                txn_id = src.get('content', {}).get('transaction_id', '')
             etype = type(event).__name__
 
-            # Dedup по типу+txn — защита от повторных синков
             if txn_id:
                 if not hasattr(self, '_seen_verify'):
                     self._seen_verify = {}
@@ -130,14 +132,15 @@ class MatrixListener:
                     txn = event.source.get('content', {}).get('transaction_id', '')
                     fdev = event.source.get('content', {}).get('from_device', '')
                     if txn and fdev:
-                        await self.client.to_device(nio.ToDeviceMessage(
+                        log.info("📨 Matrix: ready → %s/%s txn=%s", event.sender, fdev, txn[:12])
+                        resp = await self.client.to_device(nio.ToDeviceMessage(
                             type='m.key.verification.ready',
                             recipient=event.sender,
                             recipient_device=fdev,
                             content={'transaction_id': txn, 'methods': ['m.sas.v1'],
                                      'from_device': self.client.device_id},
                         ))
-                        await self.client.send_to_device_messages()
+                        log.info("📤 Matrix: ready ответ: %s", type(resp).__name__ if resp else 'None')
                 return
 
             if isinstance(event, nio.KeyVerificationStart):
@@ -180,6 +183,16 @@ class MatrixListener:
             return
         if room.room_id != self.room_id:
             return
+
+        # Авто-доверие при первом сообщении
+        if not getattr(self, '_first_room_done', False):
+            self._first_room_done = True
+            log.info("🤝 Matrix: выполняю авто-доверие устройств...")
+            try:
+                await self.client.keys_query()
+                await self._auto_trust_devices()
+            except Exception as e:
+                log.warning("⚠️ Matrix: ошибка авто-доверия — %s", e)
 
         body_stripped = body.strip()
         event_id = getattr(event, 'event_id', None)
@@ -397,7 +410,7 @@ class MatrixListener:
             return False
 
     async def _listen(self, stop_event=None):
-        import nio
+        import nio, asyncio
         if not self.client:
             return
 
@@ -405,28 +418,6 @@ class MatrixListener:
 
         self.client.add_event_callback(self._on_room_event, nio.RoomMessageText)
 
-        # Первый синк — вручную с таймаутом (sync_forever использует timeout=0)
-        try:
-            first = await self.client.sync(timeout=30000)
-            if isinstance(first, nio.SyncError):
-                log.error("Matrix: ошибка первого синка — %s", first.message)
-                return
-            await self.client.run_response_callbacks([first])
-            await self.client.send_to_device_messages()
-            log.info("✅ Matrix: первый синк завершён")
-
-            # Авто-доверие после первого синка
-            log.info("🤝 Matrix: выполняю авто-доверие устройств...")
-            try:
-                await self.client.keys_query()
-                await self._auto_trust_devices()
-            except Exception as e:
-                log.warning("⚠️ Matrix: ошибка авто-доверия — %s", e)
-        except Exception as e:
-            log.error("Matrix: ошибка первого синка — %s", e, exc_info=True)
-            return
-
-        # Запускаем sync_forever для последующих циклов
         async def _stop_watcher():
             while stop_event and not stop_event.is_set():
                 await asyncio.sleep(1)
@@ -435,7 +426,7 @@ class MatrixListener:
 
         watcher = asyncio.create_task(_stop_watcher())
         try:
-            await self.client.sync_forever(timeout=5000, loop_sleep_time=0)
+            await self.client.sync_forever(timeout=30000)
         except asyncio.CancelledError:
             pass
         except Exception as e:
