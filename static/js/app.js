@@ -15,6 +15,17 @@ const app = createApp({
         onMounted(async () => {
             if (store.authToken) {
                 store.loggedIn = true;
+                // Проверить что токен валиден
+                try {
+                    var s = await apiGet('/api/matrix/status');
+                    if (!s || s.error) throw new Error('invalid');
+                } catch (e) {
+                    store.loggedIn = false;
+                    store.authToken = '';
+                    store.currentUser = '';
+                    sessionStorage.removeItem('auth_token');
+                    sessionStorage.removeItem('current_user');
+                }
             }
             await loadDevices();
             try {
