@@ -703,6 +703,10 @@
                         <button v-for="d in ageOptions" :key="d.value" class="btn btn-sm"
                                 :class="age === d.value ? 'btn-primary' : 'btn-secondary'"
                                 @click="age = d.value">{{ d.label }}</button>
+                        <span style="width: 12px;"></span>
+                        <button class="btn btn-sm" :class="age === 'all' ? 'btn-warning' : 'btn-secondary'" 
+                                @click="age = 'all'" title="Все абоненты без фильтра активности">
+                            <i class="fas fa-list"></i> Все</button>
                         <button class="btn btn-success btn-sm" @click="doFind" :disabled="loading">
                             <i v-if="loading" class="fas fa-spinner fa-spin"></i>
                             <i v-else class="fas fa-search"></i> Найти

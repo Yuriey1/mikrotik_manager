@@ -511,8 +511,9 @@ def handle_old_leases(handler, parsed):
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
     qs = parse_qs(parsed.query)
+    show_all = qs.get('show_all', ['false'])[0].lower() == 'true'
     include_never = qs.get('include_never', ['false'])[0].lower() == 'true'
-    if include_never:
+    if include_never or show_all:
         age = 0
     else:
         try:
@@ -520,7 +521,7 @@ def handle_old_leases(handler, parsed):
         except (ValueError, TypeError):
             age = 30
     try:
-        old = ctx.mikrotik_manager.get_old_leases(age, include_never=include_never)
+        old = ctx.mikrotik_manager.get_old_leases(age, include_never=include_never, show_all=show_all)
         handler._send_json({'success': True, 'leases': old, 'count': len(old), 'age_days': age})
     except Exception as e:
         logging.error("Ошибка поиска устаревших лизов: %s", e, exc_info=True)

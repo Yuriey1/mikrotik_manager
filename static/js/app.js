@@ -1233,8 +1233,9 @@ app.component('cleanup-modal', {
             loading.value = true;
             searched.value = true;
             try {
+                const showAll = age.value === 'all';
                 const isNever = age.value === -1;
-                const data = await getOldLeases(isNever ? 0 : age.value, isNever);
+                const data = await getOldLeases(isNever && !showAll ? 0 : age.value, isNever && !showAll, showAll);
                 if (data.success) {
                     leases.value = data.leases || [];
                 }

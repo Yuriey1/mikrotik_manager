@@ -150,9 +150,10 @@ async function getSiteForIp(ip) {
     return apiGet(`/api/netbox/site_for_ip?ip=${encodeURIComponent(ip)}`);
 }
 
-async function getOldLeases(age, includeNever) {
+async function getOldLeases(age, includeNever, showAll) {
     var url = `/api/old_leases?age=${age}`;
     if (includeNever) url += '&include_never=true';
+    if (showAll) url += '&show_all=true';
     return apiGet(url);
 }
 
