@@ -154,6 +154,12 @@ class MatrixListener:
                 log.info("🔐 Matrix: верификация принята txn=%s", event.transaction_id[:12])
 
             elif isinstance(event, nio.KeyVerificationKey):
+                try:
+                    await self.client.confirm_short_auth_string(event.transaction_id)
+                    log.info("🔑 Matrix: ключ подтверждён")
+                except Exception as e:
+                    log.warning("⚠️ Matrix: ошибка confirm — %s", e)
+                # Показать эмодзи в профиле
                 sas = self.client.key_verifications.get(event.transaction_id)
                 if sas:
                     try:
@@ -165,25 +171,28 @@ class MatrixListener:
                             'emojis': [e[0] for e in emojis] if emojis else [],
                             'desc': [e[1] for e in emojis] if emojis else [],
                         }
-                        log.info("🔐 Matrix: эмодзи в профиле, авто-подтверждение через 1 сек txn=%s", event.transaction_id[:12])
-                        # Авто-подтверждение с задержкой
-                        async def _delayed_confirm():
-                            await asyncio.sleep(1)
-                            await self.client.confirm_short_auth_string(event.transaction_id)
-                            log.info("🔑 Matrix: эмодзи подтверждены автоматически")
-                        asyncio.create_task(_delayed_confirm())
-                    except Exception as e:
-                        log.warning("⚠️ Matrix: ошибка get_emoji — %s", e)
-                        try:
-                            await self.client.confirm_short_auth_string(event.transaction_id)
-                        except Exception:
-                            pass
+                    except Exception:
+                        pass
 
             elif isinstance(event, nio.KeyVerificationMac):
                 log.info("🎉 Matrix: верификация ЗАВЕРШЕНА!")
                 import services.state as state
                 state.matrix_verified = True
                 state.pending_verification = None
+                sas = self.client.key_verifications.get(event.transaction_id)
+                other_dev = sas.other_olm_device.id if sas and sas.other_olm_device else ''
+                other_user = sas.other_olm_device.user_id if sas and sas.other_olm_device else event.sender
+                if other_dev:
+                    await self.client.to_device(nio.ToDeviceMessage(
+                        type='m.key.verification.done',
+                        recipient=other_user,
+                        recipient_device=other_dev,
+                        content={
+                            'transaction_id': event.transaction_id,
+                            'from_device': self.client.device_id,
+                        },
+                    ))
+                    log.info("✅ Matrix: verification.done отправлен → %s/%s", other_user, other_dev)
 
             elif isinstance(event, nio.KeyVerificationCancel):
                 log.warning("⚠️ Matrix: верификация отменена — %s: %s",
