@@ -203,6 +203,7 @@ app.component('profile-modal', {
         const pendingVerify = ref(null);
         const verifyConfirming = ref(false);
         const verifyPollTimer = ref(null);
+        const tab = ref('profile');
 
         async function loadProfile() {
             try {
@@ -285,7 +286,7 @@ app.component('profile-modal', {
 
         Vue.watch(show, function(v) { if (v) { loadProfile(); loadMatrixStatus(); startVerifyPoll(); } else { stopVerifyPoll(); } });
 
-        return { show, m, creds, newPassword, msg, msgType, saving, testing, matrixTestResult, matrixVerified,
+        return { show, tab, m, creds, newPassword, msg, msgType, saving, testing, matrixTestResult, matrixVerified,
                  pendingVerify, verifyConfirming, loadMatrixStatus, doConfirmVerify,
                  doSave, doChangePassword, doMatrixTest, clearToken, close, openCreds, store };
     },
