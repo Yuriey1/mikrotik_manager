@@ -70,6 +70,8 @@ GET_ROUTES = {
     '/api/users':             auth_routes.handle_list_users,
     '/api/profile':           auth_routes.handle_get_profile,
     '/api/device_credentials': get_routes.handle_device_credentials,
+    '/api/netbox/site_for_ip': get_routes.handle_site_for_ip,
+    '/api/matrix/status':     auth_routes.handle_matrix_status,
 }
 
 POST_ROUTES = {
@@ -89,6 +91,8 @@ POST_ROUTES = {
     '/api/users/password':          auth_routes.handle_change_password,
     '/api/profile':                 auth_routes.handle_save_profile,
     '/api/profile/creds':           auth_routes.handle_save_mikrotik_creds,
+    '/api/matrix/test':             auth_routes.handle_matrix_test,
+    '/api/matrix/verify/confirm':   auth_routes.handle_verify_confirm,
 }
 
 DELETE_ROUTES = {

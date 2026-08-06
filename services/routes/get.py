@@ -511,8 +511,9 @@ def handle_old_leases(handler, parsed):
         handler._send_json({'error': 'Не подключено к устройству'}, 400)
         return
     qs = parse_qs(parsed.query)
+    show_all = qs.get('show_all', ['false'])[0].lower() == 'true'
     include_never = qs.get('include_never', ['false'])[0].lower() == 'true'
-    if include_never:
+    if include_never or show_all:
         age = 0
     else:
         try:
@@ -520,7 +521,7 @@ def handle_old_leases(handler, parsed):
         except (ValueError, TypeError):
             age = 30
     try:
-        old = ctx.mikrotik_manager.get_old_leases(age, include_never=include_never)
+        old = ctx.mikrotik_manager.get_old_leases(age, include_never=include_never, show_all=show_all)
         handler._send_json({'success': True, 'leases': old, 'count': len(old), 'age_days': age})
     except Exception as e:
         logging.error("Ошибка поиска устаревших лизов: %s", e, exc_info=True)
@@ -541,3 +542,27 @@ def handle_device_credentials(handler, parsed):
     web_user = ctx.user.username if ctx.user else None
     creds = ConfigManager.get_credentials(device_name, web_user)
     handler._send_json({'success': True, 'username': creds['username']})
+
+
+# ══════════════════════════════════════════════════════════════
+#  GET /api/netbox/site_for_ip
+# ══════════════════════════════════════════════════════════════
+
+def handle_site_for_ip(handler, parsed):
+    qs = parse_qs(parsed.query)
+    ip = qs.get('ip', [''])[0].strip()
+    if not ip:
+        handler._send_json({'error': 'Укажите ip'}, 400)
+        return
+
+    _init_netbox()
+    if not state.netbox_client:
+        handler._send_json({'error': 'NetBox не настроен'}, 400)
+        return
+
+    try:
+        site = state.netbox_client.get_site_for_ip(ip)
+        handler._send_json({'success': True, 'site': site, 'ip': ip})
+    except Exception as e:
+        logging.error("Ошибка site_for_ip: %s", e, exc_info=True)
+        handler._send_json({'success': False, 'error': str(e)}, 500)

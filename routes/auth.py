@@ -82,12 +82,20 @@ def handle_get_profile(handler, parsed):
 
 
 def handle_save_profile(handler, data):
-    """POST /api/profile — сохранить Matrix/LLM конфиг"""
+    """POST /api/profile — сохранить Matrix/LLM конфиг и перезапустить бота"""
     ctx = handler.session_ctx
     if not ctx.user:
         handler._send_json({'error': 'Не авторизован'}, 401)
         return
     result = auth_service.save_profile(ctx.user.username, data)
+    # Перезапуск бота если Matrix включён
+    if data.get('matrix_enabled'):
+        try:
+            from plugins.matrix_integration.plugin import restart
+            import threading
+            threading.Thread(target=restart, daemon=True).start()
+        except Exception as e:
+            logging.warning("Не удалось перезапустить Matrix-бота: %s", e)
     handler._send_json(result)
 
 
@@ -108,3 +116,68 @@ def handle_save_mikrotik_creds(handler, data):
         mk_password
     )
     handler._send_json({'success': True, 'message': f'Учётка для {device_name} сохранена'})
+
+
+def handle_matrix_test(handler, data):
+    """POST /api/matrix/test — проверить подключение к Matrix"""
+    import asyncio
+    token = data.get('token', '').strip()
+    homeserver = data.get('homeserver', 'https://matrix.krasintegra.ru').strip()
+    if not token:
+        handler._send_json({'error': 'Укажите токен'}, 400)
+        return
+
+    async def _test():
+        from nio import AsyncClient
+        client = AsyncClient(homeserver, 'nur001')
+        client.access_token = token
+        resp = await client.whoami()
+        await client.close()
+        return resp
+
+    try:
+        result = asyncio.run(_test())
+        from nio import WhoamiResponse
+        if isinstance(result, WhoamiResponse):
+            handler._send_json({'success': True, 'user_id': result.user_id, 'message': 'Подключение успешно'})
+        else:
+            handler._send_json({'success': False, 'error': str(result)})
+    except Exception as e:
+        handler._send_json({'success': False, 'error': str(e)})
+
+
+def handle_matrix_status(handler, data):
+    """GET /api/matrix/status — статус Matrix: доступен ли и верифицирован ли"""
+    import services.state as state
+    handler._send_json({
+        'available': state.matrix_available,
+        'verified': state.matrix_verified,
+        'pending_verify': state.pending_verification,
+    })
+
+
+def handle_verify_confirm(handler, data):
+    """POST /api/matrix/verify/confirm — подтвердить эмодзи"""
+    import services.state as state
+    import asyncio, logging
+    log = logging.getLogger(__name__)
+    pv = state.pending_verification
+    if not pv or not pv.get('txn_id'):
+        handler._send_json({'error': 'Нет ожидающей верификации'}, 400)
+        return
+    txn_id = pv['txn_id']
+    try:
+        from plugins.matrix_integration.plugin import _listener_obj
+        if _listener_obj and _listener_obj.client and _listener_obj._loop:
+            async def _confirm():
+                try:
+                    resp = await _listener_obj.client.confirm_short_auth_string(txn_id)
+                    log.info("📤 Matrix: подтверждение отправлено, ответ=%s", type(resp).__name__)
+                except Exception as e:
+                    log.error("❌ Matrix: ошибка подтверждения — %s", e)
+            future = asyncio.run_coroutine_threadsafe(_confirm(), _listener_obj._loop)
+            log.info("🔧 Matrix: coroutine запланирована, future=%s", future)
+        state.pending_verification = None
+        handler._send_json({'success': True, 'message': 'Эмодзи подтверждены'})
+    except Exception as e:
+        handler._send_json({'error': str(e)}, 500)

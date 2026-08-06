@@ -15,6 +15,17 @@ const app = createApp({
         onMounted(async () => {
             if (store.authToken) {
                 store.loggedIn = true;
+                // Проверить что токен валиден
+                try {
+                    var s = await apiGet('/api/matrix/status');
+                    if (!s || s.error) throw new Error('invalid');
+                } catch (e) {
+                    store.loggedIn = false;
+                    store.authToken = '';
+                    store.currentUser = '';
+                    sessionStorage.removeItem('auth_token');
+                    sessionStorage.removeItem('current_user');
+                }
             }
             await loadDevices();
             try {
@@ -71,17 +82,35 @@ app.component('matrix-bell', {
         async function openRequest(req) {
             store.showPendingList = false;
 
-            // 1. Переключаемся на нужное устройство (по 3 октетам IP)
+            // 1. Переключаемся на нужное устройство (по IP через NetBox)
             var targetDevice = null;
+            var siteData = null;
+
             if (req.ip) {
-                var ip3 = req.ip.split('.').slice(0, 3).join('.');
-                var devices = Object.values(store.devices || {});
-                for (var i = 0; i < devices.length; i++) {
-                    if ((devices[i].ip || '').startsWith(ip3)) {
-                        targetDevice = devices[i];
-                        break;
+                try {
+                    siteData = await getSiteForIp(req.ip);
+                    if (siteData && siteData.success && siteData.site) {
+                        var devices = Object.values(store.devices || {});
+                        for (var i = 0; i < devices.length; i++) {
+                            if (devices[i].name.toLowerCase().indexOf(siteData.site.toLowerCase()) !== -1) {
+                                targetDevice = devices[i];
+                                break;
+                            }
+                        }
                     }
+                } catch (e) {}
+            }
+
+            if (!targetDevice && req.ip) {
+                var msg = '⚠️ Не удалось найти устройство для IP ' + req.ip;
+                if (siteData && siteData.site) {
+                    msg += '\nNetBox определил площадку: «' + siteData.site + '»';
+                    msg += '\nУстройств с такой площадкой не найдено.';
+                } else {
+                    msg += '\nNetBox не вернул площадку для этого IP.';
                 }
+                msg += '\nПодключитесь вручную через сайдбар.';
+                store.error = msg;
             }
 
             if (targetDevice && (!store.connected || store.currentDevice !== targetDevice.name)) {
@@ -94,9 +123,6 @@ app.component('matrix-bell', {
                     await connectDevice(targetDevice.name, '', '');
                 } catch (e) {
                     store.error = 'Не удалось подключиться к ' + targetDevice.name;
-                    store.loading = false;
-                    store.loadingMessage = '';
-                    return;
                 }
                 store.loading = false;
                 store.loadingMessage = '';
@@ -173,12 +199,22 @@ app.component('profile-modal', {
     template: '#profile-modal',
     setup() {
         const show = Vue.computed(() => store.showProfileModal);
-        const m = reactive({ token: '', room_id: '', homeserver: '', llm_enabled: false, llm_key: '' });
+        const m = reactive({ enabled: false, token: '', room_id: '', homeserver: '',
+                             matrix_user: '', matrix_password: '',
+                             parsing_mode: 'regex', classify_enabled: false,
+                             llm_enabled: false, llm_key: '', llm_url: '' });
         const creds = ref([]);
         const newPassword = ref('');
         const msg = ref('');
         const msgType = ref('');
         const saving = ref(false);
+        const testing = ref(false);
+        const matrixTestResult = ref(null);
+        const matrixVerified = ref(false);
+        const pendingVerify = ref(null);
+        const verifyConfirming = ref(false);
+        const verifyPollTimer = ref(null);
+        const tab = ref('profile');
 
         async function loadProfile() {
             try {
@@ -190,13 +226,41 @@ app.component('profile-modal', {
             } catch (e) {}
         }
 
+        async function loadMatrixStatus() {
+            try {
+                var s = await apiGet('/api/matrix/status');
+                matrixVerified.value = s.verified || false;
+                pendingVerify.value = s.pending_verify || null;
+            } catch (e) {}
+        }
+
+        function startVerifyPoll() {
+            if (verifyPollTimer.value) clearInterval(verifyPollTimer.value);
+            verifyPollTimer.value = setInterval(loadMatrixStatus, 3000);
+        }
+        function stopVerifyPoll() {
+            if (verifyPollTimer.value) { clearInterval(verifyPollTimer.value); verifyPollTimer.value = null; }
+        }
+
+        async function doConfirmVerify() {
+            verifyConfirming.value = true;
+            try {
+                var r = await apiPost('/api/matrix/verify/confirm', {});
+                if (r.success) { pendingVerify.value = null; msg.value = r.message; msgType.value = ''; }
+                else { msg.value = r.error; msgType.value = 'err'; }
+            } catch (e) { msg.value = e.message; msgType.value = 'err'; }
+            verifyConfirming.value = false;
+        }
+
         async function doSave() {
             saving.value = true; msg.value = '';
             try {
                 var r = await apiPost('/api/profile', {
-                    matrix_token: m.token, matrix_room: m.room_id,
-                    matrix_homeserver: m.homeserver,
-                    llm_enabled: m.llm_enabled, llm_key: m.llm_key,
+                    matrix_enabled: m.enabled, matrix_token: m.token, matrix_room: m.room_id,
+                    matrix_homeserver: m.homeserver, matrix_user: m.matrix_user,
+                    matrix_password: m.matrix_password,
+                    parsing_mode: m.parsing_mode, classify_enabled: m.classify_enabled,
+                    llm_enabled: m.parsing_mode !== 'regex', llm_key: m.llm_key, llm_url: m.llm_url,
                 });
                 if (r.success) { msg.value = r.message; msgType.value = ''; }
                 else { msg.value = r.error; msgType.value = 'err'; }
@@ -212,6 +276,18 @@ app.component('profile-modal', {
             } catch (e) { msg.value = e.message; msgType.value = 'err'; }
         }
 
+        async function doMatrixTest() {
+            testing.value = true; matrixTestResult.value = null;
+            try {
+                var r = await apiPost('/api/matrix/test', { token: m.token, homeserver: m.homeserver || 'https://matrix.krasintegra.ru' });
+                if (r.success) { matrixTestResult.value = r.user_id; }
+                else { matrixTestResult.value = null; store.error = r.error; }
+            } catch (e) { matrixTestResult.value = null; store.error = e.message; }
+            testing.value = false;
+        }
+
+        function clearToken() { m.token = ''; m.matrix_password = ''; }
+
         function close() { store.showProfileModal = false; msg.value = ''; }
 
         function openCreds(deviceName) {
@@ -219,9 +295,11 @@ app.component('profile-modal', {
             store.showCredentialsModal = true;
         }
 
-        Vue.watch(show, function(v) { if (v) loadProfile(); });
+        Vue.watch(show, function(v) { if (v) { loadProfile(); loadMatrixStatus(); startVerifyPoll(); } else { stopVerifyPoll(); } });
 
-        return { show, m, creds, newPassword, msg, msgType, saving, doSave, doChangePassword, close, openCreds, store };
+        return { show, tab, m, creds, newPassword, msg, msgType, saving, testing, matrixTestResult, matrixVerified,
+                 pendingVerify, verifyConfirming, loadMatrixStatus, doConfirmVerify,
+                 doSave, doChangePassword, doMatrixTest, clearToken, close, openCreds, store };
     },
 });
 
@@ -496,13 +574,19 @@ app.component('subscriber-modal', {
                     findQueues(ip).catch(() => null),
                 ]);
                 if (channels?.success && queues?.success) {
+                    console.log('loadTrafficForIp: building chains, allQueues=', store.allQueues?.length || 0);
                     const data = buildTrafficChains(channels, store.allQueues, queues, ip);
+                    console.log('loadTrafficForIp: result=', data);
                     store.trafficChains = data;
                     if (data?.selectedQueues) {
                         store.trafficQueues = data.selectedQueues;
                     }
+                } else {
+                    console.log('loadTrafficForIp: FAILED ch=', channels?.success, 'q=', queues?.success);
                 }
-            } catch (e) {} finally {
+            } catch (e) {
+                console.error('loadTrafficForIp error:', e);
+            } finally {
                 store.trafficLoading = false;
             }
         }
@@ -1184,8 +1268,9 @@ app.component('cleanup-modal', {
             loading.value = true;
             searched.value = true;
             try {
+                const showAll = age.value === 'all';
                 const isNever = age.value === -1;
-                const data = await getOldLeases(isNever ? 0 : age.value, isNever);
+                const data = await getOldLeases(isNever && !showAll ? 0 : age.value, isNever && !showAll, showAll);
                 if (data.success) {
                     leases.value = data.leases || [];
                 }

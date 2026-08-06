@@ -1741,7 +1741,7 @@ class MikroTikManager:
 
     # ========== ОЧИСТКА УСТАРЕВШИХ ЛИЗОВ ==========
 
-    def get_old_leases(self, max_age_days: int, include_never: bool = False) -> List[Dict]:
+    def get_old_leases(self, max_age_days: int, include_never: bool = False, show_all: bool = False) -> List[Dict]:
         result = []
         try:
             leases = self.get_dhcp_leases()
@@ -1786,14 +1786,16 @@ class MikroTikManager:
             for lease in leases:
                 last_seen = lease.get('last-seen', '')
                 is_never = (last_seen.lower() == 'never') or (not last_seen)
+                delta = None
 
-                if include_never:
+                if show_all:
+                    pass  # без фильтра по last-seen
+                elif include_never:
                     if not is_never:
                         continue
                 else:
                     if is_never:
                         continue
-                    delta = None
                     m = re.match(r'(?:(\d+)w)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?', last_seen)
                     if m:
                         w = int(m.group(1) or 0); d = int(m.group(2) or 0); h = int(m.group(3) or 0)
@@ -1806,6 +1808,13 @@ class MikroTikManager:
                 pool_name = _in_pool(ip_str)
                 if not pool_name:
                     continue
+                # Вычисляем возраст для отображения (только если не show_all)
+                if show_all or is_never:
+                    age_days = -1
+                else:
+                    age_days = delta.days if delta else -1
+                    if not delta:
+                        age_days = 0
                 result.append({
                     'ip': ip_str,
                     'mac': lease.get('mac-address', ''),
@@ -1813,10 +1822,12 @@ class MikroTikManager:
                     'comment': lease.get('comment', ''),
                     'pool': pool_name,
                     'last_seen': last_seen if last_seen else 'never',
-                    'age_days': -1 if is_never else delta.days,
+                    'age_days': age_days,
                 })
 
-            if include_never:
+            if show_all:
+                result.sort(key=lambda x: (x['pool'], x['ip']))
+            elif include_never:
                 result.sort(key=lambda x: x['ip'])
             else:
                 result.sort(key=lambda x: -x['age_days'])
