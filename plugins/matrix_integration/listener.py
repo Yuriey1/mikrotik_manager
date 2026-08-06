@@ -241,9 +241,10 @@ class MatrixListener:
         clean = re.sub(r'^[*>\s]+', '', body_stripped)
         if clean.startswith('+') or clean.lower().startswith('лс'):
             if not _remove_replied_request(event):
-                if len(state.pending_requests) == 1:
-                    removed = state.pending_requests.pop()
-                    log.info("🗑️ Matrix: удалена заявка по '+' (единственная) %s", removed.get('id', '?')[:8])
+                if state.pending_requests:
+                    removed = state.pending_requests.pop(0)
+                    log.info("🗑️ Matrix: удалена заявка по '+' %s (%d осталось)",
+                             removed.get('id', '?')[:8], len(state.pending_requests))
             return
 
         log.info("📩 Matrix: новое сообщение от %s — %s", event.sender, body[:80])
