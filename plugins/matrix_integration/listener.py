@@ -211,6 +211,14 @@ class MatrixListener:
         if room.room_id != self.room_id:
             return
 
+        event_id = getattr(event, 'event_id', None)
+        if event_id:
+            if not hasattr(self, '_seen_events'):
+                self._seen_events = set()
+            if event_id in self._seen_events:
+                return
+            self._seen_events.add(event_id)
+
         # Авто-доверие при первом сообщении
         if not getattr(self, '_first_room_done', False):
             self._first_room_done = True
@@ -222,7 +230,6 @@ class MatrixListener:
                 log.warning("⚠️ Matrix: ошибка авто-доверия — %s", e)
 
         body_stripped = body.strip()
-        event_id = getattr(event, 'event_id', None)
 
         # Любой reply на заявку = удаляем её из pending (кроме "согласовано")
         body_lower = body_stripped.lower()
