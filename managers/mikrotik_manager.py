@@ -25,15 +25,15 @@ class MikroTikManager:
         self.api = None
         self.connected = False
 
-    def connect(self) -> bool:
-        """Подключиться к устройству"""
+    def connect(self, timeout: int = 10) -> bool:
+        """Подключиться к устройству. timeout — таймаут сокета в секундах (10 по умолч.)"""
         try:
             # Расшифровываем пароль если нужно
             password = self.device.password
             if password.startswith("enc:"):
                 password = ConfigManager.decrypt_password(password[4:])
 
-            logging.info("🔗 Подключение к %s (%s)...", self.device.name, self.device.ip)
+            logging.info("🔗 Подключение к %s (%s) [таймаут=%ss]...", self.device.name, self.device.ip, timeout)
 
             self.api = connect(
                 username=self.device.username,
@@ -41,6 +41,7 @@ class MikroTikManager:
                 host=self.device.ip,
                 port=self.device.port,
                 encoding="windows-1251",
+                timeout=timeout,
             )
             self.connected = True
             logging.info("✅ Успешное подключение")

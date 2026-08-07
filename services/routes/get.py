@@ -83,6 +83,10 @@ def handle_connect(handler, parsed):
     device_name = qs.get('device', [''])[0]
     username = qs.get('username', [''])[0]
     password = qs.get('password', [''])[0]
+    try:
+        api_timeout = int(qs.get('timeout', ['30'])[0])
+    except (ValueError, TypeError):
+        api_timeout = 30
 
     if not device_name:
         handler._send_json({'error': 'Не указано устройство'}, 400)
@@ -129,7 +133,7 @@ def handle_connect(handler, parsed):
         })
         ctx.mikrotik_manager = MikroTikManager(dev)
 
-        if ctx.mikrotik_manager.connect():
+        if ctx.mikrotik_manager.connect(timeout=api_timeout):
             if final_user or final_pass:
                 ConfigManager.save_credentials(device_name, final_user, final_pass, web_user)
             ctx.current_device_name = device_name
