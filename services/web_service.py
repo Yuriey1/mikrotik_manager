@@ -167,6 +167,16 @@ class MikroTikManagerHandler(BaseHTTPRequestHandler):
             ct = 'application/javascript; charset=utf-8'
         elif path.endswith('.png'):
             ct = 'image/png'
+        elif path.endswith('.svg'):
+            ct = 'image/svg+xml'
+        elif path.endswith('.woff2'):
+            ct = 'font/woff2'
+        elif path.endswith('.woff'):
+            ct = 'font/woff'
+        elif path.endswith('.ttf'):
+            ct = 'font/ttf'
+        elif path.endswith('.ico'):
+            ct = 'image/x-icon'
         with open(path, 'rb') as f:
             content = f.read()
         self.send_response(200)

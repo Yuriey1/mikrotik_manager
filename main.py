@@ -5,6 +5,7 @@ MikroTik Device Manager - Главный файл запуска
 
 import argparse
 import logging
+import logging.handlers
 import signal
 import sys
 from services.web_service import start_server
@@ -18,9 +19,12 @@ def setup_logging():
     console.setFormatter(fmt)
     console.setLevel(logging.INFO)
 
-    file_handler = logging.FileHandler('mikrotik_manager.log', encoding='utf-8')
+    file_handler = logging.handlers.RotatingFileHandler(
+        'mikrotik_manager.log', encoding='utf-8',
+        maxBytes=10 * 1024 * 1024, backupCount=3,
+    )
     file_handler.setFormatter(fmt)
-    file_handler.setLevel(logging.DEBUG)
+    file_handler.setLevel(logging.INFO)
 
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
@@ -29,6 +33,10 @@ def setup_logging():
 
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     logging.getLogger('requests').setLevel(logging.WARNING)
+    # Шумные библиотеки — не засоряем лог
+    logging.getLogger('nio').setLevel(logging.WARNING)
+    logging.getLogger('librouteros').setLevel(logging.WARNING)
+    logging.getLogger('peewee').setLevel(logging.WARNING)
 
 
 def signal_handler(signum, frame):
